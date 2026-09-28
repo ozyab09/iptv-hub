@@ -13,15 +13,19 @@ export class Player {
   private toast: (msg: string) => void;
   /** Вызывается, когда hls сообщит о манифесте/уровне/дорожках (для UI). */
   private onHlsState: (() => void) | null;
+  /** Вызывается при фатальной ошибке потока (для retry-кнопки UI). */
+  private onFatalError: (() => void) | null;
 
   constructor(
     video: HTMLVideoElement,
     toast: (msg: string) => void,
     onHlsState?: () => void,
+    onFatalError?: () => void,
   ) {
     this.video = video;
     this.toast = toast;
     this.onHlsState = onHlsState ?? null;
+    this.onFatalError = onFatalError ?? null;
   }
 
   /** Играть канал. True — попытка начата, false — URL не поддерживается. */
@@ -38,9 +42,24 @@ export class Player {
       this.hls.loadSource(url);
       this.hls.attachMedia(this.video);
       this.hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) {
-          this.toast(`Ошибка потока: ${data.details ?? "unknown"}`);
+        if (!data.fatal) return;
+        // Автовосстановление по типу ошибки (рекомендации hls.js):
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          // сеть/манифест: пробуем перезапустить загрузку
+          console.debug(`[iptv-hub] hls network error: ${data.details}, restarting load`);
+          this.hls?.startLoad();
+          this.toast("Сбой сети — переподключаемся…");
+          return;
         }
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          console.debug(`[iptv-hub] hls media error: ${data.details}, recovering`);
+          this.hls?.recoverMediaError();
+          this.toast("Сбой декодирования — восстанавливаемся…");
+          return;
+        }
+        // остальное — фатально: предлагаем ручной retry
+        this.toast(`Ошибка потока: ${data.details ?? "unknown"}`);
+        this.onFatalError?.();
       });
       const notify = (): void => this.onHlsState?.();
       this.hls.on(Hls.Events.MANIFEST_PARSED, notify);
@@ -137,6 +156,35 @@ export class Player {
   /** Выбрать субтитры; -1 = выключены. */
   setSubtitleTrack(index: number): void {
     if (this.hls) this.hls.subtitleTrack = index;
+  }
+
+  /** Перезапустить текущий поток с нуля (retry-кнопка). */
+  retry(): void {
+    const url = this.currentUrl;
+    if (!url) return;
+    const isHls = /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
+    const channel: Channel = { url, name: "", normalizedName: "", tvgId: null, logo: null, group: "", quality: null, catchupDays: 0, catchupSource: null };
+    this.stop();
+    if (isHls && Hls.isSupported()) {
+      this.hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+      this.hls.loadSource(url);
+      this.hls.attachMedia(this.video);
+      this.hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (data.fatal) {
+          this.toast(`Ошибка потока: ${data.details ?? "unknown"}`);
+          this.onFatalError?.();
+        }
+      });
+      const notify = (): void => this.onHlsState?.();
+      this.hls.on(Hls.Events.MANIFEST_PARSED, notify);
+      this.hls.on(Hls.Events.LEVEL_SWITCHED, notify);
+      this.hls.on(Hls.Events.LEVEL_UPDATED, notify);
+    } else {
+      this.video.src = url;
+    }
+    this.currentUrl = url;
+    this.video.play().catch(() => undefined);
+    void channel;
   }
 }
 
