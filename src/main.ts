@@ -640,18 +640,33 @@ btnRec.addEventListener("click", () => {
       // диалог (это его настройка, см. README), файл НЕ теряется.
       const blob = new Blob(recordedChunks, { type: mime.split(";")[0] });
       recordedChunks = [];
+      console.debug(
+        `[iptv-hub] запись завершена: ${blob.size} байт, mime=${mime}, chunks=${recordedChunks.length}`,
+      );
       if (blob.size === 0) {
-        showToast("Запись пустая — поток не отдал кадров");
+        showToast("Запись пустая — поток не отдал кадров (см. консоль F12)");
         return;
       }
       const name = recordingFileName(lastPlayed?.name ?? "recording");
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      document.body.append(a); // Firefox требует a в DOM
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      const url = URL.createObjectURL(blob);
+
+      // Firefox: a.click() из асинхронного onstop (вне user gesture) иногда
+      // молча глотается; повторяем попытку несколько раз и держим анкор в DOM.
+      const tryDownload = (attempt: number): void => {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = name;
+        a.rel = "noopener";
+        document.body.append(a);
+        a.click();
+        a.remove();
+        if (attempt < 4) {
+          window.setTimeout(() => tryDownload(attempt + 1), 300);
+        }
+      };
+      tryDownload(0);
+      // revoke позже: повторные клики и медленный Firefox должны успеть
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       showToast(`Запись сохранена: ${name}`);
     };
     mediaRecorder.start(2000);
