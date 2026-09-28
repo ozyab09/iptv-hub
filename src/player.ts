@@ -1,7 +1,11 @@
 import Hls from "hls.js";
 import type { Channel } from "./types";
 
-/** Плеер поверх <video>: hls.js для .m3u8, нативные механизмы для остальных. */
+/**
+ * Плеер поверх <video>: hls.js для .m3u8, нативные механизмы для остальных.
+ * Управление воспроизведением/громкостью/PiP — через нативный media API
+ * (юнит-тесты покрывают чистую логику: neighborIndex, see tests/player-logic).
+ */
 export class Player {
   private video: HTMLVideoElement;
   private hls: Hls | null = null;
@@ -49,6 +53,50 @@ export class Player {
     return true;
   }
 
+  /** Пауза/продолжить. Возвращает true после вызова — на паузе или играет. */
+  togglePause(): void {
+    if (this.video.paused) {
+      this.video.play().catch(() => {
+        // автоплей заблокирован — юзер повторит клик
+      });
+    } else {
+      this.video.pause();
+    }
+  }
+
+  /** Громкость 0..1 (мьют отдельно). */
+  setVolume(v: number): void {
+    this.video.volume = Math.min(1, Math.max(0, v));
+    if (this.video.muted && this.video.volume > 0) this.video.muted = false;
+  }
+
+  getVolume(): number {
+    return this.video.muted ? 0 : this.video.volume;
+  }
+
+  toggleMute(): void {
+    this.video.muted = !this.video.muted;
+  }
+
+  /** Picture-in-Picture. False — API недоступен или отказано. */
+  async togglePip(): Promise<boolean> {
+    if (!document.pictureInPictureEnabled) {
+      this.toast("PiP не поддерживается этим браузером");
+      return false;
+    }
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await this.video.requestPictureInPicture();
+      }
+      return true;
+    } catch {
+      this.toast("Не удалось открыть плавающее окно");
+      return false;
+    }
+  }
+
   stop(): void {
     if (this.hls) {
       this.hls.destroy();
@@ -58,4 +106,18 @@ export class Player {
     this.video.load();
     this.currentUrl = null;
   }
+}
+
+/**
+ * Соседний индекс по списку каналов с зацикливанием.
+ * Чистая функция — покрывается юнит-тестами.
+ * Возвращает null, если список пуст.
+ */
+export function neighborIndex(
+  current: number,
+  length: number,
+  step: 1 | -1,
+): number | null {
+  if (length <= 0) return null;
+  return (((current + step) % length) + length) % length;
 }
