@@ -1,4 +1,5 @@
 import type { Channel, PlaylistSnapshot } from "./types";
+import { parseCatchup } from "./catchup";
 
 /**
  * Нормализация имени канала: нижний регистр, без эмодзи, quality-маркеров,
@@ -99,6 +100,12 @@ export function parseM3U(content: string): PlaylistSnapshot {
       seenUrls.add(line);
 
       const name = pending.name || "Без названия";
+      const catchupInfo = parseCatchup(
+        extractAttr(pending.attrs, "tvg-rec"),
+        extractAttr(pending.attrs, "catchup-days"),
+        extractAttr(pending.attrs, "catchup"),
+        extractAttr(pending.attrs, "catchup-source"),
+      );
       channels.push({
         name,
         normalizedName: normalizeName(name),
@@ -107,6 +114,8 @@ export function parseM3U(content: string): PlaylistSnapshot {
         logo: extractAttr(pending.attrs, "tvg-logo"),
         group: extractAttr(pending.attrs, "group-title") ?? "Основные",
         quality: detectQuality(name),
+        catchupDays: catchupInfo.days,
+        catchupSource: catchupInfo.source,
       });
       pending = null;
     }

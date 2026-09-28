@@ -82,8 +82,21 @@
           <select id="audio-select" class="select" title="Аудиодорожка" aria-label="Аудиодорожка" hidden></select>
           <select id="subtitle-select" class="select" title="Субтитры" aria-label="Субтитры" hidden></select>
           <span id="player-status" class="player-status muted" title="Разрешение и скорость потока">—</span>
+          <button id="btn-guide" class="icon-btn" title="Программа передач" aria-label="Программа передач">📅</button>
           <button id="btn-expand" class="icon-btn" title="Развернуть" aria-label="Развернуть плеер">⤢</button>
           <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер">✕</button>
+        </div>
+      </div>
+
+      <!-- Модалка программы передач -->
+      <div id="guide-overlay" class="guide-overlay" hidden>
+        <div class="guide" role="dialog" aria-modal="true" aria-label="Программа передач">
+          <div class="guide-head">
+            <div id="guide-title" class="guide-title">Программа</div>
+            <button id="guide-close" class="icon-btn" title="Закрыть" aria-label="Закрыть программу">✕</button>
+          </div>
+          <div id="guide-days" class="guide-days"></div>
+          <div id="guide-list" class="guide-list"></div>
         </div>
       </div>
 

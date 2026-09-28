@@ -12,6 +12,10 @@ export interface Channel {
   logo: string | null;
   /** group-title (категория). */
   group: string;
+  /** Глубина catchup-архива в днях (tvg-rec/catchup-days), 0 — нет архива. */
+  catchupDays: number;
+  /** Шаблон URL архива (catchup-source), если задан провайдером. */
+  catchupSource: string | null;
   /** Качество из имени: 4K/UHD > FHD > HD > SD > null. */
   quality: "4K" | "FHD" | "HD" | "SD" | null;
 }

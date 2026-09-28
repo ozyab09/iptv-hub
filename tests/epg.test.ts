@@ -60,6 +60,8 @@ describe("channel key matching", () => {
       logo: null,
       group: "Новости",
       quality: "HD",
+      catchupDays: 0,
+      catchupSource: null,
     };
     // channelKey lowercases: id:cnn.ru — тот же ключ, что и в EPG
     expect(c.tvgId!.toLowerCase()).toBe("cnn.ru");

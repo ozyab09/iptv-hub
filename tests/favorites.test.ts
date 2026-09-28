@@ -31,6 +31,8 @@ const ch = (url: string, name = url): Channel => ({
   logo: null,
   group: "Основные",
   quality: null,
+  catchupDays: 0,
+  catchupSource: null,
 });
 
 const A = ch("https://a/stream");
