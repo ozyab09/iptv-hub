@@ -307,7 +307,7 @@ function playChannel(c: Channel): void {
   nowCategory.textContent = c.group;
   playerBar.hidden = false;
   refreshNowFav();
-  btnPause.textContent = "⏸"; // после play() обычно идёт воспроизведение
+  btnPause.textContent = "❚❚"; // после play() обычно идёт воспроизведение
   playerStatus.textContent = "—";
   if (!player.play(c)) {
     showToast("Формат потока не поддерживается");
@@ -343,7 +343,7 @@ btnClosePlayer.addEventListener("click", () => {
 btnPause.addEventListener("click", () => {
   player.togglePause();
 });
-videoEl.addEventListener("play", () => (btnPause.textContent = "⏸"));
+videoEl.addEventListener("play", () => (btnPause.textContent = "❚❚"));
 videoEl.addEventListener("pause", () => (btnPause.textContent = "▶"));
 videoEl.addEventListener("loadedmetadata", () => {
   // нативный playback: разрешение становится известно здесь
@@ -635,23 +635,24 @@ btnRec.addEventListener("click", () => {
       if (e.data.size > 0) recordedChunks.push(e.data);
     };
     mediaRecorder.onstop = () => {
-      // Без диалогов: a[download] с готовым именем кладёт файл в загрузки.
-      // (Браузер спрашивает «куда» только если это включено в его настройках —
-      // см. README.) Имя уже сгенерировано, никакого prompt.
+      // Классическое сохранение: a[download] с готовым именем. Без prompt.
+      // Если браузер настроен «спрашивать, куда сохранять» — покажет свой
+      // диалог (это его настройка, см. README), файл НЕ теряется.
       const blob = new Blob(recordedChunks, { type: mime.split(";")[0] });
       recordedChunks = [];
       if (blob.size === 0) {
         showToast("Запись пустая — поток не отдал кадров");
         return;
       }
+      const name = recordingFileName(lastPlayed?.name ?? "recording");
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = recordingFileName(lastPlayed?.name ?? "recording");
+      a.download = name;
       document.body.append(a); // Firefox требует a в DOM
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-      showToast(`Сохранено в загрузки: ${a.download}`);
+      showToast(`Запись сохранена: ${name}`);
     };
     mediaRecorder.start(2000);
     recState = "recording";
@@ -950,12 +951,12 @@ setupLoad.addEventListener("click", () => {
     showSetup("Нужен http(s)-URL плейлиста");
     return;
   }
+  // http-плейлисты разрешены: если страница https, браузер может заблокировать
+  // такой запрос (mixed content) — предупредим заранее, но не блокируем.
   if (isMixedContent(window.location.href, pUrl)) {
-    showSetup(
-      "Ссылка на плейлист http://, а страница открыта по https:// — браузер " +
-        "блокирует смешанный контент. Замените схему на https://.",
+    showToast(
+      "⚠️ Плейлист по http://: страница открыта по https://, браузер может заблокировать запрос. Если загрузка упадёт — используйте https-ссылку.",
     );
-    return;
   }
   plState = addPlaylist(plState, name || "Плейлист", pUrl, eUrl || null);
   savePlaylists(localStorage, plState);
@@ -985,8 +986,9 @@ async function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
 function describeFetchFailure(url: string): string {
   const mixed = isMixedContent(window.location.href, url);
   return mixed
-    ? "Ссылка начинается с http://, а страница открыта по https:// — браузер " +
-        "блокирует смешанный контент. Используйте https-ссылку на плейлист."
+    ? "Ссылка http://, а страница открыта по https:// — браузер блокирует " +
+        "смешанный контент. Сохраните плейлист по https-ссылке или откройте " +
+        "сайт по http (локально)."
     : "Возможные причины: (1) на бакете не включён CORS — добавьте правило для " +
         "origin https://ozyab09.github.io (см. README), (2) ссылка недоступна " +
         "из браузера (приватный бакет, firewall). Проверьте консоль (F12) — " +
