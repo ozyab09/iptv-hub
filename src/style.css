@@ -567,8 +567,15 @@ video { cursor: pointer; }
   padding: 10px 16px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
 }
-/* в fullscreen второстепенные зоны прячем — чистый экран с главными кнопками */
-#player-bar:fullscreen .pb-left,
+/* в fullscreen второстепенные зоны прячем — чистый экран с главными кнопками;
+   ⏺ запись остаётся доступной (display: contents на pb-left + скрытие детей
+   по одному, кроме btn-rec) */
+#player-bar:fullscreen .pb-left {
+  display: contents;
+}
+#player-bar:fullscreen .pb-left > :not(#btn-rec) {
+  display: none;
+}
 #player-bar:fullscreen .now-playing,
 #player-bar:fullscreen #btn-pip,
 #player-bar:fullscreen #btn-expand {
@@ -578,6 +585,19 @@ video { cursor: pointer; }
 #player-bar:fullscreen .pb-right { flex: 0 0 auto; }
 
 /* ---------- toast ---------- */
+.toast-action {
+  flex: none;
+  background: var(--bg2);
+  border: 1px solid var(--accent2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.toast-action:hover { background: var(--accent2); color: #fff; }
+
 .toast {
   position: fixed;
   bottom: 84px;
