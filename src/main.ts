@@ -1,5 +1,10 @@
 import "./style.css";
-import { resolveConfig, saveConfig, STORAGE_KEY } from "./config";
+import {
+  isMixedContent,
+  resolveConfig,
+  saveConfig,
+  STORAGE_KEY,
+} from "./config";
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { Player } from "./player";
@@ -182,6 +187,13 @@ setupLoad.addEventListener("click", () => {
     showSetup("Нужен http(s)-URL плейлиста");
     return;
   }
+  if (isMixedContent(window.location.href, pUrl)) {
+    showSetup(
+      "Ссылка на плейлист http://, а страница открыта по https:// — браузер " +
+        "блокирует смешанный контент. Замените схему на https://.",
+    );
+    return;
+  }
   saveConfig({ playlistUrl: pUrl, epgUrl: eUrl || null }, localStorage);
   bootstrap();
 });
@@ -197,6 +209,21 @@ async function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
 }
 
 // ---------- Boot ----------
+/**
+ * Подсказка по причине сетевого сбоя: смешанный контент или CORS.
+ * NetworkError браузера не различает — перечисляем оба сценария с чек-листом.
+ */
+function describeFetchFailure(url: string): string {
+  const mixed = isMixedContent(window.location.href, url);
+  return mixed
+    ? "Ссылка начинается с http://, а страница открыта по https:// — браузер " +
+        "блокирует смешанный контент. Используйте https-ссылку на плейлист."
+    : "Возможные причины: (1) на бакете не включён CORS — добавьте правило для " +
+        "origin https://ozyab09.github.io (см. README), (2) ссылка недоступна " +
+        "из браузера (приватный бакет, firewall). Проверьте консоль (F12) — " +
+        "там будет точная причина (blocked by CORS policy / net::ERR_…).";
+}
+
 async function bootstrap(): Promise<void> {
   const cfg = resolveConfig(window.location.search, localStorage);
   if (!cfg) {
@@ -214,7 +241,7 @@ async function bootstrap(): Promise<void> {
   } catch (e) {
     showSetup(
       `Не удалось загрузить плейлист: ${e instanceof Error ? e.message : "ошибка"}. ` +
-        `Проверьте ссылку и CORS на бакете.`,
+        describeFetchFailure(cfg.playlistUrl),
     );
     return;
   }

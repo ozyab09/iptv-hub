@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveConfig, STORAGE_KEY } from "../src/config";
+import { resolveConfig, isMixedContent, STORAGE_KEY } from "../src/config";
 
 const store = (): Storage => {
   const map = new Map<string, string>();
@@ -53,5 +53,35 @@ describe("resolveConfig", () => {
     const cfg = resolveConfig("?p=https://ok.m3u&e=garbage", store());
     expect(cfg?.epgUrl).toBeNull();
     expect(cfg?.playlistUrl).toBe("https://ok.m3u");
+  });
+});
+
+describe("isMixedContent", () => {
+  it("flags http targets from an https page", () => {
+    expect(
+      isMixedContent(
+        "https://ozyab09.github.io/iptv-hub/",
+        "http://storage.example.net/playlist.m3u",
+      ),
+    ).toBe(true);
+  });
+
+  it("allows https targets from an https page", () => {
+    expect(
+      isMixedContent(
+        "https://ozyab09.github.io/iptv-hub/",
+        "https://storage.yandexcloud.net/bucket/playlist.m3u",
+      ),
+    ).toBe(false);
+  });
+
+  it("allows http targets from an http (localhost) page", () => {
+    expect(
+      isMixedContent("http://localhost:5173/", "http://127.0.0.1:9000/pl.m3u"),
+    ).toBe(false);
+  });
+
+  it("is false for garbage URLs", () => {
+    expect(isMixedContent("https://x/", "not a url")).toBe(false);
   });
 });

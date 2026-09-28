@@ -64,3 +64,19 @@ export function saveConfig(cfg: AppConfig, storage: Storage | null): void {
 }
 
 export const STORAGE_KEY = "iptv-hub.config.v1";
+
+/**
+ * Смешанный контент: https-страница не может фетчить http:// URL —
+ * браузер блокирует запрос ещё до сети (снаружи выглядит как NetworkError).
+ * Проверяем заранее, чтобы дать понятную ошибку вместо загадочной.
+ */
+export function isMixedContent(pageUrl: string, targetUrl: string): boolean {
+  try {
+    return (
+      new URL(pageUrl).protocol === "https:" &&
+      new URL(targetUrl).protocol === "http:"
+    );
+  } catch {
+    return false;
+  }
+}
