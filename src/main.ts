@@ -245,6 +245,11 @@ function renderChannelCard(c: Channel): HTMLElement {
 
 // ---------- Плеер ----------
 function playChannel(c: Channel): void {
+  // Смена канала во время записи: сохраняем записанный кусок старого канала.
+  if (recState === "recording" && lastPlayed && lastPlayed.url !== c.url) {
+    stopRecording(true);
+    showToast("Запись остановлена: канал переключён");
+  }
   lastPlayed = c;
   nowTitle.textContent = c.name;
   nowTitle.title = c.url; // ссылка на поток текущего канала
@@ -273,7 +278,10 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
-  if (recState === "recording") stopRecording(false);
+  if (recState === "recording") {
+    stopRecording(true); // закрытие плеера — тоже сохраняем записанное
+    showToast("Запись остановлена: плеер закрыт");
+  }
   player.stop();
   playerBar.hidden = true;
   lastPlayed = null;
@@ -448,7 +456,20 @@ function stopRecording(save: boolean): void {
   if (!save) recordedChunks = [];
 }
 
+// Единый toggle: старт из idle, стоп+сохранение из recording.
+// (Раньше здесь жили два обработчика — addEventListener + onclick — и оба
+// срабатывали на один клик, показывая ложный тост «Запись уже идёт».)
 btnRec.addEventListener("click", () => {
+  if (recState === "recording") {
+    const stopErr = validateRecOp(recState, "stop");
+    if (stopErr) {
+      showToast(stopErr);
+      return;
+    }
+    stopRecording(true);
+    return;
+  }
+
   if (!lastPlayed) return;
   const err = validateRecOp(recState, "start");
   if (err) {
@@ -500,17 +521,6 @@ btnRec.addEventListener("click", () => {
     stopRecording(false);
     showToast(`Не удалось начать запись: ${e instanceof Error ? e.message : "ошибка"}`);
   }
-
-  // Останавливающий клик по кнопке в состоянии recording
-  btnRec.onclick = () => {
-    const stopErr = validateRecOp(recState, "stop");
-    if (stopErr) {
-      showToast(stopErr);
-      return;
-    }
-    stopRecording(true);
-    btnRec.onclick = null;
-  };
 });
 
 // ---- Гайд (программа передач) + catchup ----
