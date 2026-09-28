@@ -5,6 +5,13 @@ import {
   saveConfig,
   STORAGE_KEY,
 } from "./config";
+import {
+  applyFavorites,
+  isFavorite,
+  loadFavorites,
+  saveFavorites,
+  toggleFavorite,
+} from "./favorites";
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { Player } from "./player";
@@ -35,11 +42,14 @@ const nowCategory = $("now-category");
 const toastEl = $("toast");
 const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
+const btnFavorites = $<HTMLButtonElement>("btn-favorites");
 
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
 let epg: Map<string, import("./types").EpgProgramme[]> | null = null;
 let activeCategory: string | null = null;
+let favorites = loadFavorites(typeof localStorage !== "undefined" ? localStorage : null);
+let favFilter = false;
 const player = new Player(videoEl, showToast);
 
 // ---------- UI helpers ----------
@@ -69,6 +79,11 @@ function showPlayer(): void {
 function renderCategories(): void {
   if (!snapshot) return;
   categoriesNav.textContent = "";
+  btnFavorites.classList.toggle("active", favFilter);
+  btnFavorites.setAttribute("aria-pressed", String(favFilter));
+  btnFavorites.textContent = favFilter
+    ? "★ Показать все"
+    : "☆ Показать избранное";
   const mk = (label: string, value: string | null, count: number) => {
     const b = document.createElement("button");
     b.textContent = `${label} (${count})`;
@@ -106,9 +121,10 @@ function renderChannels(): void {
       c.group.toLowerCase().includes(q)
     );
   });
+  const sorted = applyFavorites(list, favorites, favFilter);
   channelList.textContent = "";
-  emptyState.hidden = list.length > 0;
-  for (const c of list) {
+  emptyState.hidden = sorted.length > 0;
+  for (const c of sorted) {
     channelList.append(renderChannelCard(c));
   }
 }
@@ -132,6 +148,24 @@ function renderChannelCard(c: Channel): HTMLElement {
   name.className = "channel-name";
   name.textContent = c.name;
   card.append(name);
+
+  const star = document.createElement("button");
+  star.className = isFavorite(favorites, c)
+    ? "fav-star active"
+    : "fav-star";
+  star.title = isFavorite(favorites, c)
+    ? "Убрать из избранного"
+    : "В избранное";
+  star.setAttribute("aria-label", star.title);
+  star.textContent = isFavorite(favorites, c) ? "★" : "☆";
+  star.addEventListener("click", (ev) => {
+    ev.stopPropagation(); // не запускать воспроизведение
+    favorites = toggleFavorite(favorites, c);
+    saveFavorites(localStorage, favorites);
+    renderCategories();
+    renderChannels();
+  });
+  card.append(star);
 
   if (c.quality) {
     const q = document.createElement("span");
@@ -178,6 +212,13 @@ btnExpand.addEventListener("click", () => {
 
 // ---------- Поиск ----------
 searchInput.addEventListener("input", () => renderChannels());
+
+// ---------- Избранное ----------
+btnFavorites.addEventListener("click", () => {
+  favFilter = !favFilter;
+  renderCategories();
+  renderChannels();
+});
 
 // ---------- Setup ----------
 setupLoad.addEventListener("click", () => {
