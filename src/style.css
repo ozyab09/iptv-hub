@@ -545,6 +545,37 @@ video { cursor: pointer; }
 }
 .pl-edit input:focus { border-color: var(--accent2); }
 .pl-edit-actions { display: flex; gap: 8px; align-items: center; }
+.pl-io { display: flex; gap: 8px; margin-top: 10px; }
+.io-btn {
+  width: auto;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* Недавно просмотренные */
+.recents-block { margin-bottom: 12px; }
+.recents-title { font-size: 12px; margin-bottom: 6px; }
+.recents-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.recent-chip {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  padding: 5px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-chip:hover { border-color: var(--accent2); }
+
 .pl-form { display: flex; flex-direction: column; }
 .pl-form label {
   display: block;

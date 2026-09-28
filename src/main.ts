@@ -31,6 +31,11 @@ import {
   type Theme,
 } from "./theme";
 import {
+  buildBackup,
+  parseBackup,
+  pushRecent,
+} from "./backup";
+import {
   canRecord,
   pickRecorderMime,
   recordingFileName,
@@ -90,6 +95,11 @@ const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
 const btnFullscreen = $<HTMLButtonElement>("btn-fullscreen");
 const btnRetry = $<HTMLButtonElement>("btn-retry");
+const btnExport = $<HTMLButtonElement>("btn-export");
+const btnImport = $<HTMLButtonElement>("btn-import");
+const importFile = $<HTMLInputElement>("import-file");
+const recentsBlock = $("recents-block");
+const recentsList = $("recents-list");
 const btnFavorites = $<HTMLButtonElement>("btn-favorites");
 const btnPause = $<HTMLButtonElement>("btn-pause");
 const btnPrev = $<HTMLButtonElement>("btn-prev");
@@ -132,6 +142,8 @@ let favorites = new Set<string>();
 let favFilter = false;
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
+/** Недавно просмотренные (url → имя берём из snapshot при рендере). */
+let recents: string[] = [];
 const player = new Player(
   videoEl,
   showToast,
@@ -375,6 +387,17 @@ function playChannel(c: Channel): void {
     showToast("Запись остановлена: канал переключён");
   }
   lastPlayed = c;
+  // recents: дедап по url, максимум RECENTS_MAX, хранение per-плейлист
+  recents = pushRecent(recents, c.url);
+  if (plState.activeId) {
+    try {
+      localStorage.setItem(
+        `iptv-hub.recents.v1:${plState.activeId}`,
+        JSON.stringify(recents),
+      );
+    } catch { /* приватный режим */ }
+    renderRecents();
+  }
   nowTitle.textContent = c.name;
   nowTitle.title = c.url; // ссылка на поток текущего канала
   nowCategory.textContent = c.group;
@@ -956,6 +979,36 @@ document.addEventListener("fullscreenchange", () => {
 // ---------- Поиск ----------
 searchInput.addEventListener("input", () => renderChannels());
 
+// ---------- Недавно просмотренные ----------
+function renderRecents(): void {
+  const urls = recents.filter((u) => visibleChannels.some((c) => c.url === u));
+  recentsBlock.hidden = urls.length === 0;
+  recentsList.textContent = "";
+  for (const url of urls) {
+    const ch = visibleChannels.find((c) => c.url === url);
+    if (!ch) continue;
+    const chip = document.createElement("button");
+    chip.className = "recent-chip";
+    chip.textContent = ch.name;
+    chip.title = ch.group;
+    chip.addEventListener("click", () => playChannel(ch));
+    recentsList.append(chip);
+  }
+}
+
+function loadRecentsFor(id: string): void {
+  try {
+    const raw = localStorage.getItem(`iptv-hub.recents.v1:${id}`);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    recents = Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === "string")
+      : [];
+  } catch {
+    recents = [];
+  }
+  renderRecents();
+}
+
 // ---------- Тема ----------
 let currentTheme: Theme = resolveTheme(
   typeof localStorage !== "undefined" ? localStorage : null,
@@ -1007,6 +1060,7 @@ function activatePlaylist(id: string): void {
   savePlaylists(localStorage, plState);
   favorites = loadFavoritesFor(id);
   favFilter = false;
+  loadRecentsFor(id);
   const pl = activePlaylist(plState);
   if (pl) {
     void openPlaylist(pl.playlistUrl, pl.epgUrl);
@@ -1118,6 +1172,69 @@ function renderPlaylistManager(): void {
     plList.append(row);
   }
 }
+
+// ---------- Экспорт / импорт настроек ----------
+btnExport.addEventListener("click", () => {
+  const favs: Record<string, string[]> = {};
+  for (const p of plState.items) {
+    const list = loadFavoritesFor(p.id);
+    if (list.size > 0) favs[p.id] = [...list];
+  }
+  const backup = buildBackup({
+    theme: document.documentElement.dataset.theme ?? "dark",
+    playlists: plState.items,
+    activeId: plState.activeId,
+    favorites: favs,
+  });
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {
+    type: "application/json",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `iptv-hub-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  showToast("Настройки экспортированы");
+});
+
+btnImport.addEventListener("click", () => importFile.click());
+importFile.addEventListener("change", () => {
+  const file = importFile.files?.[0];
+  if (!file) return;
+  file
+    .text()
+    .then((text) => {
+      const result = parseBackup(text);
+      if (!result.ok) {
+        showToast(`Импорт не удался: ${result.error}`);
+        return;
+      }
+      const data = result.data;
+      // темы
+      if (data.theme !== document.documentElement.dataset.theme) {
+        btnTheme.click();
+      }
+      // плейлисты + избранное (замена целиком)
+      plState = { items: data.playlists, activeId: data.activeId };
+      savePlaylists(localStorage, plState);
+      for (const [plId, urls] of Object.entries(data.favorites)) {
+        try {
+          localStorage.setItem(favoritesKey(plId), JSON.stringify(urls));
+        } catch { /* приватный режим */ }
+      }
+      renderPlaylistManager();
+      renderPlaylistSwitcher();
+      showToast(`Импортировано плейлистов: ${data.playlists.length}`);
+      const active = activePlaylist(plState);
+      if (active) void openPlaylist(active.playlistUrl, active.epgUrl);
+    })
+    .catch(() => showToast("Не удалось прочитать файл"))
+    .finally(() => {
+      importFile.value = ""; // повторный выбор того же файла тоже сработает
+    });
+});
 
 // ---------- Переключатель плейлистов (топбар) ----------
 function renderPlaylistSwitcher(): void {
@@ -1273,6 +1390,7 @@ async function bootstrap(): Promise<void> {
     return;
   }
   favorites = loadFavoritesFor(active.id);
+  loadRecentsFor(active.id);
   await openPlaylist(active.playlistUrl, active.epgUrl);
 }
 
