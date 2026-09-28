@@ -52,6 +52,11 @@
             </p>
             <div id="pl-list" class="pl-list"></div>
             <button id="btn-back-to-player" class="primary" hidden>← Вернуться к просмотру</button>
+            <div class="pl-io">
+              <button id="btn-export" class="icon-btn io-btn" title="Экспорт настроек в JSON" aria-label="Экспорт настроек">⬇ Экспорт</button>
+              <button id="btn-import" class="icon-btn io-btn" title="Импорт настроек из JSON" aria-label="Импорт настроек">⬆ Импорт</button>
+              <input id="import-file" type="file" accept="application/json,.json" hidden />
+            </div>
             <div class="pl-form">
               <label for="setup-name">Название</label>
               <input id="setup-name" type="text" placeholder="Мой IPTV" />
@@ -83,6 +88,10 @@
             </aside>
             <div class="content">
               <div id="epg-now" class="epg-now" hidden></div>
+              <div id="recents-block" class="recents-block" hidden>
+                <div class="recents-title muted">Недавно просмотренные</div>
+                <div id="recents-list" class="recents-list"></div>
+              </div>
               <div id="channel-list" class="channel-list" role="list"></div>
               <div id="empty-state" class="muted" hidden>Ничего не найдено</div>
             </div>
