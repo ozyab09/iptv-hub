@@ -100,8 +100,14 @@
               <button id="quality-btn" class="select quality-btn" title="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
               <div id="quality-menu" class="quality-menu" role="listbox" hidden></div>
             </div>
-            <select id="audio-select" class="select" title="Аудиодорожка" aria-label="Аудиодорожка" hidden></select>
-            <select id="subtitle-select" class="select" title="Субтитры" aria-label="Субтитры" hidden></select>
+            <div id="audio-wrap" class="quality-wrap" hidden>
+              <button id="audio-btn" class="select quality-btn" title="Аудиодорожка" aria-haspopup="listbox" aria-expanded="false">🎵</button>
+              <div id="audio-menu" class="quality-menu" role="listbox" hidden></div>
+            </div>
+            <div id="subtitle-wrap" class="quality-wrap" hidden>
+              <button id="subtitle-btn" class="select quality-btn" title="Субтитры" aria-haspopup="listbox" aria-expanded="false">💬</button>
+              <div id="subtitle-menu" class="quality-menu" role="listbox" hidden></div>
+            </div>
             <span id="player-status" class="player-status muted" title="Разрешение и скорость потока">—</span>
             <button id="btn-guide" class="icon-btn" title="Программа передач" aria-label="Программа передач">📅</button>
             <button id="btn-rec" class="icon-btn rec-btn" title="Записать эфир в файл" aria-label="Запись эфира">⏺</button>

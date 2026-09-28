@@ -101,8 +101,12 @@ const btnPip = $<HTMLButtonElement>("btn-pip");
 const qualityWrap = $("quality-wrap");
 const qualityBtn = $<HTMLButtonElement>("quality-btn");
 const qualityMenu = $("quality-menu");
-const audioSelect = $<HTMLSelectElement>("audio-select");
-const subtitleSelect = $<HTMLSelectElement>("subtitle-select");
+const audioWrap = $("audio-wrap");
+const audioBtn = $<HTMLButtonElement>("audio-btn");
+const audioMenu = $("audio-menu");
+const subtitleWrap = $("subtitle-wrap");
+const subtitleBtn = $<HTMLButtonElement>("subtitle-btn");
+const subtitleMenu = $("subtitle-menu");
 const playerStatus = $("player-status");
 const btnGuide = $<HTMLButtonElement>("btn-guide");
 const guideOverlay = $("guide-overlay");
@@ -516,16 +520,16 @@ window.addEventListener("keydown", (e) => {
 function refreshQualityUi(): void {
   const hls = player.getHls();
   qualityMenu.textContent = "";
-  audioSelect.textContent = "";
-  subtitleSelect.textContent = "";
+  audioMenu.textContent = "";
+  subtitleMenu.textContent = "";
 
   if (!hls) {
     // нативный playback (Safari/iOS, mp4): выбор качества/дорожек недоступен
     qualityBtn.disabled = true;
     qualityBtn.textContent = "Auto";
     qualityMenu.hidden = true;
-    audioSelect.hidden = true;
-    subtitleSelect.hidden = true;
+    audioWrap.hidden = true;
+    subtitleWrap.hidden = true;
     playerStatus.textContent =
       videoEl.videoWidth
         ? formatStatus({
@@ -571,22 +575,47 @@ function refreshQualityUi(): void {
   );
 
   const audioTracks = hls.audioTracks ?? [];
-  audioSelect.hidden = audioTracks.length < 2;
+  audioWrap.hidden = audioTracks.length < 2;
   if (audioTracks.length >= 2) {
-    audioTracks.forEach((t, i) =>
-      audioSelect.append(new Option(trackLabel(t, i), String(i))),
-    );
-    audioSelect.value = String(hls.audioTrack);
+    audioMenu.textContent = "";
+    audioTracks.forEach((t, i) => {
+      const b = document.createElement("button");
+      b.className =
+        i === hls.audioTrack ? "quality-item active" : "quality-item";
+      b.textContent = trackLabel(t, i);
+      b.addEventListener("click", () => {
+        player.setAudioTrack(i);
+        audioMenu.hidden = true;
+      });
+      audioMenu.append(b);
+    });
+    audioBtn.title = `Аудиодорожка: ${trackLabel(audioTracks[hls.audioTrack] ?? {}, hls.audioTrack)}`;
   }
 
   const subTracks = hls.subtitleTracks ?? [];
-  subtitleSelect.hidden = subTracks.length === 0;
+  subtitleWrap.hidden = subTracks.length === 0;
   if (subTracks.length > 0) {
-    subtitleSelect.append(new Option("Выключены", "-1"));
-    subTracks.forEach((t, i) =>
-      subtitleSelect.append(new Option(trackLabel(t, i), String(i))),
-    );
-    subtitleSelect.value = String(hls.subtitleTrack);
+    subtitleMenu.textContent = "";
+    const off = document.createElement("button");
+    off.className =
+      hls.subtitleTrack === -1 ? "quality-item active" : "quality-item";
+    off.textContent = "Выключены";
+    off.addEventListener("click", () => {
+      player.setSubtitleTrack(-1);
+      subtitleMenu.hidden = true;
+    });
+    subtitleMenu.append(off);
+    subTracks.forEach((t, i) => {
+      const b = document.createElement("button");
+      b.className =
+        i === hls.subtitleTrack ? "quality-item active" : "quality-item";
+      b.textContent = trackLabel(t, i);
+      b.addEventListener("click", () => {
+        player.setSubtitleTrack(i);
+        subtitleMenu.hidden = true;
+      });
+      subtitleMenu.append(b);
+    });
   }
 }
 
@@ -619,11 +648,18 @@ document.addEventListener("click", (e) => {
   }
 });
 
-audioSelect.addEventListener("change", () => {
-  player.setAudioTrack(Number(audioSelect.value));
+// меню дорожек — тот же паттерн, что у качества
+document.addEventListener("click", (e) => {
+  if (!audioMenu.hidden && !audioWrap.contains(e.target as Node)) audioMenu.hidden = true;
+  if (!subtitleMenu.hidden && !subtitleWrap.contains(e.target as Node)) subtitleMenu.hidden = true;
 });
-subtitleSelect.addEventListener("change", () => {
-  player.setSubtitleTrack(Number(subtitleSelect.value));
+audioBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  audioMenu.hidden = !audioMenu.hidden;
+});
+subtitleBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  subtitleMenu.hidden = !subtitleMenu.hidden;
 });
 
 /** Остановить запись, если идёт (с сохранением). Вызывается при смене плейлиста. */
