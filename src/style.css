@@ -46,6 +46,10 @@ html, body {
 #search:focus { border-color: var(--accent2); }
 
 /* ---------- screens ---------- */
+/* Атрибут hidden обязан побеждать любой display из классов (иначе
+   .guide-overlay{display:flex} показывает пустую модалку при загрузке). */
+[hidden] { display: none !important; }
+
 .screen[hidden] { display: none; }
 
 .card {
