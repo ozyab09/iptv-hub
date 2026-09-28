@@ -87,6 +87,7 @@ const nowCategory = $("now-category");
 const toastEl = $("toast");
 const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
+const btnFullscreen = $<HTMLButtonElement>("btn-fullscreen");
 const btnFavorites = $<HTMLButtonElement>("btn-favorites");
 const btnPause = $<HTMLButtonElement>("btn-pause");
 const btnPrev = $<HTMLButtonElement>("btn-prev");
@@ -334,6 +335,7 @@ btnClosePlayer.addEventListener("click", () => {
     stopRecording(true); // закрытие плеера — тоже сохраняем записанное
     showToast("Запись остановлена: плеер закрыт");
   }
+  if (document.fullscreenElement) void document.exitFullscreen();
   player.stop();
   playerBar.hidden = true;
   lastPlayed = null;
@@ -441,6 +443,10 @@ window.addEventListener("keydown", (e) => {
     case "l":
     case "д": // ru-раскладка
       btnSeekFwd.click();
+      break;
+    case "f":
+    case "а": // ru-раскладка
+      btnFullscreen.click();
       break;
   }
 });
@@ -789,6 +795,23 @@ window.addEventListener("keydown", (e) => {
 // Театральный режим
 btnExpand.addEventListener("click", () => {
   playerBar.classList.toggle("theater");
+});
+
+// Нативный fullscreen: применяем к #player-bar, чтобы контролы остались поверх
+btnFullscreen.addEventListener("click", () => {
+  if (document.fullscreenElement) {
+    void document.exitFullscreen();
+  } else {
+    void playerBar.requestFullscreen?.().catch(() => {
+      showToast("Полноэкранный режим недоступен");
+    });
+  }
+});
+document.addEventListener("fullscreenchange", () => {
+  btnFullscreen.textContent = document.fullscreenElement ? "⛶" : "⛶"; // глиф одинаков; меняем title
+  btnFullscreen.title = document.fullscreenElement
+    ? "Выйти из полного экрана (F)"
+    : "На весь экран (F)";
 });
 
 // ---------- Поиск ----------
