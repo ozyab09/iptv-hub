@@ -292,6 +292,16 @@ html, body {
   flex: none;
 }
 .icon-btn:hover { border-color: var(--accent); }
+.rec-btn { color: #ff6b6b; }
+.rec-btn.recording {
+  color: #fff;
+  background: #ff3b3b;
+  border-color: #ff3b3b;
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+  50% { opacity: 0.55; }
+}
 
 .player-bar.theater {
   inset: 0;
