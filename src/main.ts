@@ -16,6 +16,13 @@ import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { neighborIndex, Player } from "./player";
 import {
+  buildCatchupUrl,
+  canWatchPast,
+  dayWindows,
+  programmesInDay,
+  type DayWindow,
+} from "./catchup";
+import {
   formatBitrate,
   formatResolution,
   formatStatus,
@@ -61,6 +68,12 @@ const qualitySelect = $<HTMLSelectElement>("quality-select");
 const audioSelect = $<HTMLSelectElement>("audio-select");
 const subtitleSelect = $<HTMLSelectElement>("subtitle-select");
 const playerStatus = $("player-status");
+const btnGuide = $<HTMLButtonElement>("btn-guide");
+const guideOverlay = $("guide-overlay");
+const guideTitle = $("guide-title");
+const guideDays = $("guide-days");
+const guideList = $("guide-list");
+const guideClose = $<HTMLButtonElement>("guide-close");
 
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
@@ -392,6 +405,109 @@ audioSelect.addEventListener("change", () => {
 });
 subtitleSelect.addEventListener("change", () => {
   player.setSubtitleTrack(Number(subtitleSelect.value));
+});
+
+// ---- Гайд (программа передач) + catchup ----
+let guideDayIdx = 0;
+
+function openGuide(): void {
+  if (!lastPlayed) return;
+  guideTitle.textContent = `Программа · ${lastPlayed.name}`;
+  guideDayIdx = 0;
+  guideOverlay.hidden = false;
+  renderGuide();
+}
+
+function renderGuide(): void {
+  if (!lastPlayed) return;
+  const wins = dayWindows();
+  guideDays.textContent = "";
+  wins.forEach((w, i) => {
+    const b = document.createElement("button");
+    b.textContent = w.label;
+    b.className = i === guideDayIdx ? "guide-day active" : "guide-day";
+    b.addEventListener("click", () => {
+      guideDayIdx = i;
+      renderGuide();
+    });
+    guideDays.append(b);
+  });
+
+  guideList.textContent = "";
+  const window: DayWindow = wins[guideDayIdx]!;
+  const progs = epg
+    ? programmesInDay(
+        epg.get(`id:${lastPlayed.tvgId?.toLowerCase() ?? ""}`) ??
+          epg.get(`name:${lastPlayed.normalizedName}`) ??
+          [],
+        window,
+      )
+    : [];
+  if (progs.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "Нет данных на этот день";
+    guideList.append(empty);
+    return;
+  }
+
+  const now = new Date();
+  const cu = {
+    days: lastPlayed.catchupDays,
+    source: lastPlayed.catchupSource,
+  };
+  for (const p of progs) {
+    const start = Date.parse(p.start);
+    const stop = Date.parse(p.stop);
+    const isLive = start <= now.getTime() && now.getTime() < stop;
+    const watchable = isLive || canWatchPast(cu, p, now);
+
+    const row = document.createElement("button");
+    row.className =
+      "guide-row" + (isLive ? " live" : "") + (watchable ? "" : " dim");
+    const t = document.createElement("span");
+    t.className = "guide-time";
+    t.textContent = formatRange(p);
+    const title = document.createElement("span");
+    title.className = "guide-name";
+    title.textContent = p.title + (isLive ? " ● сейчас" : "");
+    row.append(t, title);
+
+    if (watchable) {
+      row.title = isLive
+        ? "Смотреть сейчас"
+        : "Смотреть из архива (catchup)";
+      row.addEventListener("click", () => {
+        if (isLive) {
+          playChannel(lastPlayed!);
+          guideOverlay.hidden = true;
+          return;
+        }
+        const url = buildCatchupUrl(cu, p, now);
+        if (!url) {
+          showToast("Провайдер не дал шаблон архива для этого канала");
+          return;
+        }
+        nowTitle.textContent = `${lastPlayed!.name} · архив`;
+        nowTitle.title = url;
+        playerBar.hidden = false;
+        player.play({ ...lastPlayed!, url });
+        guideOverlay.hidden = true;
+      });
+    } else {
+      row.title =
+        cu.days > 0
+          ? "Вне глубины архива"
+          : "Архив недоступен на этом канале (нет tvg-rec)";
+    }
+    guideList.append(row);
+  }
+}
+
+btnGuide.addEventListener("click", openGuide);
+guideClose.addEventListener("click", () => (guideOverlay.hidden = true));
+guideOverlay.addEventListener("click", (e) => {
+  if (e.target === guideOverlay) guideOverlay.hidden = true;
 });
 
 // Театральный режим

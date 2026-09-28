@@ -303,6 +303,91 @@ html, body {
 }
 .player-bar.theater video { display: block; max-height: none; height: 100%; }
 
+/* ---------- guide (программа передач) ---------- */
+.guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(5, 7, 12, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.guide {
+  width: min(640px, 100%);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  gap: 12px;
+}
+.guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.guide-title {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-days {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.guide-day {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.guide-day.active {
+  border-color: var(--accent2);
+  color: var(--text);
+}
+.guide-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 120px;
+}
+.guide-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.guide-row:hover { background: var(--bg2); }
+.guide-row.live { border-color: var(--accent); }
+.guide-row.dim { opacity: 0.45; cursor: default; }
+.guide-row.dim:hover { background: transparent; }
+.guide-time {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.guide-name { flex: 1; min-width: 0; }
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed;
