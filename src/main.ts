@@ -72,6 +72,8 @@ const plList = $("pl-list");
 const plSwitch = $("pl-switch");
 const plSwitchBtn = $<HTMLButtonElement>("pl-switch-btn");
 const plSwitchMenu = $("pl-switch-menu");
+const btnManage = $<HTMLButtonElement>("btn-manage");
+const btnBackToPlayer = $<HTMLButtonElement>("btn-back-to-player");
 const setupError = $("setup-error");
 const searchInput = $<HTMLInputElement>("search");
 const categoriesNav = $("categories");
@@ -150,6 +152,31 @@ function showPlayer(): void {
   setupScreen.hidden = true;
   playerScreen.hidden = false;
 }
+
+/** Экран менеджера плейлистов (плеер продолжает играть в фоне). */
+function showManager(): void {
+  setupError.hidden = true;
+  renderPlaylistManager();
+  renderPlaylistSwitcher();
+  btnBackToPlayer.hidden = !activePlaylist(plState);
+  playerScreen.hidden = true;
+  setupScreen.hidden = false;
+}
+
+btnManage.addEventListener("click", () => {
+  const wasHidden = playerScreen.hidden;
+  if (wasHidden) {
+    showPlayer(); // менеджер уже открыт — сворачиваем обратно
+  } else {
+    showManager();
+  }
+});
+
+btnBackToPlayer.addEventListener("click", () => {
+  const active = activePlaylist(plState);
+  if (active) void openPlaylist(active.playlistUrl, active.epgUrl);
+  else showSetup();
+});
 
 // ---------- Рендер категорий ----------
 function renderCategories(): void {
@@ -852,6 +879,8 @@ function renderPlaylistManager(): void {
       savePlaylists(localStorage, plState);
       renderPlaylistManager();
       renderPlaylistSwitcher();
+      // Если редактировали активный — перезагрузим его по «Вернуться»
+      btnBackToPlayer.hidden = !activePlaylist(plState);
     });
     const del = document.createElement("button");
     del.className = "icon-btn pl-del";
