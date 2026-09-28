@@ -140,6 +140,30 @@ function showToast(msg: string): void {
   }, 3500);
 }
 
+/** Тост с кнопкой действия (для Firefox-скачивания нужен новый user gesture). */
+function showToastAction(
+  msg: string,
+  actionLabel: string,
+  action: () => void,
+  durationMs = 15_000,
+): void {
+  toastEl.textContent = "";
+  const span = document.createElement("span");
+  span.textContent = msg;
+  const btn = document.createElement("button");
+  btn.className = "toast-action";
+  btn.textContent = actionLabel;
+  btn.addEventListener("click", () => {
+    action();
+    toastEl.hidden = true;
+  });
+  toastEl.append(span, btn);
+  toastEl.hidden = false;
+  window.setTimeout(() => {
+    toastEl.hidden = true;
+  }, durationMs);
+}
+
 function showSetup(message?: string): void {
   if (message) {
     setupError.textContent = message;
@@ -656,24 +680,34 @@ btnRec.addEventListener("click", () => {
       const name = recordingFileName(lastPlayed?.name ?? "recording");
       const url = URL.createObjectURL(blob);
 
-      // Firefox: a.click() из асинхронного onstop (вне user gesture) иногда
-      // молча глотается; повторяем попытку несколько раз и держим анкор в DOM.
-      const tryDownload = (attempt: number): void => {
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = name;
-        a.rel = "noopener";
-        document.body.append(a);
-        a.click();
-        a.remove();
-        if (attempt < 4) {
-          window.setTimeout(() => tryDownload(attempt + 1), 300);
-        }
-      };
-      tryDownload(0);
-      // revoke позже: повторные клики и медленный Firefox должны успеть
+      // Firefox: a.click() из асинхронного onstop (вне user gesture) молча
+      // глотается — повторные клики не помогают. Надёжный путь — клик по кнопке
+      // из тоста: это новый user gesture, скачивание гарантировано.
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.rel = "noopener";
+      document.body.append(a);
+      a.click();
+      a.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      showToast(`Запись сохранена: ${name}`);
+
+      // Кнопка в тосте живёт 15с: если авто-скачивание не сработало (Firefox),
+      // явный клик = свежий жест → загрузка начнётся наверняка.
+      showToastAction(
+        `Автоскачивание не началось?`,
+        `Скачать ${name}`,
+        () => {
+          const a2 = document.createElement("a");
+          a2.href = url;
+          a2.download = name;
+          a2.rel = "noopener";
+          document.body.append(a2);
+          a2.click();
+          a2.remove();
+        },
+        15_000,
+      );
     };
     mediaRecorder.start(2000);
     recState = "recording";
