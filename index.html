@@ -33,6 +33,7 @@
         <a class="brand" href="./" title="На главную"><span class="brand-icon">📺</span> IPTV Hub</a>
         <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
         <div class="topbar-right">
+          <button id="btn-manage" class="icon-btn" title="Список плейлистов (управление)" aria-label="Список плейлистов">📃</button>
           <div class="pl-switch" id="pl-switch" hidden>
             <button id="pl-switch-btn" class="select pl-switch-btn" title="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false">📺</button>
             <div id="pl-switch-menu" class="quality-menu pl-switch-menu" role="listbox" hidden></div>
@@ -50,6 +51,7 @@
               Self-hosted плеер для ваших плейлистов. Ссылки хранятся <b>только в этом браузере</b>.
             </p>
             <div id="pl-list" class="pl-list"></div>
+            <button id="btn-back-to-player" class="primary" hidden>← Вернуться к просмотру</button>
             <div class="pl-form">
               <label for="setup-name">Название</label>
               <input id="setup-name" type="text" placeholder="Мой IPTV" />
