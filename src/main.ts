@@ -20,6 +20,7 @@ import {
 } from "./favorites";
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
+import { computeWindow, spacerHeight } from "./virtual-list";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -236,7 +237,41 @@ function renderCategories(): void {
   );
 }
 
-// ---------- Рендер каналов ----------
+// ---------- Рендер каналов (виртуализированный) ----------
+/** Карточки держим живыми только в видимом окне; остальное — спейсер. */
+let virtualSpacer: HTMLDivElement | null = null;
+let virtualInner: HTMLDivElement | null = null;
+
+function ensureVirtualShell(): void {
+  if (virtualInner) return;
+  virtualSpacer = document.createElement("div");
+  virtualSpacer.className = "virtual-spacer";
+  virtualInner = document.createElement("div");
+  virtualInner.className = "virtual-inner";
+  virtualSpacer.append(virtualInner);
+  channelList.append(virtualSpacer);
+  channelList.addEventListener("scroll", () => {
+    renderVirtualWindow();
+  });
+}
+
+function renderVirtualWindow(): void {
+  if (!virtualInner || !virtualSpacer) return;
+  const vh = channelList.clientHeight || 600;
+  const win = computeWindow(
+    channelList.scrollTop,
+    vh,
+    visibleChannels.length,
+  );
+  virtualSpacer.style.height = `${spacerHeight(visibleChannels.length)}px`;
+  virtualInner.style.transform = `translateY(${win.offset}px)`;
+  virtualInner.textContent = "";
+  for (let i = win.start; i < win.start + win.count; i++) {
+    const c = visibleChannels[i];
+    if (c) virtualInner.append(renderChannelCard(c));
+  }
+}
+
 function renderChannels(): void {
   if (!snapshot) return;
   const q = searchInput.value.trim().toLowerCase();
@@ -251,11 +286,11 @@ function renderChannels(): void {
   });
   const sorted = applyFavorites(list, favorites, favFilter);
   visibleChannels = sorted;
-  channelList.textContent = "";
   emptyState.hidden = sorted.length > 0;
-  for (const c of sorted) {
-    channelList.append(renderChannelCard(c));
-  }
+  ensureVirtualShell();
+  // при смене фильтра сбрасываем прокрутку, чтобы окно пересчиталось с нуля
+  channelList.scrollTop = 0;
+  renderVirtualWindow();
 }
 
 function renderChannelCard(c: Channel): HTMLElement {

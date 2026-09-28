@@ -195,6 +195,19 @@ html, body {
   font-size: 13px;
 }
 .channel-list {
+  /* виртуализация: контейнер сам прокручивается, внутри спейсер высотой
+     items*56px, карточки позиционируются через translateY (см. virtual-list) */
+  position: relative;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  display: block;
+}
+.virtual-spacer { position: relative; width: 100%; }
+.virtual-inner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
