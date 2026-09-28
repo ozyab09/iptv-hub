@@ -42,7 +42,9 @@ import {
   formatResolution,
   formatStatus,
   levelLabel,
+  qualityButtonLabel,
   sortLevelsDesc,
+  tierName,
   trackLabel,
 } from "./quality";
 import type { Channel, PlaylistSnapshot } from "./types";
@@ -79,7 +81,9 @@ const btnNext = $<HTMLButtonElement>("btn-next");
 const btnMute = $<HTMLButtonElement>("btn-mute");
 const volumeSlider = $<HTMLInputElement>("volume-slider");
 const btnPip = $<HTMLButtonElement>("btn-pip");
-const qualitySelect = $<HTMLSelectElement>("quality-select");
+const qualityWrap = $("quality-wrap");
+const qualityBtn = $<HTMLButtonElement>("quality-btn");
+const qualityMenu = $("quality-menu");
 const audioSelect = $<HTMLSelectElement>("audio-select");
 const subtitleSelect = $<HTMLSelectElement>("subtitle-select");
 const playerStatus = $("player-status");
@@ -90,6 +94,7 @@ const guideDays = $("guide-days");
 const guideList = $("guide-list");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
+const nowFav = $<HTMLButtonElement>("now-fav");
 const btnTheme = $<HTMLButtonElement>("btn-theme");
 
 // ---------- Состояние ----------
@@ -255,6 +260,7 @@ function playChannel(c: Channel): void {
   nowTitle.title = c.url; // ссылка на поток текущего канала
   nowCategory.textContent = c.group;
   playerBar.hidden = false;
+  refreshNowFav();
   btnPause.textContent = "⏸"; // после play() обычно идёт воспроизведение
   playerStatus.textContent = "—";
   if (!player.play(c)) {
@@ -319,6 +325,28 @@ volumeSlider.addEventListener("input", () => {
 
 btnPip.addEventListener("click", () => void player.togglePip());
 
+// Клик по самому видео — пауза/продолжить (стандарт видеоплееров)
+videoEl.addEventListener("click", () => {
+  if (playerBar.hidden) return;
+  player.togglePause();
+});
+
+// Звезда избранного в плеер-баре (синхронизирована со списком)
+function refreshNowFav(): void {
+  if (!lastPlayed) return;
+  const fav = isFavorite(favorites, lastPlayed);
+  nowFav.textContent = fav ? "★" : "☆";
+  nowFav.classList.toggle("active", fav);
+  nowFav.title = fav ? "Убрать из избранного" : "В избранное";
+}
+nowFav.addEventListener("click", () => {
+  if (!lastPlayed) return;
+  favorites = toggleFavorite(favorites, lastPlayed);
+  saveFavorites(localStorage, favorites);
+  refreshNowFav();
+  renderChannels();
+});
+
 // Горячие клавиши (когда фокус не в инпуте)
 window.addEventListener("keydown", (e) => {
   if (playerBar.hidden) return;
@@ -364,14 +392,15 @@ window.addEventListener("keydown", (e) => {
 /** Перестроить селект качества + дорожки после смены канала. */
 function refreshQualityUi(): void {
   const hls = player.getHls();
-  qualitySelect.textContent = "";
+  qualityMenu.textContent = "";
   audioSelect.textContent = "";
   subtitleSelect.textContent = "";
 
   if (!hls) {
-    // нативный playback (Safari/iOS, mp4): селекты недоступны
-    qualitySelect.append(new Option("Auto", "-1"));
-    qualitySelect.disabled = true;
+    // нативный playback (Safari/iOS, mp4): выбор качества/дорожек недоступен
+    qualityBtn.disabled = true;
+    qualityBtn.textContent = "Auto";
+    qualityMenu.hidden = true;
     audioSelect.hidden = true;
     subtitleSelect.hidden = true;
     playerStatus.textContent =
@@ -384,13 +413,39 @@ function refreshQualityUi(): void {
     return;
   }
 
-  qualitySelect.disabled = false;
-  qualitySelect.append(new Option("Auto", "-1"));
-  for (const l of sortLevelsDesc(hls.levels.map((lv, i) => ({ ...lv, index: i })))) {
-    const opt = new Option(levelLabel(l), String(l.index));
-    qualitySelect.append(opt);
-  }
-  qualitySelect.value = String(hls.autoLevelEnabled ? -1 : hls.currentLevel);
+  qualityBtn.disabled = false;
+  const levels = sortLevelsDesc(
+    hls.levels.map((lv, i) => ({ ...lv, index: i })),
+  );
+  const currentLv = hls.levels[hls.currentLevel] ?? null;
+  qualityBtn.textContent = qualityButtonLabel(hls.autoLevelEnabled, currentLv);
+  const mkItem = (label: string, levelIndex: number, active: boolean) => {
+    const b = document.createElement("button");
+    b.className = active ? "quality-item active" : "quality-item";
+    b.setAttribute("role", "option");
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      player.setLevel(levelIndex);
+      closeQualityMenu();
+    });
+    return b;
+  };
+  qualityMenu.append(
+    mkItem(
+      hls.autoLevelEnabled
+        ? `Auto · ${currentLv?.height ? tierName(currentLv.height) : "…"}`
+        : "Auto",
+      -1,
+      hls.autoLevelEnabled,
+    ),
+    ...levels.map((l) =>
+      mkItem(
+        levelLabel(l),
+        l.index ?? -1,
+        !hls.autoLevelEnabled && hls.currentLevel === l.index,
+      ),
+    ),
+  );
 
   const audioTracks = hls.audioTracks ?? [];
   audioSelect.hidden = audioTracks.length < 2;
@@ -423,9 +478,24 @@ function refreshPlayerStatus(): void {
   });
 }
 
-qualitySelect.addEventListener("change", () => {
-  player.setLevel(Number(qualitySelect.value));
+// ---- Меню качества (кнопка + выпадающий список) ----
+function closeQualityMenu(): void {
+  qualityMenu.hidden = true;
+  qualityBtn.setAttribute("aria-expanded", "false");
+}
+
+qualityBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = qualityMenu.hidden;
+  qualityMenu.hidden = !willOpen;
+  qualityBtn.setAttribute("aria-expanded", String(willOpen));
 });
+document.addEventListener("click", (e) => {
+  if (!qualityMenu.hidden && !qualityWrap.contains(e.target as Node)) {
+    closeQualityMenu();
+  }
+});
+
 audioSelect.addEventListener("change", () => {
   player.setAudioTrack(Number(audioSelect.value));
 });
@@ -738,6 +808,7 @@ async function bootstrap(): Promise<void> {
       .then((parsed) => {
         epg = parsed;
         renderChannels();
+        refreshNowFav();
         epgNow.textContent = `Каналов: ${snapshot!.channels.length} · Категорий: ${snapshot!.categories.length} · EPG ✓`;
       })
       .catch(() => {

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   formatBitrate,
   formatResolution,
+  tierName,
+  qualityButtonLabel,
   levelLabel,
   sortLevelsDesc,
   trackLabel,
@@ -62,6 +64,30 @@ describe("trackLabel", () => {
   it("falls back to lang then index", () => {
     expect(trackLabel({ lang: "eng" }, 1)).toBe("eng");
     expect(trackLabel({}, 2)).toBe("Дорожка 3");
+  });
+});
+
+describe("tierName", () => {
+  it("maps heights to tiers", () => {
+    expect(tierName(2160)).toBe("4K");
+    expect(tierName(1440)).toBe("QHD");
+    expect(tierName(1080)).toBe("FHD");
+    expect(tierName(720)).toBe("HD");
+    expect(tierName(576)).toBe("SD");
+    expect(tierName(360)).toBe("360p");
+    expect(tierName(0)).toBe("—");
+  });
+});
+
+describe("qualityButtonLabel", () => {
+  it("auto shows the actual tier", () => {
+    expect(qualityButtonLabel(true, { height: 1080, bitrate: 1 })).toBe("Auto · FHD");
+    expect(qualityButtonLabel(true, { height: 0, bitrate: 0 })).toBe("Auto");
+    expect(qualityButtonLabel(true, null)).toBe("Auto");
+  });
+  it("fixed level shows its tier", () => {
+    expect(qualityButtonLabel(false, { height: 720, bitrate: 1 })).toBe("HD");
+    expect(qualityButtonLabel(false, null)).toBe("—");
   });
 });
 

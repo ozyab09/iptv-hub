@@ -90,11 +90,17 @@
             <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Громкость" />
           </div>
           <div class="now-playing">
-            <div id="now-title" class="now-title">—</div>
+            <div class="now-line">
+              <button id="now-fav" class="fav-star" title="В избранное" aria-label="В избранное или убрать">☆</button>
+              <div id="now-title" class="now-title">—</div>
+            </div>
             <div id="now-category" class="now-category muted"></div>
           </div>
           <button id="btn-pip" class="icon-btn" title="Плавающее окно (PiP)" aria-label="Плавающее окно">⧉</button>
-          <select id="quality-select" class="select" title="Качество" aria-label="Качество"></select>
+          <div id="quality-wrap" class="quality-wrap">
+            <button id="quality-btn" class="select quality-btn" title="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
+            <div id="quality-menu" class="quality-menu" role="listbox" hidden></div>
+          </div>
           <select id="audio-select" class="select" title="Аудиодорожка" aria-label="Аудиодорожка" hidden></select>
           <select id="subtitle-select" class="select" title="Субтитры" aria-label="Субтитры" hidden></select>
           <span id="player-status" class="player-status muted" title="Разрешение и скорость потока">—</span>

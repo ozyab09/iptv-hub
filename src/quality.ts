@@ -30,8 +30,33 @@ export function formatResolution(
 }
 
 /**
- * Подпись уровня качества для селекта: «1080p (4.5 Мбит/с)».
- * Auto обрабатывается вызывающей стороной.
+ * Короткое имя качества по высоте потока — для лейбла кнопки:
+ * ≥2000 → 4K, ≥1400 → QHD, ≥1000 → FHD, ≥700 → HD, ≥400 → SD, иначе — «{h}p».
+ */
+export function tierName(height: number): string {
+  if (!Number.isFinite(height) || height <= 0) return "—";
+  if (height >= 2000) return "4K";
+  if (height >= 1400) return "QHD";
+  if (height >= 1000) return "FHD";
+  if (height >= 700) return "HD";
+  if (height >= 400) return "SD";
+  return `${height}p`;
+}
+
+/** Лейбл кнопки качества: «Auto · HD» или «1080p». */
+export function qualityButtonLabel(
+  auto: boolean,
+  level: QualityLevel | null,
+): string {
+  if (auto) {
+    const t = level && level.height ? tierName(level.height) : "";
+    return t ? `Auto · ${t}` : "Auto";
+  }
+  return level && level.height ? tierName(level.height) : "—";
+}
+
+/**
+ * Подпись уровня качества для меню выбора: «1080p (4.5 Мбит/с)».
  */
 export function levelLabel(level: QualityLevel): string {
   const h = level.height ? `${level.height}p` : "уровень";
@@ -39,7 +64,7 @@ export function levelLabel(level: QualityLevel): string {
 }
 
 /**
- * Сортировка уровней по убыванию высоты (для селекта — лучшие сверху).
+ * Сортировка уровней по убыванию высоты (для меню — лучшие сверху).
  * Без мутирования входного массива.
  */
 export function sortLevelsDesc(levels: QualityLevel[]): QualityLevel[] {
