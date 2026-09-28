@@ -90,6 +90,11 @@ export interface RecordingDeps {
   onSave: (blob: Blob, chunkCount: number, mimeType: string) => void;
   onNotify: (message: string) => void;
   onState: (state: RecState) => void;
+  /**
+   * Источник оборвался сам, стоп никто не нажимал. Накопленный огрызок
+   * не сохраняется — отдавать его как готовую запись было бы ложным успехом.
+   */
+  onSourceLost?: () => void;
   /** Подмены для тестов. */
   pickMime?: (hasAudio: boolean) => string | null;
   stopTimeoutMs?: number;
@@ -125,6 +130,7 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
   let chunks: Blob[] = [];
   let mime = "";
   let saved = false;
+  let failed = false;
   let watchdog: ReturnType<typeof setTimeout> | null = null;
 
   function setState(next: RecState): void {
@@ -155,6 +161,30 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
     const collected = chunks;
     chunks = [];
     deps.onSave(new Blob(collected, { type: mime.split(";")[0] }), collected.length, mime);
+  }
+
+  /**
+   * Завершение записи. `aborted` — запись сорвалась сама (умер источник или
+   * упал энкодер): накопленный огрызок не отдаётся, вместо файла зовётся
+   * onSourceLost, чтобы вызывающий мог сменить способ захвата.
+   */
+  function settle(aborted: boolean): void {
+    if (!aborted) flush();
+    finalize();
+    if (aborted) {
+      console.warn("[iptv-hub] rec: запись сорвалась, файл не сохранён");
+      deps.onSourceLost?.();
+    }
+  }
+
+  /** Страховка от молчания: stop может не прийти ни после stop(), ни после ошибки. */
+  function armWatchdog(): void {
+    if (watchdog !== null) return;
+    watchdog = setTimeout(() => {
+      watchdog = null;
+      console.warn("[iptv-hub] rec: событие stop не пришло — завершаем сами");
+      settle(failed);
+    }, stopTimeoutMs);
   }
 
   return {
@@ -194,12 +224,17 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
       };
       started.onerror = (e) => {
         console.error("[iptv-hub] MediaRecorder error:", e);
-        deps.onNotify("Ошибка записи (подробности в консоли F12)");
-        finalize();
+        failed = true;
+        // Источник не сносим: за ошибкой обычно приходит stop, и снос в этот
+        // момент съел бы его — та же гонка, что в #58. Завершает onstop,
+        // а watchdog подстрахует, если stop так и не придёт.
+        armWatchdog();
       };
       started.onstop = () => {
-        flush();
-        finalize();
+        // MediaRecorder останавливается сам, когда умирают дорожки стрима или
+        // падает энкодер. Если стоп никто не нажимал (state ещё recording) или
+        // до этого была ошибка — в буфере лежит бесполезный огрызок.
+        settle(failed || state === "recording");
       };
       try {
         started.start(TIMESLICE_MS);
@@ -213,6 +248,7 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
       mime = picked;
       chunks = [];
       saved = false;
+      failed = false;
       setState("recording");
     },
 
@@ -232,14 +268,9 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
         return;
       }
       setState("stopping");
-      // Страховка: без неё отказ рекордера выглядит как полная тишина —
-      // ни файла, ни сообщения (симптом, который чинили PR #40/#44/#46).
-      watchdog = setTimeout(() => {
-        watchdog = null;
-        console.warn("[iptv-hub] rec: событие stop не пришло — сохраняем накопленное");
-        flush();
-        finalize();
-      }, stopTimeoutMs);
+      // Без страховки отказ рекордера выглядит как полная тишина — ни файла,
+      // ни сообщения (симптом, который чинили PR #40/#44/#46).
+      armWatchdog();
       // Источник НЕ трогаем: его снесёт finalize() после onstop.
       active.stop();
     },
