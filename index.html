@@ -11,12 +11,28 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>IPTV Hub</title>
-  </head>
+    <script>
+      // До первой отрисовки: сохранённая тема или системная — без FOUC.
+      // (Дублирует логику src/theme.ts; здесь нельзя ждать бандла.)
+      (function () {
+        try {
+          var t = localStorage.getItem("iptv-hub.theme.v1");
+          if (t !== "dark" && t !== "light") {
+            t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          }
+          document.documentElement.dataset.theme = t;
+          document.documentElement.style.colorScheme = t;
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
   <body>
     <div id="app">
       <header class="topbar">
         <div class="brand"><span class="brand-icon">📺</span> IPTV Hub</div>
         <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
+        <button id="btn-theme" class="icon-btn" title="Переключить тему" aria-label="Переключить тему">☀️</button>
       </header>
 
       <main id="main">

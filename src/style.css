@@ -7,7 +7,26 @@
   --muted: #8b94a7;
   --accent: #ff4fa3;
   --accent2: #4f8cff;
+  --overlay: rgba(5, 7, 12, 0.72);
+  --bar: rgba(11, 14, 20, 0.97);
   --radius: 12px;
+  color-scheme: dark;
+}
+
+/* Светлая тема — та же семантика переменных, дневная палитра.
+   Акценты чуть глубже, чтобы держать контраст на белом. */
+:root[data-theme="light"] {
+  --bg: #f4f6fa;
+  --bg2: #e8ecf4;
+  --card: #ffffff;
+  --border: #d5dbe7;
+  --text: #1c2333;
+  --muted: #5c6579;
+  --accent: #d81b7c;
+  --accent2: #2f6ce0;
+  --overlay: rgba(28, 35, 51, 0.4);
+  --bar: rgba(255, 255, 255, 0.97);
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -249,7 +268,7 @@ html, body {
   position: fixed;
   left: 0; right: 0; bottom: 0;
   z-index: 50;
-  background: rgba(11, 14, 20, 0.97);
+  background: var(--bar);
   border-top: 1px solid var(--border);
   backdrop-filter: blur(8px);
   padding: 8px 16px;
@@ -322,7 +341,7 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgba(5, 7, 12, 0.72);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;

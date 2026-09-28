@@ -16,6 +16,14 @@ import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { neighborIndex, Player } from "./player";
 import {
+  applyTheme,
+  resolveTheme,
+  saveTheme,
+  themeButtonLabel,
+  toggleTheme,
+  type Theme,
+} from "./theme";
+import {
   canRecord,
   pickRecorderMime,
   recordingFileName,
@@ -82,6 +90,7 @@ const guideDays = $("guide-days");
 const guideList = $("guide-list");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
+const btnTheme = $<HTMLButtonElement>("btn-theme");
 
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
@@ -617,6 +626,22 @@ btnExpand.addEventListener("click", () => {
 
 // ---------- Поиск ----------
 searchInput.addEventListener("input", () => renderChannels());
+
+// ---------- Тема ----------
+let currentTheme: Theme = resolveTheme(
+  typeof localStorage !== "undefined" ? localStorage : null,
+  typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)").matches
+    : null,
+);
+applyTheme(currentTheme);
+btnTheme.textContent = themeButtonLabel(currentTheme);
+btnTheme.addEventListener("click", () => {
+  currentTheme = toggleTheme(currentTheme);
+  applyTheme(currentTheme);
+  saveTheme(currentTheme, localStorage);
+  btnTheme.textContent = themeButtonLabel(currentTheme);
+});
 
 // ---------- Избранное ----------
 btnFavorites.addEventListener("click", () => {
