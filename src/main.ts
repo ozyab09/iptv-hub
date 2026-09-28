@@ -16,6 +16,13 @@ import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { neighborIndex, Player } from "./player";
 import {
+  canRecord,
+  pickRecorderMime,
+  recordingFileName,
+  validateRecOp,
+  type RecState,
+} from "./recorder";
+import {
   buildCatchupUrl,
   canWatchPast,
   dayWindows,
@@ -74,6 +81,7 @@ const guideTitle = $("guide-title");
 const guideDays = $("guide-days");
 const guideList = $("guide-list");
 const guideClose = $<HTMLButtonElement>("guide-close");
+const btnRec = $<HTMLButtonElement>("btn-rec");
 
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
@@ -256,6 +264,7 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
+  if (recState === "recording") stopRecording(false);
   player.stop();
   playerBar.hidden = true;
   lastPlayed = null;
@@ -405,6 +414,94 @@ audioSelect.addEventListener("change", () => {
 });
 subtitleSelect.addEventListener("change", () => {
   player.setSubtitleTrack(Number(subtitleSelect.value));
+});
+
+// ---- Запись эфира (MediaRecorder поверх captureStream) ----
+let recState: RecState = "idle";
+let mediaRecorder: MediaRecorder | null = null;
+let recordedChunks: BlobPart[] = [];
+let recordCanvas: HTMLCanvasElement | null = null;
+let recordRaf = 0;
+
+function stopRecording(save: boolean): void {
+  window.clearInterval(recordRaf);
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+  if (recordCanvas) {
+    const stream = recordCanvas.captureStream();
+    stream.getTracks().forEach((t) => t.stop());
+    recordCanvas = null;
+  }
+  btnRec.classList.remove("recording");
+  btnRec.title = "Записать эфир в файл";
+  recState = "idle";
+  if (!save) recordedChunks = [];
+}
+
+btnRec.addEventListener("click", () => {
+  if (!lastPlayed) return;
+  const err = validateRecOp(recState, "start");
+  if (err) {
+    showToast(err);
+    return;
+  }
+  const mime = pickRecorderMime();
+  if (!mime || !canRecord()) {
+    showToast("Запись не поддерживается этим браузером");
+    return;
+  }
+  try {
+    // MSE-видео нельзя записать напрямую — рисуем кадры на canvas
+    recordCanvas = document.createElement("canvas");
+    recordCanvas.width = videoEl.videoWidth || 1280;
+    recordCanvas.height = videoEl.videoHeight || 720;
+    const ctx = recordCanvas.getContext("2d");
+    if (!ctx) throw new Error("canvas 2d недоступен");
+    recordRaf = window.setInterval(
+      () => ctx.drawImage(videoEl, 0, 0, recordCanvas!.width, recordCanvas!.height),
+      1000 / 25,
+    );
+    const stream = recordCanvas.captureStream(25);
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+    recordedChunks = [];
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: mime.split(";")[0] });
+      recordedChunks = [];
+      if (blob.size === 0) {
+        showToast("Запись пустая — поток не отдал кадров");
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = recordingFileName(lastPlayed?.name ?? "recording");
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      showToast(`Запись сохранена: ${a.download}`);
+    };
+    mediaRecorder.start(2000);
+    recState = "recording";
+    btnRec.classList.add("recording");
+    btnRec.title = "Остановить запись и сохранить файл";
+    showToast("Запись началась");
+  } catch (e) {
+    stopRecording(false);
+    showToast(`Не удалось начать запись: ${e instanceof Error ? e.message : "ошибка"}`);
+  }
+
+  // Останавливающий клик по кнопке в состоянии recording
+  btnRec.onclick = () => {
+    const stopErr = validateRecOp(recState, "stop");
+    if (stopErr) {
+      showToast(stopErr);
+      return;
+    }
+    stopRecording(true);
+    btnRec.onclick = null;
+  };
 });
 
 // ---- Гайд (программа передач) + catchup ----
