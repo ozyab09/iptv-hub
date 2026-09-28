@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { neighborIndex } from "../src/player";
+import { neighborIndex, skipTarget } from "../src/player";
 
 describe("neighborIndex (prev/next channel)", () => {
   it("returns null for an empty list", () => {
@@ -19,5 +19,26 @@ describe("neighborIndex (prev/next channel)", () => {
   it("handles single-element list", () => {
     expect(neighborIndex(0, 1, 1)).toBe(0);
     expect(neighborIndex(0, 1, -1)).toBe(0);
+  });
+});
+
+describe("skipTarget (±15s seek)", () => {
+  it("returns null for live streams", () => {
+    expect(skipTarget(10, -15, 0, true)).toBeNull();
+    expect(skipTarget(10, 15, Infinity, true)).toBeNull();
+  });
+
+  it("clamps to [0, duration]", () => {
+    expect(skipTarget(5, -15, 600, false)).toBe(0);
+    expect(skipTarget(595, 15, 600, false)).toBe(600);
+  });
+
+  it("moves by delta within bounds", () => {
+    expect(skipTarget(100, 15, 600, false)).toBe(115);
+    expect(skipTarget(100, -15, 600, false)).toBe(85);
+  });
+
+  it("handles NaN currentTime", () => {
+    expect(skipTarget(NaN, 15, 600, false)).toBeNull();
   });
 });

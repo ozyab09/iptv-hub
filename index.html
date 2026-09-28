@@ -92,32 +92,45 @@
       <div id="player-bar" class="player-bar" hidden>
         <video id="video" playsinline></video>
         <div class="player-bar-row">
-          <button id="btn-pause" class="icon-btn" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить">▶</button>
-          <button id="btn-prev" class="icon-btn" title="Предыдущий канал (←)" aria-label="Предыдущий канал">⏮</button>
-          <button id="btn-next" class="icon-btn" title="Следующий канал (→)" aria-label="Следующий канал">⏭</button>
-          <div class="volume">
-            <button id="btn-mute" class="icon-btn" title="Звук вкл/выкл (M)" aria-label="Звук вкл или выкл">🔊</button>
-            <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Громкость" />
-          </div>
-          <div class="now-playing">
-            <div class="now-line">
-              <button id="now-fav" class="fav-star" title="В избранное" aria-label="В избранное или убрать">☆</button>
-              <div id="now-title" class="now-title">—</div>
+          <!-- Левая зона: качество, дорожки, статус, гайд, запись -->
+          <div class="pb-zone pb-left">
+            <div id="quality-wrap" class="quality-wrap">
+              <button id="quality-btn" class="select quality-btn" title="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
+              <div id="quality-menu" class="quality-menu" role="listbox" hidden></div>
             </div>
-            <div id="now-category" class="now-category muted"></div>
+            <select id="audio-select" class="select" title="Аудиодорожка" aria-label="Аудиодорожка" hidden></select>
+            <select id="subtitle-select" class="select" title="Субтитры" aria-label="Субтитры" hidden></select>
+            <span id="player-status" class="player-status muted" title="Разрешение и скорость потока">—</span>
+            <button id="btn-guide" class="icon-btn" title="Программа передач" aria-label="Программа передач">📅</button>
+            <button id="btn-rec" class="icon-btn rec-btn" title="Записать эфир в файл" aria-label="Запись эфира">⏺</button>
           </div>
-          <button id="btn-pip" class="icon-btn" title="Плавающее окно (PiP)" aria-label="Плавающее окно">⧉</button>
-          <div id="quality-wrap" class="quality-wrap">
-            <button id="quality-btn" class="select quality-btn" title="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
-            <div id="quality-menu" class="quality-menu" role="listbox" hidden></div>
+
+          <!-- Центральная зона: перемотка и каналы -->
+          <div class="pb-zone pb-center">
+            <button id="btn-seek-back" class="icon-btn" title="Назад 15 сек (J)" aria-label="Назад 15 секунд">⏪</button>
+            <button id="btn-prev" class="icon-btn" title="Предыдущий канал (←)" aria-label="Предыдущий канал">⏮</button>
+            <button id="btn-pause" class="icon-btn btn-pause-main" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить">▶</button>
+            <button id="btn-next" class="icon-btn" title="Следующий канал (→)" aria-label="Следующий канал">⏭</button>
+            <button id="btn-seek-fwd" class="icon-btn" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд">⏩</button>
           </div>
-          <select id="audio-select" class="select" title="Аудиодорожка" aria-label="Аудиодорожка" hidden></select>
-          <select id="subtitle-select" class="select" title="Субтитры" aria-label="Субтитры" hidden></select>
-          <span id="player-status" class="player-status muted" title="Разрешение и скорость потока">—</span>
-          <button id="btn-guide" class="icon-btn" title="Программа передач" aria-label="Программа передач">📅</button>
-          <button id="btn-rec" class="icon-btn rec-btn" title="Записать эфир в файл" aria-label="Запись эфира">⏺</button>
-          <button id="btn-expand" class="icon-btn" title="Развернуть" aria-label="Развернуть плеер">⤢</button>
-          <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер">✕</button>
+
+          <!-- Правая зона: громкость, канал, окно -->
+          <div class="pb-zone pb-right">
+            <div class="volume">
+              <button id="btn-mute" class="icon-btn" title="Звук вкл/выкл (M)" aria-label="Звук вкл или выкл">🔊</button>
+              <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Громкость" />
+            </div>
+            <div class="now-playing">
+              <div class="now-line">
+                <button id="now-fav" class="fav-star" title="В избранное" aria-label="В избранное или убрать">☆</button>
+                <div id="now-title" class="now-title">—</div>
+              </div>
+              <div id="now-category" class="now-category muted"></div>
+            </div>
+            <button id="btn-pip" class="icon-btn" title="Плавающее окно (PiP)" aria-label="Плавающее окно">⧉</button>
+            <button id="btn-expand" class="icon-btn" title="Развернуть" aria-label="Развернуть плеер">⤢</button>
+            <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер">✕</button>
+          </div>
         </div>
       </div>
 

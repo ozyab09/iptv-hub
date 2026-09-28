@@ -20,7 +20,7 @@ import {
 } from "./favorites";
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
-import { neighborIndex, Player } from "./player";
+import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
   resolveTheme,
@@ -89,6 +89,8 @@ const btnFavorites = $<HTMLButtonElement>("btn-favorites");
 const btnPause = $<HTMLButtonElement>("btn-pause");
 const btnPrev = $<HTMLButtonElement>("btn-prev");
 const btnNext = $<HTMLButtonElement>("btn-next");
+const btnSeekBack = $<HTMLButtonElement>("btn-seek-back");
+const btnSeekFwd = $<HTMLButtonElement>("btn-seek-fwd");
 const btnMute = $<HTMLButtonElement>("btn-mute");
 const volumeSlider = $<HTMLInputElement>("volume-slider");
 const btnPip = $<HTMLButtonElement>("btn-pip");
@@ -330,6 +332,10 @@ videoEl.addEventListener("loadedmetadata", () => {
 btnPrev.addEventListener("click", () => playNeighbor(-1));
 btnNext.addEventListener("click", () => playNeighbor(1));
 
+// Перемотка ±15 сек (на live заблокирована — skipTarget вернёт null)
+btnSeekBack.addEventListener("click", () => seekBy(videoEl, -15));
+btnSeekFwd.addEventListener("click", () => seekBy(videoEl, 15));
+
 btnMute.addEventListener("click", () => {
   player.toggleMute();
   btnMute.textContent = player.getVolume() === 0 ? "🔇" : "🔊";
@@ -400,6 +406,14 @@ window.addEventListener("keydown", (e) => {
     case "m":
     case "ь": // ru-раскладка
       btnMute.click();
+      break;
+    case "j":
+    case "о": // ru-раскладка
+      btnSeekBack.click();
+      break;
+    case "l":
+    case "д": // ru-раскладка
+      btnSeekFwd.click();
       break;
   }
 });

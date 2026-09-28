@@ -294,6 +294,19 @@ html, body {
   padding-top: 6px;
   flex-wrap: wrap;
 }
+/* Три зоны бара: центральная группа контролов — строго по центру */
+.pb-zone { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pb-left { flex: 1; justify-content: flex-start; flex-wrap: wrap; }
+.pb-center { flex: 0 0 auto; justify-content: center; gap: 6px; }
+.pb-right { flex: 1; justify-content: flex-end; flex-wrap: wrap; }
+.btn-pause-main { width: 44px; height: 44px; font-size: 19px; }
+@media (max-width: 900px) {
+  /* На узких экранах центр уходит на первую строку, лево/право ниже */
+  .player-bar-row { flex-wrap: wrap; }
+  .pb-center { order: -1; flex: 1; }
+  .pb-left { order: 2; flex: 1; }
+  .pb-right { order: 3; flex: 1; }
+}
 .volume {
   display: flex;
   align-items: center;
