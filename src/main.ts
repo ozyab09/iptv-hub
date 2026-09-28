@@ -15,6 +15,14 @@ import {
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { neighborIndex, Player } from "./player";
+import {
+  formatBitrate,
+  formatResolution,
+  formatStatus,
+  levelLabel,
+  sortLevelsDesc,
+  trackLabel,
+} from "./quality";
 import type { Channel, PlaylistSnapshot } from "./types";
 
 // ---------- DOM ----------
@@ -49,6 +57,10 @@ const btnNext = $<HTMLButtonElement>("btn-next");
 const btnMute = $<HTMLButtonElement>("btn-mute");
 const volumeSlider = $<HTMLInputElement>("volume-slider");
 const btnPip = $<HTMLButtonElement>("btn-pip");
+const qualitySelect = $<HTMLSelectElement>("quality-select");
+const audioSelect = $<HTMLSelectElement>("audio-select");
+const subtitleSelect = $<HTMLSelectElement>("subtitle-select");
+const playerStatus = $("player-status");
 
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
@@ -58,7 +70,10 @@ let favorites = loadFavorites(typeof localStorage !== "undefined" ? localStorage
 let favFilter = false;
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
-const player = new Player(videoEl, showToast);
+const player = new Player(videoEl, showToast, () => {
+  refreshQualityUi();
+  refreshPlayerStatus();
+});
 
 // ---------- UI helpers ----------
 function showToast(msg: string): void {
@@ -206,9 +221,13 @@ function playChannel(c: Channel): void {
   nowCategory.textContent = c.group;
   playerBar.hidden = false;
   btnPause.textContent = "⏸"; // после play() обычно идёт воспроизведение
+  playerStatus.textContent = "—";
   if (!player.play(c)) {
     showToast("Формат потока не поддерживается");
+    return;
   }
+  // уровни/дорожки приходят асинхронно после парсинга манифеста
+  refreshQualityUi();
   renderChannels(); // подсветка активного
 }
 
@@ -235,6 +254,16 @@ btnPause.addEventListener("click", () => {
 });
 videoEl.addEventListener("play", () => (btnPause.textContent = "⏸"));
 videoEl.addEventListener("pause", () => (btnPause.textContent = "▶"));
+videoEl.addEventListener("loadedmetadata", () => {
+  // нативный playback: разрешение становится известно здесь
+  if (videoEl.videoWidth) {
+    playerStatus.textContent = formatStatus({
+      resolution: formatResolution(videoEl.videoWidth, videoEl.videoHeight),
+      bitrate: "—",
+    });
+  }
+  refreshPlayerStatus();
+});
 
 btnPrev.addEventListener("click", () => playNeighbor(-1));
 btnNext.addEventListener("click", () => playNeighbor(1));
@@ -289,6 +318,80 @@ window.addEventListener("keydown", (e) => {
       btnMute.click();
       break;
   }
+});
+
+// ---- Качество / дорожки / статус-бар (живут, пока играет hls-поток) ----
+
+/** Перестроить селект качества + дорожки после смены канала. */
+function refreshQualityUi(): void {
+  const hls = player.getHls();
+  qualitySelect.textContent = "";
+  audioSelect.textContent = "";
+  subtitleSelect.textContent = "";
+
+  if (!hls) {
+    // нативный playback (Safari/iOS, mp4): селекты недоступны
+    qualitySelect.append(new Option("Auto", "-1"));
+    qualitySelect.disabled = true;
+    audioSelect.hidden = true;
+    subtitleSelect.hidden = true;
+    playerStatus.textContent =
+      videoEl.videoWidth
+        ? formatStatus({
+            resolution: formatResolution(videoEl.videoWidth, videoEl.videoHeight),
+            bitrate: "—",
+          })
+        : "—";
+    return;
+  }
+
+  qualitySelect.disabled = false;
+  qualitySelect.append(new Option("Auto", "-1"));
+  for (const l of sortLevelsDesc(hls.levels.map((lv, i) => ({ ...lv, index: i })))) {
+    const opt = new Option(levelLabel(l), String(l.index));
+    qualitySelect.append(opt);
+  }
+  qualitySelect.value = String(hls.autoLevelEnabled ? -1 : hls.currentLevel);
+
+  const audioTracks = hls.audioTracks ?? [];
+  audioSelect.hidden = audioTracks.length < 2;
+  if (audioTracks.length >= 2) {
+    audioTracks.forEach((t, i) =>
+      audioSelect.append(new Option(trackLabel(t, i), String(i))),
+    );
+    audioSelect.value = String(hls.audioTrack);
+  }
+
+  const subTracks = hls.subtitleTracks ?? [];
+  subtitleSelect.hidden = subTracks.length === 0;
+  if (subTracks.length > 0) {
+    subtitleSelect.append(new Option("Выключены", "-1"));
+    subTracks.forEach((t, i) =>
+      subtitleSelect.append(new Option(trackLabel(t, i), String(i))),
+    );
+    subtitleSelect.value = String(hls.subtitleTrack);
+  }
+}
+
+/** Обновить статус-бар: разрешение + текущий битрейт (при смене уровня). */
+function refreshPlayerStatus(): void {
+  const hls = player.getHls();
+  if (!hls) return;
+  const lv = hls.levels[hls.currentLevel];
+  playerStatus.textContent = formatStatus({
+    resolution: formatResolution(videoEl.videoWidth, videoEl.videoHeight),
+    bitrate: lv ? formatBitrate(lv.bitrate) : "—",
+  });
+}
+
+qualitySelect.addEventListener("change", () => {
+  player.setLevel(Number(qualitySelect.value));
+});
+audioSelect.addEventListener("change", () => {
+  player.setAudioTrack(Number(audioSelect.value));
+});
+subtitleSelect.addEventListener("change", () => {
+  player.setSubtitleTrack(Number(subtitleSelect.value));
 });
 
 // Театральный режим

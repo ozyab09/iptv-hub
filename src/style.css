@@ -145,6 +145,12 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Внутри flex-колонки со скроллом кнопки обязаны сохранять свою высоту:
+   flex-shrink по умолчанию сжимает их, и текст обрезается по вертикали. */
+  flex: 0 0 auto;
+  min-height: 2.4em;
+  line-height: 1.4;
+  overflow-wrap: normal;
 }
 .category-btn:hover { background: var(--bg2); color: var(--text); }
 .category-btn.active {

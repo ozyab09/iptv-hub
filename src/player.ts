@@ -11,13 +11,17 @@ export class Player {
   private hls: Hls | null = null;
   private currentUrl: string | null = null;
   private toast: (msg: string) => void;
+  /** Вызывается, когда hls сообщит о манифесте/уровне/дорожках (для UI). */
+  private onHlsState: (() => void) | null;
 
   constructor(
     video: HTMLVideoElement,
     toast: (msg: string) => void,
+    onHlsState?: () => void,
   ) {
     this.video = video;
     this.toast = toast;
+    this.onHlsState = onHlsState ?? null;
   }
 
   /** Играть канал. True — попытка начата, false — URL не поддерживается. */
@@ -38,6 +42,12 @@ export class Player {
           this.toast(`Ошибка потока: ${data.details ?? "unknown"}`);
         }
       });
+      const notify = (): void => this.onHlsState?.();
+      this.hls.on(Hls.Events.MANIFEST_PARSED, notify);
+      this.hls.on(Hls.Events.LEVEL_SWITCHED, notify);
+      this.hls.on(Hls.Events.LEVEL_UPDATED, notify);
+      this.hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, notify);
+      this.hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, notify);
     } else if (isDash) {
       this.toast("MPEG-DASH не поддерживается в MVP (см. ROADMAP)");
       return false;
@@ -105,6 +115,28 @@ export class Player {
     this.video.removeAttribute("src");
     this.video.load();
     this.currentUrl = null;
+  }
+
+  // ---- Качество / дорожки (работают только когда поток через hls.js) ----
+
+  /** Живой hls-инстанс или null (нативный playback — управление недоступно). */
+  getHls(): Hls | null {
+    return this.hls;
+  }
+
+  /** Выбрать уровень качества; -1 = Auto. */
+  setLevel(index: number): void {
+    if (this.hls) this.hls.currentLevel = index;
+  }
+
+  /** Выбрать аудиодорожку. */
+  setAudioTrack(index: number): void {
+    if (this.hls) this.hls.audioTrack = index;
+  }
+
+  /** Выбрать субтитры; -1 = выключены. */
+  setSubtitleTrack(index: number): void {
+    if (this.hls) this.hls.subtitleTrack = index;
   }
 }
 
