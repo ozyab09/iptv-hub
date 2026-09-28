@@ -196,6 +196,31 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.fav-star {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 8px;
+  line-height: 1;
+}
+.fav-star:hover { background: var(--bg2); color: var(--text); }
+.fav-star.active { color: var(--accent); }
+
+.fav-toggle {
+  margin-bottom: 8px;
+  border: 1px dashed var(--border);
+}
+.fav-toggle.active {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .badge {
   flex: none;
   font-size: 10px;
