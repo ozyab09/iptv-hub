@@ -635,6 +635,9 @@ btnRec.addEventListener("click", () => {
       if (e.data.size > 0) recordedChunks.push(e.data);
     };
     mediaRecorder.onstop = () => {
+      // Без диалогов: a[download] с готовым именем кладёт файл в загрузки.
+      // (Браузер спрашивает «куда» только если это включено в его настройках —
+      // см. README.) Имя уже сгенерировано, никакого prompt.
       const blob = new Blob(recordedChunks, { type: mime.split(";")[0] });
       recordedChunks = [];
       if (blob.size === 0) {
@@ -644,9 +647,11 @@ btnRec.addEventListener("click", () => {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = recordingFileName(lastPlayed?.name ?? "recording");
+      document.body.append(a); // Firefox требует a в DOM
       a.click();
+      a.remove();
       window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-      showToast(`Запись сохранена: ${a.download}`);
+      showToast(`Сохранено в загрузки: ${a.download}`);
     };
     mediaRecorder.start(2000);
     recState = "recording";
