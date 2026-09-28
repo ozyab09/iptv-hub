@@ -89,6 +89,7 @@ const toastEl = $("toast");
 const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
 const btnFullscreen = $<HTMLButtonElement>("btn-fullscreen");
+const btnRetry = $<HTMLButtonElement>("btn-retry");
 const btnFavorites = $<HTMLButtonElement>("btn-favorites");
 const btnPause = $<HTMLButtonElement>("btn-pause");
 const btnPrev = $<HTMLButtonElement>("btn-prev");
@@ -131,10 +132,18 @@ let favorites = new Set<string>();
 let favFilter = false;
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
-const player = new Player(videoEl, showToast, () => {
-  refreshQualityUi();
-  refreshPlayerStatus();
-});
+const player = new Player(
+  videoEl,
+  showToast,
+  () => {
+    refreshQualityUi();
+    refreshPlayerStatus();
+    btnRetry.hidden = true; // поток ожил — retry не нужен
+  },
+  () => {
+    btnRetry.hidden = false; // фатальная ошибка — показываем retry
+  },
+);
 
 // ---------- UI helpers ----------
 function showToast(msg: string): void {
@@ -373,6 +382,7 @@ function playChannel(c: Channel): void {
   refreshNowFav();
   btnPause.textContent = "❚❚"; // после play() обычно идёт воспроизведение
   playerStatus.textContent = "—";
+  btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
   if (!player.play(c)) {
     showToast("Формат потока не поддерживается");
     return;
@@ -427,6 +437,13 @@ btnNext.addEventListener("click", () => playNeighbor(1));
 // Перемотка ±15 сек (на live заблокирована — skipTarget вернёт null)
 btnSeekBack.addEventListener("click", () => seekBy(videoEl, -15));
 btnSeekFwd.addEventListener("click", () => seekBy(videoEl, 15));
+
+// Ручной перезапуск потока после фатальной ошибки
+btnRetry.addEventListener("click", () => {
+  btnRetry.hidden = true;
+  player.retry();
+  showToast("Перезапуск потока…");
+});
 
 btnMute.addEventListener("click", () => {
   player.toggleMute();
