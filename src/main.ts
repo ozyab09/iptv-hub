@@ -147,6 +147,7 @@ function renderChannelCard(c: Channel): HTMLElement {
   const name = document.createElement("span");
   name.className = "channel-name";
   name.textContent = c.name;
+  name.title = c.url; // ссылка на поток при наведении
   card.append(name);
 
   const star = document.createElement("button");
@@ -191,6 +192,7 @@ function renderChannelCard(c: Channel): HTMLElement {
 // ---------- Плеер ----------
 function playChannel(c: Channel): void {
   nowTitle.textContent = c.name;
+  nowTitle.title = c.url; // ссылка на поток текущего канала
   nowCategory.textContent = c.group;
   playerBar.hidden = false;
   if (!player.play(c)) {
