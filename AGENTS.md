@@ -172,9 +172,27 @@ Pages включить руками: Settings → Pages → Source: **GitHub Act
 - Комментарии на русском, идентификаторы на английском (как в кодовой базе
   автора).
 - Conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `chore:`,
-  `refactor:`. Ветки `feat/<slug>`, `fix/<slug>`.
-- Post-task follow-up: после задачи спросить пользователя про (a) branch,
-  (b) commit, (c) issue, (d) PR — не делать без подтверждения.
+  `refactor:`.
+
+### Процесс изменений (branch protection включён — push в `main` запрещён)
+
+1. **Issue** для каждой правки/фичи/бага (`gh issue create`) — даже для
+   мелочей; в теле — зачем, что сделать, acceptance-критерий.
+2. **Ветка** от актуального `main`: `docs/<slug>`, `feat/<slug>`, `fix/<slug>`
+   (в идеале — с номером issue: `fix/12-player-retry`).
+3. **PR** в `main` с `Closes #<issue>` в описании. CI обязан прогнать
+   `build` (vitest + typecheck + vite build) — check `build` обязателен
+   к зелёному статусу (ruleset `main-protection`).
+4. **Merge** после зелёного CI (любой из методов: merge/squash/rebase).
+   Деплой на Pages происходит автоматически при обновлении `main`.
+5. Прямой push, force-push и удаление `main` отклоняются GitHub-ом
+   (`push declined due to repository rule violations`) — это не ошибка
+   окружения, обходить защиту не нужно.
+
+### Post-task follow-up
+
+После задачи спросить пользователя про (a) issue, (b) ветку, (c) PR —
+не коммитить/пушить в `main` напрямую, это заблокировано protection-ом.
 
 ## 🗺 Дорожная карта (актуальные направления)
 
