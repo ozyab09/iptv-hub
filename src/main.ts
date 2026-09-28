@@ -1044,26 +1044,60 @@ function renderPlaylistManager(): void {
     edit.title = "Переименовать / изменить ссылки";
     edit.textContent = "✎";
     edit.addEventListener("click", () => {
-      const newName = window.prompt("Название:", p.name);
-      if (newName === null) return;
-      const newUrl = window.prompt("URL плейлиста:", p.playlistUrl);
-      if (newUrl === null) return;
-      if (!/^https?:\/\//.test(newUrl.trim())) {
-        showSetup("Нужен http(s)-URL плейлиста");
-        return;
-      }
-      const newEpg = window.prompt("URL EPG (пусто — без EPG):", p.epgUrl ?? "");
-      if (newEpg === null) return;
-      plState = updatePlaylist(plState, p.id, {
-        name: newName.trim() || p.name,
-        playlistUrl: newUrl.trim(),
-        epgUrl: newEpg.trim() || null,
+      // Инлайн-редактирование: карточка превращается в форму
+      row.textContent = "";
+      row.classList.add("editing");
+      const form = document.createElement("div");
+      form.className = "pl-edit";
+      const mk = (label: string, value: string, type = "text"): HTMLInputElement => {
+        const l = document.createElement("label");
+        l.textContent = label;
+        const input = document.createElement("input");
+        input.type = type;
+        input.value = value;
+        l.append(input);
+        form.append(l);
+        return input;
+      };
+      const nameIn = mk("Название", p.name);
+      const urlIn = mk("URL плейлиста", p.playlistUrl, "url");
+      const epgIn = mk("URL EPG (необязательно)", p.epgUrl ?? "", "url");
+      const btns = document.createElement("div");
+      btns.className = "pl-edit-actions";
+      const save = document.createElement("button");
+      save.className = "primary pl-open";
+      save.textContent = "Сохранить";
+      const cancel = document.createElement("button");
+      cancel.className = "icon-btn";
+      cancel.textContent = "✕";
+      cancel.title = "Отмена";
+      btns.append(save, cancel);
+      form.append(btns);
+      row.append(form);
+      nameIn.focus();
+
+      const closeEditor = (): void => renderPlaylistManager();
+      cancel.addEventListener("click", closeEditor);
+      save.addEventListener("click", () => {
+        const newName = nameIn.value.trim();
+        const newUrl = urlIn.value.trim();
+        const newEpg = epgIn.value.trim();
+        if (!/^https?:\/\//.test(newUrl)) {
+          setupError.textContent = "Нужен http(s)-URL плейлиста";
+          setupError.hidden = false;
+          return;
+        }
+        plState = updatePlaylist(plState, p.id, {
+          name: newName || p.name,
+          playlistUrl: newUrl,
+          epgUrl: newEpg || null,
+        });
+        savePlaylists(localStorage, plState);
+        setupError.hidden = true;
+        renderPlaylistManager();
+        renderPlaylistSwitcher();
+        btnBackToPlayer.hidden = !activePlaylist(plState);
       });
-      savePlaylists(localStorage, plState);
-      renderPlaylistManager();
-      renderPlaylistSwitcher();
-      // Если редактировали активный — перезагрузим его по «Вернуться»
-      btnBackToPlayer.hidden = !activePlaylist(plState);
     });
     const del = document.createElement("button");
     del.className = "icon-btn pl-del";
