@@ -606,6 +606,9 @@ guideClose.addEventListener("click", () => (guideOverlay.hidden = true));
 guideOverlay.addEventListener("click", (e) => {
   if (e.target === guideOverlay) guideOverlay.hidden = true;
 });
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !guideOverlay.hidden) guideOverlay.hidden = true;
+});
 
 // Театральный режим
 btnExpand.addEventListener("click", () => {
