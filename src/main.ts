@@ -722,11 +722,47 @@ function stopIfRecording(): void {
 // браузерная обвязка: источник кадров, адаптер MediaRecorder, сохранение файла.
 let recordRaf = 0;
 
+/** captureStream у <video> нестандартен: в Gecko он зовётся mozCaptureStream. */
+type CapturableVideo = HTMLVideoElement & {
+  captureStream?: () => MediaStream;
+  mozCaptureStream?: () => MediaStream;
+};
+
 /**
- * Источник записи: кадры <video> рисуются на канвас — MSE-видео напрямую
- * записать нельзя.
+ * Источник записи: сначала прямой захват с <video> — он отдаёт видео и звук
+ * одним стримом, без канваса и rAF. Не всякий браузер умеет это поверх MSE,
+ * поэтому при неудаче откатываемся на отрисовку кадров в канвас (без звука).
  */
 function createRecordSource(): RecordingSource {
+  return captureFromVideo() ?? captureFromCanvas();
+}
+
+/** Прямой захват элемента. null — браузер не умеет его для текущего источника. */
+function captureFromVideo(): RecordingSource | null {
+  const v = videoEl as CapturableVideo;
+  for (const capture of [v.captureStream, v.mozCaptureStream]) {
+    if (typeof capture !== "function") continue;
+    try {
+      const stream = capture.call(v);
+      if (stream.getVideoTracks().length === 0) {
+        // Стрим без картинки бесполезен — освобождаем и пробуем следующий путь.
+        stream.getTracks().forEach((t) => t.stop());
+        continue;
+      }
+      console.debug(
+        `[iptv-hub] rec: захват с <video>, video=${stream.getVideoTracks().length} audio=${stream.getAudioTracks().length}`,
+      );
+      return { stream };
+    } catch (e) {
+      console.debug("[iptv-hub] rec: захват с <video> не удался:", e);
+    }
+  }
+  return null;
+}
+
+/** Фолбэк: кадры рисуются на канвас. Звука не даёт — канвас его не отдаёт. */
+function captureFromCanvas(): RecordingSource {
+  console.debug("[iptv-hub] rec: фолбэк на канвас (запись будет без звука)");
   const canvas = document.createElement("canvas");
   canvas.width = videoEl.videoWidth || 1280;
   canvas.height = videoEl.videoHeight || 720;
