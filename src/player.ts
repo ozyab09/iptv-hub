@@ -153,3 +153,28 @@ export function neighborIndex(
   if (length <= 0) return null;
   return (((current + step) % length) + length) % length;
 }
+
+/**
+ * Цель перемотки ±сек. Чистая функция с валидацией границ.
+ * live-поток не перематывается — возвращает null;
+ * выход за [0, duration] обрезается к границе.
+ */
+export function skipTarget(
+  current: number,
+  deltaSec: number,
+  duration: number,
+  isLive: boolean,
+): number | null {
+  if (isLive) return null;
+  if (!Number.isFinite(current)) return null;
+  const target = current + deltaSec;
+  const max = Number.isFinite(duration) && duration > 0 ? duration : current;
+  return Math.min(Math.max(target, 0), max);
+}
+
+/** Перемотать видео на ±сек (учитывает live-режим). */
+export function seekBy(video: HTMLVideoElement, deltaSec: number): void {
+  const live = !Number.isFinite(video.duration) || video.duration === 0;
+  const target = skipTarget(video.currentTime, deltaSec, video.duration, live);
+  if (target !== null) video.currentTime = target;
+}
