@@ -607,8 +607,9 @@ let recordCanvas: HTMLCanvasElement | null = null;
 let recordRaf = 0;
 
 function stopRecording(save: boolean): void {
-  window.clearInterval(recordRaf);
+  window.cancelAnimationFrame(recordRaf);
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    console.debug(`[iptv-hub] rec: stop из state=${mediaRecorder.state}`);
     mediaRecorder.stop();
   }
   if (recordCanvas) {
@@ -648,33 +649,49 @@ btnRec.addEventListener("click", () => {
     return;
   }
   try {
-    // MSE-видео нельзя записать напрямую — рисуем кадры на canvas
+    // MSE-видео нельзя записать напрямую — рисуем кадры на canvas.
+    // requestAnimationFrame вместо setInterval: Firefox/Zen троттлят setInterval
+    // в фоне до 1/с, captureStream(25) перестаёт отдавать кадры → пустая запись.
     recordCanvas = document.createElement("canvas");
     recordCanvas.width = videoEl.videoWidth || 1280;
     recordCanvas.height = videoEl.videoHeight || 720;
     const ctx = recordCanvas.getContext("2d");
     if (!ctx) throw new Error("canvas 2d недоступен");
-    recordRaf = window.setInterval(
-      () => ctx.drawImage(videoEl, 0, 0, recordCanvas!.width, recordCanvas!.height),
-      1000 / 25,
-    );
+    const drawFrame = (): void => {
+      if (!recordCanvas) return;
+      ctx.drawImage(videoEl, 0, 0, recordCanvas.width, recordCanvas.height);
+      recordRaf = window.requestAnimationFrame(drawFrame);
+    };
+    drawFrame();
     const stream = recordCanvas.captureStream(25);
+    const [track] = stream.getVideoTracks();
+    console.debug(
+      `[iptv-hub] rec: track=${track?.label ?? "?"} muted=${track?.muted} readyState=${track?.readyState}`,
+    );
     mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
     recordedChunks = [];
     mediaRecorder.ondataavailable = (e) => {
+      console.debug(`[iptv-hub] rec: chunk ${e.data.size}B (${mediaRecorder?.state})`);
       if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+    mediaRecorder.onerror = (ev) => {
+      console.error("[iptv-hub] MediaRecorder error:", (ev as unknown as { error?: Error }).error);
+      showToast("Ошибка записи (подробности в консоли F12)");
     };
     mediaRecorder.onstop = () => {
       // Классическое сохранение: a[download] с готовым именем. Без prompt.
       // Если браузер настроен «спрашивать, куда сохранять» — покажет свой
       // диалог (это его настройка, см. README), файл НЕ теряется.
       const blob = new Blob(recordedChunks, { type: mime.split(";")[0] });
+      const chunkCount = recordedChunks.length;
       recordedChunks = [];
       console.debug(
-        `[iptv-hub] запись завершена: ${blob.size} байт, mime=${mime}, chunks=${recordedChunks.length}`,
+        `[iptv-hub] onstop: ${blob.size} байт, mime=${mime}, chunks=${chunkCount}`,
       );
       if (blob.size === 0) {
-        showToast("Запись пустая — поток не отдал кадров (см. консоль F12)");
+        showToast(
+          `Запись пустая (${chunkCount} чанков, 0 байт) — вероятно, видео было скрыто/свёрнуто. Не сворачивайте вкладку при записи. Консоль F12: [iptv-hub]`,
+        );
         return;
       }
       const name = recordingFileName(lastPlayed?.name ?? "recording");
