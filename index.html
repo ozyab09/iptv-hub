@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0e14" />
+    <meta name="description" content="IPTV Hub — self-hosted веб-плеер для IPTV-плейлистов с телепрограммой" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>IPTV Hub</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand"><span class="brand-icon">📺</span> IPTV Hub</div>
+        <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
+      </header>
+
+      <main id="main">
+        <!-- Экран 1: стартовый — настройка источника -->
+        <section id="setup-screen" class="screen">
+          <div class="card">
+            <h1>📺 IPTV Hub</h1>
+            <p class="muted">
+              Self-hosted плеер для ваших плейлистов. Ссылки на плейлист и EPG
+              хранятся <b>только в этом браузере</b> и никуда не отправляются.
+            </p>
+            <label for="setup-playlist">URL плейлиста (M3U)</label>
+            <input id="setup-playlist" type="url" placeholder="https://…/playlist.m3u" required />
+            <label for="setup-epg">URL телепрограммы (XMLTV, опционально)</label>
+            <input id="setup-epg" type="url" placeholder="https://…/epg.xml.gz (необязательно)" />
+            <button id="setup-load" class="primary">Загрузить</button>
+            <p id="setup-error" class="error" hidden></p>
+            <details class="hint">
+              <summary>Как это работает</summary>
+              <ul>
+                <li>Приложение — статика (GitHub Pages), бэкенда нет.</li>
+                <li>Плейлист и EPG скачиваются напрямую из вашего S3-бакета.</li>
+                <li>На бакете должен быть включён CORS (см. README).</li>
+                <li>HLS-потоки (m3u8) играются через hls.js; прямые потоки — силами браузера.</li>
+              </ul>
+            </details>
+          </div>
+        </section>
+
+        <!-- Экран 2: основной — каналы + плеер -->
+        <section id="player-screen" class="screen" hidden>
+          <div class="layout">
+            <aside class="sidebar">
+              <nav id="categories" class="categories" aria-label="Категории"></nav>
+            </aside>
+            <div class="content">
+              <div id="epg-now" class="epg-now" hidden></div>
+              <div id="channel-list" class="channel-list" role="list"></div>
+              <div id="empty-state" class="muted" hidden>Ничего не найдено</div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Плеер: закреплён снизу (мобайл-first), разворачивается в полноэкранный театр -->
+      <div id="player-bar" class="player-bar" hidden>
+        <video id="video" playsinline></video>
+        <div class="player-bar-row">
+          <button id="btn-expand" class="icon-btn" title="Развернуть" aria-label="Развернуть плеер">⤢</button>
+          <div class="now-playing">
+            <div id="now-title" class="now-title">—</div>
+            <div id="now-category" class="now-category muted"></div>
+          </div>
+          <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер">✕</button>
+        </div>
+      </div>
+
+      <div id="toast" class="toast" hidden></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

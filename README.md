@@ -1,0 +1,111 @@
+# 📺 IPTV Hub
+
+Self-hosted веб-плеер для ваших IPTV-плейлистов с телепрограммой. Статика на
+GitHub Pages, бэкенда нет: плейлист и EPG скачиваются браузером напрямую
+из вашего S3-бакета (Yandex Object Storage и любой S3-совместимый).
+
+Парный проект: [iptv](https://github.com/ozyab09/iptv) — пайплайн, который
+фильтрует M3U + EPG и кладёт их в S3 по расписанию.
+
+[![CI + Pages](https://github.com/ozyab09/iptv-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/ozyab09/iptv-hub/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+---
+
+## Возможности
+
+- 📋 Категории + поиск по названию канала
+- 📅 «Сейчас / далее» из EPG (XMLTV, `.xml` и `.xml.gz`)
+- 🎬 HLS (`hls.js`) + нативные форматы (Safari/iOS)
+- 📱 Мобильный first, **PWA**: установка на домашний экран, оффлайн-оболочка,
+  последняя копия плейлиста/EPG доступна без сети
+- 🔒 Privacy-first: никаких аналитики/бэкенда, ссылки хранятся в `localStorage`
+
+## Быстрый старт
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm test           # vitest
+npm run build      # dist/ + typecheck
+```
+
+## Конфигурация источника
+
+Два способа (первый имеет приоритет и сохраняется в localStorage):
+
+1. **GET-параметры** — даёте браузеру ссылку вида:
+
+   ```
+   https://ozyab09.github.io/iptv-hub/?p=<URL-плейлиста>&e=<URL-EPG>
+   ```
+
+   Оба значения должны быть валидными http(s)-URL (encodeURIComponent).
+   EPG можно опустить (`?p=...`), тогда если в `#EXTM3U` есть `tvg-url`/`url-tvg`,
+   EPG возьмётся оттуда.
+
+2. **Экран настройки** — при первом открытии введите URL плейлиста
+   и (опционально) EPG. Они сохранятся в `localStorage`.
+
+## CORS на S3-бакете (обязательно)
+
+Статика на `*.github.io`, файлы на другом домене — без CORS браузер не даст
+их прочитать. Для Yandex Object Storage: бакет → **Settings → CORS** → PUT:
+
+```xml
+<CORSConfiguration>
+  <CORSRule>
+    <AllowedOrigin>https://ozyab09.github.io</AllowedOrigin>
+    <AllowedOrigin>http://localhost:5173</AllowedOrigin>
+    <AllowedOrigin>http://localhost:4173</AllowedOrigin>
+    <AllowedMethod>GET</AllowedMethod>
+    <AllowedHeader>*</AllowedHeader>
+    <MaxAgeSeconds>3600</MaxAgeSeconds>
+  </CORSRule>
+</CORSConfiguration>
+```
+
+Для локальной разработки удобнее `http://localhost:*`, но Yandex может не
+принять wildcard в origin — добавьте конкретные порты.
+
+> ⚠️ **Про сами потоки:** CORS-политика бакета разрешает скачивание
+> *плейлиста и EPG*, но не влияет на доступность медиа-потоков из чужих CDN.
+> HLS через `hls.js` обычно работает (fetch + MSE), а Safari/iOS играет
+> нативно, минуя CORS-ограничения. Потоки без CORS в Chrome могут не играть —
+> это ограничение браузера, а не баг плеера. См. «Ожидания» в AGENTS.md.
+
+## Деплой
+
+`Settings → Pages → Source: GitHub Actions`. Workflow `ci.yml` сам тестирует,
+собирает и деплоит `dist/` на Pages при пуше в `main`.
+
+Локальный предпросмотр продакшен-сборки:
+
+```bash
+npm run build && npm run preview   # http://localhost:4173
+```
+
+## Технологии
+
+- TypeScript (strict) + Vite
+- hls.js — единственная runtime-зависимость
+- Vitest — юнит-тесты парсеров
+- PWA: manifest + service worker (без плагинов, `public/sw.js`)
+- GitHub Actions — CI/CD
+
+## PWA
+
+- **Установка:** Chrome/Android — «Установить приложение» в меню; iOS Safari —
+  «На экран «Домой»». Запускается в standalone-режиме без адресной строки.
+- **Иконки:** генерируются скриптом `npm run icons` (без внешних зависимостей,
+  PNG собирается вручную через `node:zlib`) → `public/icons/`.
+- **Оффлайн:** оболочка (HTML/CSS/JS/иконки) кешируется cache-first; плейлист
+  и EPG — network-first с отдачей последней успешной копии без сети.
+  Живые медиа-потоки **не кешируются** — это осознанное решение.
+- **Обновления:** кэши версионированы (`v0.2.0` в `public/sw.js`); при выпуске
+  новой версии bump'ните `VERSION` в sw.js — старые кэши удалятся в `activate`.
+  Новая SW-версия подхватывается после перезагрузки страницы.
+
+## Лицензия
+
+MIT
