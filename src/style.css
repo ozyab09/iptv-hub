@@ -257,6 +257,20 @@ html, body {
   align-items: center;
   gap: 12px;
   padding-top: 6px;
+  flex-wrap: wrap;
+}
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#volume-slider {
+  width: 90px;
+  accent-color: var(--accent);
+}
+@media (max-width: 720px) {
+  #volume-slider { width: 64px; }
+  .player-bar-row { gap: 8px; }
 }
 .now-playing { flex: 1; min-width: 0; }
 .now-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -14,7 +14,7 @@ import {
 } from "./favorites";
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
-import { Player } from "./player";
+import { neighborIndex, Player } from "./player";
 import type { Channel, PlaylistSnapshot } from "./types";
 
 // ---------- DOM ----------
@@ -43,6 +43,12 @@ const toastEl = $("toast");
 const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
 const btnFavorites = $<HTMLButtonElement>("btn-favorites");
+const btnPause = $<HTMLButtonElement>("btn-pause");
+const btnPrev = $<HTMLButtonElement>("btn-prev");
+const btnNext = $<HTMLButtonElement>("btn-next");
+const btnMute = $<HTMLButtonElement>("btn-mute");
+const volumeSlider = $<HTMLInputElement>("volume-slider");
+const btnPip = $<HTMLButtonElement>("btn-pip");
 
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
@@ -50,6 +56,8 @@ let epg: Map<string, import("./types").EpgProgramme[]> | null = null;
 let activeCategory: string | null = null;
 let favorites = loadFavorites(typeof localStorage !== "undefined" ? localStorage : null);
 let favFilter = false;
+/** Плоский список каналов в текущем рендере — для prev/next в плеере. */
+let visibleChannels: Channel[] = [];
 const player = new Player(videoEl, showToast);
 
 // ---------- UI helpers ----------
@@ -122,6 +130,7 @@ function renderChannels(): void {
     );
   });
   const sorted = applyFavorites(list, favorites, favFilter);
+  visibleChannels = sorted;
   channelList.textContent = "";
   emptyState.hidden = sorted.length > 0;
   for (const c of sorted) {
@@ -191,20 +200,95 @@ function renderChannelCard(c: Channel): HTMLElement {
 
 // ---------- Плеер ----------
 function playChannel(c: Channel): void {
+  lastPlayed = c;
   nowTitle.textContent = c.name;
   nowTitle.title = c.url; // ссылка на поток текущего канала
   nowCategory.textContent = c.group;
   playerBar.hidden = false;
+  btnPause.textContent = "⏸"; // после play() обычно идёт воспроизведение
   if (!player.play(c)) {
     showToast("Формат потока не поддерживается");
   }
   renderChannels(); // подсветка активного
 }
 
+/** Переключить на соседний канал в текущем видимом списке (с зацикливанием). */
+function playNeighbor(step: 1 | -1): void {
+  if (visibleChannels.length === 0) return;
+  const cur = visibleChannels.findIndex((c) => c === lastPlayed);
+  const from = cur >= 0 ? cur : step === 1 ? -1 : 0;
+  const idx = neighborIndex(from, visibleChannels.length, step);
+  if (idx !== null) playChannel(visibleChannels[idx]!);
+}
+
+let lastPlayed: Channel | null = null;
+
 btnClosePlayer.addEventListener("click", () => {
   player.stop();
   playerBar.hidden = true;
+  lastPlayed = null;
   renderChannels();
+});
+
+btnPause.addEventListener("click", () => {
+  player.togglePause();
+});
+videoEl.addEventListener("play", () => (btnPause.textContent = "⏸"));
+videoEl.addEventListener("pause", () => (btnPause.textContent = "▶"));
+
+btnPrev.addEventListener("click", () => playNeighbor(-1));
+btnNext.addEventListener("click", () => playNeighbor(1));
+
+btnMute.addEventListener("click", () => {
+  player.toggleMute();
+  btnMute.textContent = player.getVolume() === 0 ? "🔇" : "🔊";
+  volumeSlider.value = String(Math.round(player.getVolume() * 100));
+});
+volumeSlider.addEventListener("input", () => {
+  player.setVolume(Number(volumeSlider.value) / 100);
+  btnMute.textContent = player.getVolume() === 0 ? "🔇" : "🔊";
+});
+
+btnPip.addEventListener("click", () => void player.togglePip());
+
+// Горячие клавиши (когда фокус не в инпуте)
+window.addEventListener("keydown", (e) => {
+  if (playerBar.hidden) return;
+  const t = e.target as HTMLElement | null;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  switch (e.key) {
+    case " ":
+      e.preventDefault();
+      player.togglePause();
+      break;
+    case "ArrowRight":
+      playNeighbor(1);
+      break;
+    case "ArrowLeft":
+      playNeighbor(-1);
+      break;
+    case "ArrowUp":
+      e.preventDefault();
+      volumeSlider.value = String(
+        Math.min(100, Number(volumeSlider.value) + 10),
+      );
+      player.setVolume(Number(volumeSlider.value) / 100);
+      btnMute.textContent = "🔊";
+      break;
+    case "ArrowDown":
+      e.preventDefault();
+      volumeSlider.value = String(
+        Math.max(0, Number(volumeSlider.value) - 10),
+      );
+      player.setVolume(Number(volumeSlider.value) / 100);
+      btnMute.textContent =
+        Number(volumeSlider.value) === 0 ? "🔇" : "🔊";
+      break;
+    case "m":
+    case "ь": // ru-раскладка
+      btnMute.click();
+      break;
+  }
 });
 
 // Театральный режим

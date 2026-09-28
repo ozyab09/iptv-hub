@@ -66,11 +66,19 @@
       <div id="player-bar" class="player-bar" hidden>
         <video id="video" playsinline></video>
         <div class="player-bar-row">
-          <button id="btn-expand" class="icon-btn" title="Развернуть" aria-label="Развернуть плеер">⤢</button>
+          <button id="btn-pause" class="icon-btn" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить">▶</button>
+          <button id="btn-prev" class="icon-btn" title="Предыдущий канал (←)" aria-label="Предыдущий канал">⏮</button>
+          <button id="btn-next" class="icon-btn" title="Следующий канал (→)" aria-label="Следующий канал">⏭</button>
+          <div class="volume">
+            <button id="btn-mute" class="icon-btn" title="Звук вкл/выкл (M)" aria-label="Звук вкл или выкл">🔊</button>
+            <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Громкость" />
+          </div>
           <div class="now-playing">
             <div id="now-title" class="now-title">—</div>
             <div id="now-category" class="now-category muted"></div>
           </div>
+          <button id="btn-pip" class="icon-btn" title="Плавающее окно (PiP)" aria-label="Плавающее окно">⧉</button>
+          <button id="btn-expand" class="icon-btn" title="Развернуть" aria-label="Развернуть плеер">⤢</button>
           <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер">✕</button>
         </div>
       </div>
