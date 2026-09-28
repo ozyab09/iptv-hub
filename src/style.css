@@ -469,6 +469,64 @@ video { cursor: pointer; }
 }
 .guide-name { flex: 1; min-width: 0; }
 
+/* ---------- менеджер плейлистов (setup) ---------- */
+.pl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+.pl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.pl-row.active { border-color: var(--accent2); }
+.pl-name { flex: 1; min-width: 0; font-weight: 600; }
+.pl-url {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+.pl-actions { display: flex; gap: 6px; flex: none; }
+.pl-open { padding: 7px 14px; font-size: 13px; margin: 0; }
+.pl-open:disabled { opacity: 0.55; cursor: default; }
+.pl-del:hover { border-color: #ff6b6b; color: #ff6b6b; }
+.pl-form { display: flex; flex-direction: column; }
+.pl-form label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: left;
+}
+.pl-form input {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 10px 12px;
+  outline: none;
+}
+.pl-form input:focus { border-color: var(--accent2); }
+.pl-form .primary { margin-top: 14px; }
+
+/* Переключатель плейлистов в топбаре */
+.topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.pl-switch { position: relative; }
+.pl-switch-btn { cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-switch-menu { bottom: calc(100% + 6px); right: 0; left: auto; }
+@media (max-width: 720px) {
+  .pl-switch-btn { max-width: 110px; }
+}
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed;

@@ -32,31 +32,41 @@
       <header class="topbar">
         <a class="brand" href="./" title="На главную"><span class="brand-icon">📺</span> IPTV Hub</a>
         <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
-        <button id="btn-theme" class="icon-btn" title="Переключить тему" aria-label="Переключить тему">☀️</button>
+        <div class="topbar-right">
+          <div class="pl-switch" id="pl-switch" hidden>
+            <button id="pl-switch-btn" class="select pl-switch-btn" title="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false">📺</button>
+            <div id="pl-switch-menu" class="quality-menu pl-switch-menu" role="listbox" hidden></div>
+          </div>
+          <button id="btn-theme" class="icon-btn" title="Переключить тему" aria-label="Переключить тему">☀️</button>
+        </div>
       </header>
 
       <main id="main">
-        <!-- Экран 1: стартовый — настройка источника -->
+        <!-- Экран 1: стартовый — менеджер плейлистов -->
         <section id="setup-screen" class="screen">
           <div class="card">
             <h1>📺 IPTV Hub</h1>
             <p class="muted">
-              Self-hosted плеер для ваших плейлистов. Ссылки на плейлист и EPG
-              хранятся <b>только в этом браузере</b> и никуда не отправляются.
+              Self-hosted плеер для ваших плейлистов. Ссылки хранятся <b>только в этом браузере</b>.
             </p>
-            <label for="setup-playlist">URL плейлиста (M3U)</label>
-            <input id="setup-playlist" type="url" placeholder="https://…/playlist.m3u" required />
-            <label for="setup-epg">URL телепрограммы (XMLTV, опционально)</label>
-            <input id="setup-epg" type="url" placeholder="https://…/epg.xml.gz (необязательно)" />
-            <button id="setup-load" class="primary">Загрузить</button>
+            <div id="pl-list" class="pl-list"></div>
+            <div class="pl-form">
+              <label for="setup-name">Название</label>
+              <input id="setup-name" type="text" placeholder="Мой IPTV" />
+              <label for="setup-playlist">URL плейлиста (M3U)</label>
+              <input id="setup-playlist" type="url" placeholder="https://…/playlist.m3u" required />
+              <label for="setup-epg">URL телепрограммы (XMLTV, опционально)</label>
+              <input id="setup-epg" type="url" placeholder="https://…/epg.xml.gz (необязательно)" />
+              <button id="setup-load" class="primary">Добавить и открыть</button>
+            </div>
             <p id="setup-error" class="error" hidden></p>
             <details class="hint">
               <summary>Как это работает</summary>
               <ul>
                 <li>Приложение — статика (GitHub Pages), бэкенда нет.</li>
-                <li>Плейлист и EPG скачиваются напрямую из вашего S3-бакета.</li>
+                <li>Плейлистов может быть несколько — переключение в шапке.</li>
+                <li>Избранное у каждого плейлиста своё.</li>
                 <li>На бакете должен быть включён CORS (см. README).</li>
-                <li>HLS-потоки (m3u8) играются через hls.js; прямые потоки — силами браузера.</li>
               </ul>
             </details>
           </div>
