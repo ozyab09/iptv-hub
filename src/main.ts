@@ -37,10 +37,10 @@ import {
 } from "./backup";
 import {
   canRecord,
-  pickRecorderMime,
+  createRecordingSession,
   recordingFileName,
-  validateRecOp,
-  type RecState,
+  type RecorderLike,
+  type RecordingSource,
 } from "./recorder";
 import {
   buildCatchupUrl,
@@ -158,11 +158,17 @@ const player = new Player(
 );
 
 // ---------- UI helpers ----------
+// Токен показа: таймер скрытия гасит тост, только если поверх не показали
+// новый. Иначе короткий тост («Запись остановлена») уносил с собой кнопку
+// скачивания, которая должна жить 15с (issue #58).
+let toastToken = 0;
+
 function showToast(msg: string): void {
+  const token = ++toastToken;
   toastEl.textContent = msg;
   toastEl.hidden = false;
   window.setTimeout(() => {
-    toastEl.hidden = true;
+    if (toastToken === token) toastEl.hidden = true;
   }, 3500);
 }
 
@@ -173,6 +179,7 @@ function showToastAction(
   action: () => void,
   durationMs = 15_000,
 ): void {
+  const token = ++toastToken;
   toastEl.textContent = "";
   const span = document.createElement("span");
   span.textContent = msg;
@@ -186,7 +193,7 @@ function showToastAction(
   toastEl.append(span, btn);
   toastEl.hidden = false;
   window.setTimeout(() => {
-    toastEl.hidden = true;
+    if (toastToken === token) toastEl.hidden = true;
   }, durationMs);
 }
 
@@ -382,8 +389,8 @@ function renderChannelCard(c: Channel): HTMLElement {
 // ---------- Плеер ----------
 function playChannel(c: Channel): void {
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
-  if (recState === "recording" && lastPlayed && lastPlayed.url !== c.url) {
-    stopRecording(true);
+  if (recSession.isRecording() && lastPlayed && lastPlayed.url !== c.url) {
+    recSession.stop(true);
     showToast("Запись остановлена: канал переключён");
   }
   lastPlayed = c;
@@ -427,8 +434,8 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
-  if (recState === "recording") {
-    stopRecording(true); // закрытие плеера — тоже сохраняем записанное
+  if (recSession.isRecording()) {
+    recSession.stop(true); // закрытие плеера — тоже сохраняем записанное
     showToast("Запись остановлена: плеер закрыт");
   }
   if (document.fullscreenElement) void document.exitFullscreen();
@@ -704,148 +711,186 @@ subtitleBtn.addEventListener("click", (e) => {
 
 /** Остановить запись, если идёт (с сохранением). Вызывается при смене плейлиста. */
 function stopIfRecording(): void {
-  if (recState === "recording") {
-    stopRecording(true);
+  if (recSession.isRecording()) {
+    recSession.stop(true);
     showToast("Запись остановлена: плейлист переключён");
   }
 }
 
 // ---- Запись эфира (MediaRecorder поверх captureStream) ----
-let recState: RecState = "idle";
-let mediaRecorder: MediaRecorder | null = null;
-let recordedChunks: BlobPart[] = [];
-let recordCanvas: HTMLCanvasElement | null = null;
+// Жизненный цикл живёт в recorder.ts (createRecordingSession) — здесь только
+// браузерная обвязка: источник кадров, адаптер MediaRecorder, сохранение файла.
 let recordRaf = 0;
 
-function stopRecording(save: boolean): void {
-  window.cancelAnimationFrame(recordRaf);
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    console.debug(`[iptv-hub] rec: stop из state=${mediaRecorder.state}`);
-    mediaRecorder.stop();
-  }
-  if (recordCanvas) {
-    const stream = recordCanvas.captureStream();
-    stream.getTracks().forEach((t) => t.stop());
-    recordCanvas = null;
-  }
-  btnRec.classList.remove("recording");
-  btnRec.title = "Записать эфир в файл";
-  recState = "idle";
-  if (!save) recordedChunks = [];
+/** captureStream у <video> нестандартен: в Gecko он зовётся mozCaptureStream. */
+type CapturableVideo = HTMLVideoElement & {
+  captureStream?: () => MediaStream;
+  mozCaptureStream?: () => MediaStream;
+};
+
+/**
+ * Источник записи: сначала прямой захват с <video> — он отдаёт видео и звук
+ * одним стримом, без канваса и rAF. Не всякий браузер умеет это поверх MSE,
+ * поэтому при неудаче откатываемся на отрисовку кадров в канвас (без звука).
+ */
+function createRecordSource(): RecordingSource {
+  return captureFromVideo() ?? captureFromCanvas();
 }
+
+/** Прямой захват элемента. null — браузер не умеет его для текущего источника. */
+function captureFromVideo(): RecordingSource | null {
+  const v = videoEl as CapturableVideo;
+  for (const capture of [v.captureStream, v.mozCaptureStream]) {
+    if (typeof capture !== "function") continue;
+    try {
+      const stream = capture.call(v);
+      if (stream.getVideoTracks().length === 0) {
+        // Стрим без картинки бесполезен — освобождаем и пробуем следующий путь.
+        stream.getTracks().forEach((t) => t.stop());
+        continue;
+      }
+      console.debug(
+        `[iptv-hub] rec: захват с <video>, video=${stream.getVideoTracks().length} audio=${stream.getAudioTracks().length}`,
+      );
+      return { stream };
+    } catch (e) {
+      console.debug("[iptv-hub] rec: захват с <video> не удался:", e);
+    }
+  }
+  return null;
+}
+
+/** Фолбэк: кадры рисуются на канвас. Звука не даёт — канвас его не отдаёт. */
+function captureFromCanvas(): RecordingSource {
+  console.debug("[iptv-hub] rec: фолбэк на канвас (запись будет без звука)");
+  const canvas = document.createElement("canvas");
+  canvas.width = videoEl.videoWidth || 1280;
+  canvas.height = videoEl.videoHeight || 720;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas 2d недоступен");
+  let disposed = false;
+  // requestAnimationFrame вместо setInterval: Firefox/Zen троттлят setInterval
+  // в фоне до 1/с, и captureStream(25) перестаёт получать кадры.
+  const drawFrame = (): void => {
+    if (disposed) return;
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    recordRaf = window.requestAnimationFrame(drawFrame);
+  };
+  drawFrame();
+  let stream: MediaStream;
+  try {
+    stream = canvas.captureStream(25);
+  } catch (e) {
+    // иначе rAF-цикл остался бы крутиться без владельца
+    disposed = true;
+    window.cancelAnimationFrame(recordRaf);
+    recordRaf = 0;
+    throw e;
+  }
+  const [track] = stream.getVideoTracks();
+  console.debug(
+    `[iptv-hub] rec: track=${track?.label ?? "?"} muted=${track?.muted} readyState=${track?.readyState}`,
+  );
+  return {
+    stream,
+    dispose: () => {
+      disposed = true;
+      window.cancelAnimationFrame(recordRaf);
+      recordRaf = 0;
+    },
+  };
+}
+
+/** Обёртка реального MediaRecorder в контракт сессии. */
+function createRecorderAdapter(stream: MediaStream, mimeType: string): RecorderLike {
+  const rec = new MediaRecorder(stream, { mimeType });
+  const adapter: RecorderLike = {
+    getState: () => rec.state,
+    start: (timesliceMs) => rec.start(timesliceMs),
+    stop: () => {
+      console.debug(`[iptv-hub] rec: stop из state=${rec.state}`);
+      rec.stop();
+    },
+    ondataavailable: null,
+    onstop: null,
+    onerror: null,
+  };
+  rec.ondataavailable = (e) => {
+    console.debug(`[iptv-hub] rec: chunk ${e.data.size}B (${rec.state})`);
+    adapter.ondataavailable?.({ data: e.data });
+  };
+  rec.onstop = () => adapter.onstop?.();
+  rec.onerror = (ev) => adapter.onerror?.((ev as unknown as { error?: Error }).error);
+  return adapter;
+}
+
+/**
+ * Отдать записанный файл. Классическое сохранение: a[download] с готовым
+ * именем, без prompt. Если браузер настроен «спрашивать, куда сохранять» —
+ * покажет свой диалог (это его настройка, см. README), файл НЕ теряется.
+ */
+function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {
+  console.debug(
+    `[iptv-hub] onstop: ${blob.size} байт, mime=${mimeType}, chunks=${chunkCount}`,
+  );
+  if (blob.size === 0) {
+    showToast(
+      `Запись пустая (${chunkCount} чанков, 0 байт) — вероятно, видео было скрыто/свёрнуто. Не сворачивайте вкладку при записи. Консоль F12: [iptv-hub]`,
+    );
+    return;
+  }
+  const name = recordingFileName(lastPlayed?.name ?? "recording");
+  const url = URL.createObjectURL(blob);
+
+  // Firefox: a.click() из асинхронного onstop (вне user gesture) молча
+  // глотается — повторные клики не помогают. Надёжный путь — клик по кнопке
+  // из тоста: это новый user gesture, скачивание гарантировано.
+  const download = (): void => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.rel = "noopener";
+    document.body.append(a);
+    a.click();
+    a.remove();
+  };
+  download();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+  // Кнопка в тосте живёт 15с: если авто-скачивание не сработало (Firefox),
+  // явный клик = свежий жест → загрузка начнётся наверняка.
+  showToastAction("Автоскачивание не началось?", `Скачать ${name}`, download, 15_000);
+}
+
+const recSession = createRecordingSession({
+  createSource: createRecordSource,
+  createRecorder: createRecorderAdapter,
+  onSave: saveRecording,
+  onNotify: showToast,
+  onState: (state) => {
+    btnRec.classList.toggle("recording", state === "recording");
+    btnRec.title =
+      state === "recording"
+        ? "Остановить запись и сохранить файл"
+        : "Записать эфир в файл";
+  },
+});
 
 // Единый toggle: старт из idle, стоп+сохранение из recording.
 // (Раньше здесь жили два обработчика — addEventListener + onclick — и оба
 // срабатывали на один клик, показывая ложный тост «Запись уже идёт».)
 btnRec.addEventListener("click", () => {
-  if (recState === "recording") {
-    const stopErr = validateRecOp(recState, "stop");
-    if (stopErr) {
-      showToast(stopErr);
-      return;
-    }
-    stopRecording(true);
+  if (recSession.isRecording()) {
+    recSession.stop(true);
     return;
   }
-
   if (!lastPlayed) return;
-  const err = validateRecOp(recState, "start");
-  if (err) {
-    showToast(err);
-    return;
-  }
-  const mime = pickRecorderMime();
-  if (!mime || !canRecord()) {
+  if (!canRecord()) {
     showToast("Запись не поддерживается этим браузером");
     return;
   }
-  try {
-    // MSE-видео нельзя записать напрямую — рисуем кадры на canvas.
-    // requestAnimationFrame вместо setInterval: Firefox/Zen троттлят setInterval
-    // в фоне до 1/с, captureStream(25) перестаёт отдавать кадры → пустая запись.
-    recordCanvas = document.createElement("canvas");
-    recordCanvas.width = videoEl.videoWidth || 1280;
-    recordCanvas.height = videoEl.videoHeight || 720;
-    const ctx = recordCanvas.getContext("2d");
-    if (!ctx) throw new Error("canvas 2d недоступен");
-    const drawFrame = (): void => {
-      if (!recordCanvas) return;
-      ctx.drawImage(videoEl, 0, 0, recordCanvas.width, recordCanvas.height);
-      recordRaf = window.requestAnimationFrame(drawFrame);
-    };
-    drawFrame();
-    const stream = recordCanvas.captureStream(25);
-    const [track] = stream.getVideoTracks();
-    console.debug(
-      `[iptv-hub] rec: track=${track?.label ?? "?"} muted=${track?.muted} readyState=${track?.readyState}`,
-    );
-    mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
-    recordedChunks = [];
-    mediaRecorder.ondataavailable = (e) => {
-      console.debug(`[iptv-hub] rec: chunk ${e.data.size}B (${mediaRecorder?.state})`);
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-    mediaRecorder.onerror = (ev) => {
-      console.error("[iptv-hub] MediaRecorder error:", (ev as unknown as { error?: Error }).error);
-      showToast("Ошибка записи (подробности в консоли F12)");
-    };
-    mediaRecorder.onstop = () => {
-      // Классическое сохранение: a[download] с готовым именем. Без prompt.
-      // Если браузер настроен «спрашивать, куда сохранять» — покажет свой
-      // диалог (это его настройка, см. README), файл НЕ теряется.
-      const blob = new Blob(recordedChunks, { type: mime.split(";")[0] });
-      const chunkCount = recordedChunks.length;
-      recordedChunks = [];
-      console.debug(
-        `[iptv-hub] onstop: ${blob.size} байт, mime=${mime}, chunks=${chunkCount}`,
-      );
-      if (blob.size === 0) {
-        showToast(
-          `Запись пустая (${chunkCount} чанков, 0 байт) — вероятно, видео было скрыто/свёрнуто. Не сворачивайте вкладку при записи. Консоль F12: [iptv-hub]`,
-        );
-        return;
-      }
-      const name = recordingFileName(lastPlayed?.name ?? "recording");
-      const url = URL.createObjectURL(blob);
-
-      // Firefox: a.click() из асинхронного onstop (вне user gesture) молча
-      // глотается — повторные клики не помогают. Надёжный путь — клик по кнопке
-      // из тоста: это новый user gesture, скачивание гарантировано.
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name;
-      a.rel = "noopener";
-      document.body.append(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-
-      // Кнопка в тосте живёт 15с: если авто-скачивание не сработало (Firefox),
-      // явный клик = свежий жест → загрузка начнётся наверняка.
-      showToastAction(
-        `Автоскачивание не началось?`,
-        `Скачать ${name}`,
-        () => {
-          const a2 = document.createElement("a");
-          a2.href = url;
-          a2.download = name;
-          a2.rel = "noopener";
-          document.body.append(a2);
-          a2.click();
-          a2.remove();
-        },
-        15_000,
-      );
-    };
-    mediaRecorder.start(2000);
-    recState = "recording";
-    btnRec.classList.add("recording");
-    btnRec.title = "Остановить запись и сохранить файл";
-    showToast("Запись началась");
-  } catch (e) {
-    stopRecording(false);
-    showToast(`Не удалось начать запись: ${e instanceof Error ? e.message : "ошибка"}`);
-  }
+  recSession.start();
+  if (recSession.isRecording()) showToast("Запись началась");
 });
 
 // ---- Гайд (программа передач) + catchup ----
