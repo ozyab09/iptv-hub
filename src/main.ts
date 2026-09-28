@@ -1,15 +1,21 @@
 import "./style.css";
 import {
   isMixedContent,
-  resolveConfig,
-  saveConfig,
-  STORAGE_KEY,
 } from "./config";
+import {
+  activePlaylist,
+  addPlaylist,
+  loadPlaylists,
+  removePlaylist,
+  savePlaylists,
+  updatePlaylist,
+  upsertByUrl,
+  favoritesKey,
+  type PlaylistsState,
+} from "./playlists";
 import {
   applyFavorites,
   isFavorite,
-  loadFavorites,
-  saveFavorites,
   toggleFavorite,
 } from "./favorites";
 import { parseM3U } from "./m3u";
@@ -61,6 +67,11 @@ const playerScreen = $("player-screen");
 const setupPlaylist = $<HTMLInputElement>("setup-playlist");
 const setupEpg = $<HTMLInputElement>("setup-epg");
 const setupLoad = $<HTMLButtonElement>("setup-load");
+const setupName = $<HTMLInputElement>("setup-name");
+const plList = $("pl-list");
+const plSwitch = $("pl-switch");
+const plSwitchBtn = $<HTMLButtonElement>("pl-switch-btn");
+const plSwitchMenu = $("pl-switch-menu");
 const setupError = $("setup-error");
 const searchInput = $<HTMLInputElement>("search");
 const categoriesNav = $("categories");
@@ -101,7 +112,12 @@ const btnTheme = $<HTMLButtonElement>("btn-theme");
 let snapshot: PlaylistSnapshot | null = null;
 let epg: Map<string, import("./types").EpgProgramme[]> | null = null;
 let activeCategory: string | null = null;
-let favorites = loadFavorites(typeof localStorage !== "undefined" ? localStorage : null);
+let plState: PlaylistsState = loadPlaylists(
+  typeof localStorage !== "undefined" ? localStorage : null,
+);
+let favKey: string | null = null; // favoritesKey(id) активного плейлиста (legacy)
+void favKey;
+let favorites = new Set<string>();
 let favFilter = false;
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
@@ -221,7 +237,8 @@ function renderChannelCard(c: Channel): HTMLElement {
   star.addEventListener("click", (ev) => {
     ev.stopPropagation(); // не запускать воспроизведение
     favorites = toggleFavorite(favorites, c);
-    saveFavorites(localStorage, favorites);
+    if (plState.activeId) saveFavoritesFor(plState.activeId);
+    refreshNowFav();
     renderCategories();
     renderChannels();
   });
@@ -342,7 +359,7 @@ function refreshNowFav(): void {
 nowFav.addEventListener("click", () => {
   if (!lastPlayed) return;
   favorites = toggleFavorite(favorites, lastPlayed);
-  saveFavorites(localStorage, favorites);
+  if (plState.activeId) saveFavoritesFor(plState.activeId);
   refreshNowFav();
   renderChannels();
 });
@@ -502,6 +519,14 @@ audioSelect.addEventListener("change", () => {
 subtitleSelect.addEventListener("change", () => {
   player.setSubtitleTrack(Number(subtitleSelect.value));
 });
+
+/** Остановить запись, если идёт (с сохранением). Вызывается при смене плейлиста. */
+function stopIfRecording(): void {
+  if (recState === "recording") {
+    stopRecording(true);
+    showToast("Запись остановлена: плейлист переключён");
+  }
+}
 
 // ---- Запись эфира (MediaRecorder поверх captureStream) ----
 let recState: RecState = "idle";
@@ -730,10 +755,149 @@ btnFavorites.addEventListener("click", () => {
   renderChannels();
 });
 
+/** Загрузить избранное по ключу плейлиста (localStorage, нестандартный ключ). */
+function loadFavoritesFor(id: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(favoritesKey(id));
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((x): x is string => typeof x === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Сохранить избранное по ключу плейлиста (best-effort). */
+function saveFavoritesFor(id: string): void {
+  try {
+    localStorage.setItem(favoritesKey(id), JSON.stringify([...favorites]));
+  } catch {
+    // приватный режим / quota
+  }
+}
+
+/** Активировать плейлист по id: перезагрузить его избранное и список. */
+function activatePlaylist(id: string): void {
+  plState = { ...plState, activeId: id };
+  savePlaylists(localStorage, plState);
+  favorites = loadFavoritesFor(id);
+  favFilter = false;
+  const pl = activePlaylist(plState);
+  if (pl) {
+    void openPlaylist(pl.playlistUrl, pl.epgUrl);
+  }
+}
+
+// ---------- Менеджер плейлистов (setup-экран) ----------
+function renderPlaylistManager(): void {
+  plList.textContent = "";
+  if (plState.items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Пока ни одного плейлиста — добавьте первый ниже.";
+    plList.append(empty);
+  }
+  for (const p of plState.items) {
+    const row = document.createElement("div");
+    row.className = "pl-row" + (p.id === plState.activeId ? " active" : "");
+    const name = document.createElement("div");
+    name.className = "pl-name";
+    name.textContent = p.name;
+    const url = document.createElement("div");
+    url.className = "pl-url muted";
+    url.textContent = p.playlistUrl;
+    name.append(url);
+    const actions = document.createElement("div");
+    actions.className = "pl-actions";
+    const open = document.createElement("button");
+    open.className = "primary pl-open";
+    open.textContent = p.id === plState.activeId ? "Открыт" : "Открыть";
+    open.disabled = p.id === plState.activeId;
+    open.addEventListener("click", () => activatePlaylist(p.id));
+    const edit = document.createElement("button");
+    edit.className = "icon-btn";
+    edit.title = "Переименовать / изменить ссылки";
+    edit.textContent = "✎";
+    edit.addEventListener("click", () => {
+      const newName = window.prompt("Название:", p.name);
+      if (newName === null) return;
+      const newUrl = window.prompt("URL плейлиста:", p.playlistUrl);
+      if (newUrl === null) return;
+      if (!/^https?:\/\//.test(newUrl.trim())) {
+        showSetup("Нужен http(s)-URL плейлиста");
+        return;
+      }
+      const newEpg = window.prompt("URL EPG (пусто — без EPG):", p.epgUrl ?? "");
+      if (newEpg === null) return;
+      plState = updatePlaylist(plState, p.id, {
+        name: newName.trim() || p.name,
+        playlistUrl: newUrl.trim(),
+        epgUrl: newEpg.trim() || null,
+      });
+      savePlaylists(localStorage, plState);
+      renderPlaylistManager();
+      renderPlaylistSwitcher();
+    });
+    const del = document.createElement("button");
+    del.className = "icon-btn pl-del";
+    del.title = "Удалить плейлист (избранное тоже будет удалено)";
+    del.textContent = "🗑";
+    del.addEventListener("click", () => {
+      if (!window.confirm(`Удалить «${p.name}»?`)) return;
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem(favoritesKey(p.id));
+      }
+      plState = removePlaylist(plState, p.id);
+      savePlaylists(localStorage, plState);
+      renderPlaylistManager();
+      renderPlaylistSwitcher();
+    });
+    actions.append(open, edit, del);
+    row.append(name, actions);
+    plList.append(row);
+  }
+}
+
+// ---------- Переключатель плейлистов (топбар) ----------
+function renderPlaylistSwitcher(): void {
+  const active = activePlaylist(plState);
+  plSwitch.hidden = !active;
+  if (!active) return;
+  plSwitchBtn.textContent = `📺 ${active.name}`;
+  plSwitchMenu.textContent = "";
+  for (const p of plState.items) {
+    const b = document.createElement("button");
+    b.className =
+      p.id === plState.activeId ? "quality-item active" : "quality-item";
+    b.textContent = p.name;
+    b.addEventListener("click", () => {
+      plSwitchMenu.hidden = true;
+      plSwitchBtn.setAttribute("aria-expanded", "false");
+      if (p.id !== plState.activeId) activatePlaylist(p.id);
+    });
+    plSwitchMenu.append(b);
+  }
+}
+
+plSwitchBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = plSwitchMenu.hidden;
+  plSwitchMenu.hidden = !willOpen;
+  plSwitchBtn.setAttribute("aria-expanded", String(willOpen));
+});
+document.addEventListener("click", (e) => {
+  if (!plSwitchMenu.hidden && !plSwitch.contains(e.target as Node)) {
+    plSwitchMenu.hidden = true;
+    plSwitchBtn.setAttribute("aria-expanded", "false");
+  }
+});
+
 // ---------- Setup ----------
 setupLoad.addEventListener("click", () => {
   const pUrl = setupPlaylist.value.trim();
   const eUrl = setupEpg.value.trim();
+  const name = setupName.value.trim();
   if (!/^https?:\/\//.test(pUrl)) {
     showSetup("Нужен http(s)-URL плейлиста");
     return;
@@ -745,8 +909,14 @@ setupLoad.addEventListener("click", () => {
     );
     return;
   }
-  saveConfig({ playlistUrl: pUrl, epgUrl: eUrl || null }, localStorage);
-  bootstrap();
+  plState = addPlaylist(plState, name || "Плейлист", pUrl, eUrl || null);
+  savePlaylists(localStorage, plState);
+  setupPlaylist.value = "";
+  setupEpg.value = "";
+  setupName.value = "";
+  renderPlaylistManager();
+  renderPlaylistSwitcher();
+  activatePlaylist(plState.items[plState.items.length - 1]!.id);
 });
 
 async function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
@@ -775,24 +945,24 @@ function describeFetchFailure(url: string): string {
         "там будет точная причина (blocked by CORS policy / net::ERR_…).";
 }
 
-async function bootstrap(): Promise<void> {
-  const cfg = resolveConfig(window.location.search, localStorage);
-  if (!cfg) {
-    showSetup();
-    return;
-  }
-  setupPlaylist.value = cfg.playlistUrl;
-  setupEpg.value = cfg.epgUrl ?? "";
+/** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
+async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  stopIfRecording();
+  player.stop();
+  playerBar.hidden = true;
+  lastPlayed = null;
+  snapshot = null;
+  epg = null;
   showPlayer();
   epgNow.hidden = false;
   epgNow.textContent = "Загрузка плейлиста…";
 
   try {
-    snapshot = await loadPlaylist(cfg.playlistUrl);
+    snapshot = await loadPlaylist(url);
   } catch (e) {
     showSetup(
       `Не удалось загрузить плейлист: ${e instanceof Error ? e.message : "ошибка"}. ` +
-        describeFetchFailure(cfg.playlistUrl),
+        describeFetchFailure(url),
     );
     return;
   }
@@ -801,10 +971,10 @@ async function bootstrap(): Promise<void> {
   renderChannels();
   epgNow.textContent = `Каналов: ${snapshot.channels.length} · Категорий: ${snapshot.categories.length}`;
 
-  const epgUrl = cfg.epgUrl ?? snapshot.headerTvgUrl;
-  if (epgUrl) {
+  const finalEpgUrl = epgUrl ?? snapshot.headerTvgUrl;
+  if (finalEpgUrl) {
     epgNow.textContent += " · Загрузка телепрограммы…";
-    loadEpg(epgUrl)
+    loadEpg(finalEpgUrl)
       .then((parsed) => {
         epg = parsed;
         renderChannels();
@@ -817,7 +987,35 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-void STORAGE_KEY;
+async function bootstrap(): Promise<void> {
+  renderPlaylistManager();
+  renderPlaylistSwitcher();
+
+  // GET-параметры приоритетны: upsert в список и активация
+  const params = new URLSearchParams(window.location.search);
+  const p = params.get("p")?.trim() ?? "";
+  if (p && /^https?:\/\//.test(p)) {
+    const e = params.get("e")?.trim() ?? "";
+    plState = upsertByUrl(
+      plState,
+      p,
+      e && /^https?:\/\//.test(e) ? e : null,
+    );
+    savePlaylists(localStorage, plState);
+    renderPlaylistManager();
+    renderPlaylistSwitcher();
+  }
+
+  const active = activePlaylist(plState);
+  if (!active) {
+    showSetup();
+    return;
+  }
+  favorites = loadFavoritesFor(active.id);
+  await openPlaylist(active.playlistUrl, active.epgUrl);
+}
+
+// (legacy STORAGE_KEY из config.ts больше не используется — миграция в playlists.ts)
 
 // ---------- PWA: service worker + онлайн-статус ----------
 // SW регистрируется только в прод-сборке: в dev он кеширует статику и мешает HMR.
