@@ -32,6 +32,10 @@ export class Player {
   private onFragment: ((payload: ArrayBuffer, isInit: boolean) => void) | null = null;
   /** Сетевые сбои подряд; сбрасывается, как только пошли данные. */
   private networkRetries = 0;
+  /** https-апгрейд для текущего URL уже пробовали — второй раз не ждём. */
+  private httpsFallbackTried = false;
+  /** Текущий URL — результат https-апгрейда (для сообщений об ошибке). */
+  private httpsUpgraded = false;
 
   constructor(
     video: HTMLVideoElement,
@@ -43,6 +47,9 @@ export class Player {
     this.toast = toast;
     this.onHlsState = onHlsState ?? null;
     this.onFatalError = onFatalError ?? null;
+    // Нативный playback (mp4/Safari): ошибки <video> — единственный канал
+    // фатальных ошибок; через них же спасаем mixed content апгрейдом.
+    this.video.addEventListener("error", this.handleVideoError);
   }
 
   /**
@@ -62,21 +69,69 @@ export class Player {
   }
 
   /**
+   * URL для воспроизведения: при смешанном контенте (https-страница,
+   * http-канал) пробуем https-порт того же хоста. Если апгрейд невозможен
+   * (локальные/приватные адреса) — играем как есть: на http-странице это
+   * работает, на https браузер заблокирует и сработает видео-ошибка.
+   */
+  private resolvePlayableUrl(url: string): string {
+    this.httpsUpgraded = false;
+    if (!isMixedContent(window.location.href, url)) return url;
+    const upgraded = httpToHttps(url);
+    if (!upgraded) return url;
+    console.debug(`[iptv-hub] mixed content: пробую ${upgraded}`);
+    this.httpsUpgraded = true;
+    this.toast("http-канал на https-странице: пробую https…");
+    return upgraded;
+  }
+
+  /**
+   * Фатальная ошибка нативного <video> (MSE-путь репортит через
+   * Hls.Events.ERROR). Последний шанс для mixed content: http-поток
+   * заблокирован — пробуем https.
+   */
+  private handleVideoError = (): void => {
+    if (this.hls || !this.currentUrl) return;
+    const err = this.video.error;
+    console.debug(
+      `[iptv-hub] native video error: code=${err?.code} ${err?.message ?? ""}`,
+    );
+    if (this.httpsFallbackTried) {
+      this.toast("Поток не отвечает и по https — попробуйте другой канал");
+      this.onFatalError?.();
+      return;
+    }
+    const upgraded = httpToHttps(this.currentUrl);
+    if (!upgraded) {
+      this.toast(
+        isMixedContent(window.location.href, this.currentUrl)
+          ? "Канал отдаётся по http с адреса без TLS (локальный или приватный) — на https-странице браузер его не пропустит"
+          : "Браузер не смог воспроизвести поток (подробности в консоли)",
+      );
+      this.onFatalError?.();
+      return;
+    }
+    this.httpsFallbackTried = true;
+    this.httpsUpgraded = true;
+    this.toast("Поток заблокирован на https-странице — пробую https…");
+    this.currentUrl = upgraded;
+    this.video.src = upgraded;
+    this.video.play().catch(() => undefined);
+  };
+
+  /**
    * Играть канал. null — попытка начата, строка — причина отказа (её и
    * показывает вызывающий; сам плеер про это не тостит, чтобы сообщения
    * не наслаивались).
    */
   play(channel: Channel): string | null {
-    const url = channel.url;
+    // Смешанный контент: вместо немедленного отказа пробуем https-порт —
+    // у большинства IPTV-CDN тот же контент доступен по TLS (issue #67).
+    const url = this.resolvePlayableUrl(channel.url);
     if (this.currentUrl === url && !this.video.paused) return null;
-    // Браузер блокирует http-поток на https-странице ещё до сети, и снаружи
-    // это выглядит как обычный сетевой сбой — плеер уходил в бесконечное
-    // переподключение вместо того, чтобы назвать причину.
-    if (isMixedContent(window.location.href, url)) {
-      return "Канал отдаётся по http — браузер блокирует его на https-странице";
-    }
     this.stop();
     this.networkRetries = 0;
+    this.httpsFallbackTried = false;
 
     const isHls = /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
     const isDash = /\.mpd(\?|$)/i.test(url);
@@ -91,7 +146,11 @@ export class Player {
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           if (!shouldRetryNetwork(++this.networkRetries)) {
             console.debug(`[iptv-hub] hls network error: ${data.details}, сдаёмся`);
-            this.toast("Поток не отвечает — попробуйте повтор или другой канал");
+            this.toast(
+              this.httpsUpgraded
+                ? "Поток недоступен и по https — у провайдера, похоже, нет TLS, и на https-странице браузер этот канал не пропустит"
+                : "Поток не отвечает — попробуйте повтор или другой канал",
+            );
             this.onFatalError?.();
             return;
           }
@@ -216,6 +275,7 @@ export class Player {
     const channel: Channel = { url, name: "", normalizedName: "", tvgId: null, logo: null, group: "", quality: null, catchupDays: 0, catchupSource: null };
     this.stop();
     this.networkRetries = 0; // ручной повтор даёт потоку новый лимит попыток
+    this.httpsFallbackTried = false;
     if (isHls && Hls.isSupported()) {
       this.hls = new Hls({ enableWorker: true, lowLatencyMode: false });
       this.hls.loadSource(url);
@@ -246,6 +306,36 @@ export class Player {
  */
 export function shouldRetryNetwork(consecutiveFailures: number): boolean {
   return consecutiveFailures <= MAX_NETWORK_RETRIES;
+}
+
+/**
+ * http→https для спасения потока на https-странице (mixed content).
+ * Возвращает null, если апгрейд не имеет смысла: URL не http, кривой,
+ * или адрес локальный/приватный (localhost, RFC1918) — у таких хостов
+ * TLS на 443 обычно не поднят. Чистая функция — покрыта тестами.
+ */
+export function httpToHttps(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:") return null;
+    const host = u.hostname.toLowerCase();
+    const local =
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host.endsWith(".local") ||
+      host === "127.0.0.1" ||
+      host === "[::1]" ||
+      host === "::1" ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    if (local) return null;
+    u.protocol = "https:";
+    if (u.port === "80") u.port = ""; // :80 → дефолтный https-порт 443
+    return u.toString();
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -2050,16 +2050,21 @@ async function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
  * Подсказка по причине сетевого сбоя: смешанный контент или CORS.
  * NetworkError браузера не различает — перечисляем оба сценария с чек-листом.
  */
-function describeFetchFailure(url: string): string {
-  const mixed = isMixedContent(window.location.href, url);
-  return mixed
-    ? "Ссылка http://, а страница открыта по https:// — браузер блокирует " +
-        "смешанный контент. Сохраните плейлист по https-ссылке или откройте " +
-        "сайт по http (локально)."
-    : "Возможные причины: (1) на бакете не включён CORS — добавьте правило для " +
-        "origin https://ozyab09.github.io (см. README), (2) ссылка недоступна " +
-        "из браузера (приватный бакет, firewall). Проверьте консоль (F12) — " +
-        "там будет точная причина (blocked by CORS policy / net::ERR_…).";
+function describeFetchFailure(url: string, reason?: string): string {
+  // Точная причина от плеера главнее: она знает, что уже предпринято
+  // (например, попытку https-порта), и не должна подменяться общим текстом.
+  if (reason) return reason;
+  if (isMixedContent(window.location.href, url)) {
+    return (
+      "Ссылка http://, а страница открыта по https:// — браузер блокирует " +
+      "смешанный контент. Плеер уже пробует https-порт 443; если не помогло — " +
+      "найдите https-ссылку или откройте сайт по http (локально)."
+    );
+  }
+  return "Возможные причины: (1) на бакете не включён CORS — добавьте правило для " +
+    "origin https://ozyab09.github.io (см. README), (2) ссылка недоступна " +
+    "из браузера (приватный бакет, firewall). Проверьте консоль (F12) — " +
+    "там будет точная причина (blocked by CORS policy / net::ERR_…).";
 }
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
