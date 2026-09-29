@@ -124,3 +124,21 @@ describe("доступность", () => {
     }
   });
 });
+
+describe("соседние кнопки различимы", () => {
+  it("театр и полный экран нарисованы по-разному", () => {
+    // Обе кнопки стоят рядом в плеере. Пока обе были четырьмя уголками,
+    // отличить их можно было только по подсказке при наведении.
+    const theater = ICONS["theater"]!;
+    const fullscreen = ICONS["fullscreen"]!;
+    expect(theater).not.toBe(fullscreen);
+    // Разные примитивы, а не разный набор координат одной и той же фигуры.
+    expect(theater).toContain("<rect");
+    expect(fullscreen).not.toContain("<rect");
+  });
+
+  it("развернуть и свернуть плеер — не одна и та же иконка", () => {
+    expect(ICONS["pip"]).not.toBe(ICONS["theater"]);
+    expect(ICONS["pip"]).not.toBe(ICONS["fullscreen"]);
+  });
+});

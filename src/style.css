@@ -353,11 +353,14 @@ html, body {
   }
   /* Кадр 16:9 по высоте окна: width:100% в широкой колонке давал бы
      чёрные поля по бокам вместо картинки. */
+  .watch .player-bar:not(.theater) {
+    --frame-w: calc(62vh * 16 / 9);
+  }
   .watch .player-bar:not(.theater) video {
     aspect-ratio: 16 / 9;
     height: auto;
     max-height: 62vh;
-    max-width: min(100%, calc(62vh * 16 / 9));
+    max-width: min(100%, var(--frame-w));
     margin-inline: auto;
   }
 
@@ -641,7 +644,26 @@ video { cursor: pointer; }
   justify-content: center;
   padding: 16px;
 }
-.player-bar.theater video { display: block; max-height: none; height: 100%; }
+.player-bar.theater {
+  /* Ширина кадра при вписывании по высоте — по ней равняются и контролы */
+  --frame-w: calc((100vh - 140px) * 16 / 9);
+}
+.player-bar.theater video {
+  display: block;
+  max-height: none;
+  height: 100%;
+  max-width: min(100%, var(--frame-w));
+  margin-inline: auto;
+}
+
+/* Контролы равняются по кадру, а не по краям окна. Иначе на широком
+   мониторе крайние кнопки уезжают к самым границам экрана и теряют
+   связь с видео, под которым стоят. */
+.player-bar.theater .player-bar-row,
+.watch .player-bar:not(.theater) .player-bar-row {
+  width: min(100%, var(--frame-w));
+  margin-inline: auto;
+}
 
 /* ---------- guide (программа передач) ---------- */
 .guide-overlay {
