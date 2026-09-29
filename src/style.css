@@ -678,7 +678,8 @@ html, body {
 }
 /* Строки программы — это <button>: без сброса браузер рисует им свой
    серый фон и рамку поверх .prog-row из дизайн-системы. */
-.guide-list .prog-row {
+.guide-list .prog-row,
+.sched-list .prog-row {
   width: 100%;
   border: 0;
   background: transparent;
@@ -687,11 +688,63 @@ html, body {
   text-align: left;
   cursor: pointer;
 }
-.guide-list .prog-row:hover { background: var(--surface-2); }
-.guide-list .prog-row.now { background: var(--accent-soft); }
-.guide-list .prog-row:disabled { cursor: default; }
-.guide-list .prog-row:disabled:hover { background: transparent; }
-.guide-list .prog-row .time { width: auto; min-width: 96px; }
+.guide-list .prog-row:hover,
+.sched-list .prog-row:hover { background: var(--surface-2); }
+.guide-list .prog-row.now,
+.sched-list .prog-row.now { background: var(--accent-soft); }
+.guide-list .prog-row:disabled,
+.sched-list .prog-row:disabled { cursor: default; }
+.guide-list .prog-row:disabled:hover,
+.sched-list .prog-row:disabled:hover { background: transparent; }
+.guide-list .prog-row .time,
+.sched-list .prog-row .time { width: auto; min-width: 96px; }
+.prog-body { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.prog-body .title { font-size: 15px; line-height: 22px; }
+.prog-arch { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 12px; line-height: 16px; color: var(--muted); }
+.prog-row:not(:disabled):hover .prog-arch { color: var(--text); }
+
+/* Программа под плеером */
+.now-schedule { display: flex; flex-direction: column; gap: var(--space-2); }
+.sched-head { display: flex; align-items: center; justify-content: space-between; }
+.sched-head h3 { margin: 0; }
+.sched-all {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 13px/18px var(--font-sans);
+  padding: var(--space-2);
+  margin-right: calc(-1 * var(--space-2));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.sched-all:hover { color: var(--text); background: var(--surface-2); }
+.sched-list { display: flex; flex-direction: column; gap: 2px; }
+.sched-list .prog-row { padding: var(--space-3) var(--space-2); }
+@media (max-width: 1023px) {
+  .player-bar:not(.open) .now-schedule { display: none; }
+}
+/* На широком экране — пять плиток в ряд под кадром */
+@media (min-width: 1024px) {
+  .sched-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2); }
+  .sched-list .prog-row {
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+  }
+  .sched-list .prog-row .time { min-width: 0; font-size: 12px; line-height: 16px; }
+  .sched-list .prog-body .title {
+    font-size: 13px;
+    line-height: 18px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .sched-list .prog-row:disabled:hover { background: var(--surface-1); }
+  .sched-list .prog-row.now { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+}
 .prog-row.dim { opacity: 0.45; cursor: default; }
 .prog-row.dim:hover { background: transparent; }
 
@@ -909,7 +962,7 @@ html, body {
     /* Кадр вписывается и по ширине колонки, и по высоте окна — под ним
        должна остаться строка «что идёт». Контролы и строка равняются по
        кадру, а не по краям колонки. */
-    --frame-w: min(100%, calc((100vh - 170px) * 16 / 9));
+    --frame-w: min(100%, calc((100vh - 330px) * 16 / 9));
   }
   .watch .player-bar > * { width: var(--frame-w); }
 

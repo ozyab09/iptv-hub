@@ -87,7 +87,7 @@ import {
   tierName,
   trackLabel,
 } from "./quality";
-import type { Channel, PlaylistSnapshot } from "./types";
+import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -190,6 +190,9 @@ const guideOverlay = $("guide-overlay");
 const guideTitle = $("guide-title");
 const guideDays = $("guide-days");
 const guideList = $("guide-list");
+const nowSchedule = $("now-schedule");
+const schedList = $("sched-list");
+const btnFullGuide = $<HTMLButtonElement>("btn-full-guide");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
 const nowFav = $<HTMLButtonElement>("now-fav");
@@ -1460,14 +1463,7 @@ function renderGuide(): void {
 
   guideList.textContent = "";
   const window: DayWindow = wins[guideDayIdx]!;
-  const progs = epg
-    ? programmesInDay(
-        epg.get(`id:${lastPlayed.tvgId?.toLowerCase() ?? ""}`) ??
-          epg.get(`name:${lastPlayed.normalizedName}`) ??
-          [],
-        window,
-      )
-    : [];
+  const progs = epg ? programmesInDay(channelProgrammes(), window) : [];
   if (progs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "muted";
@@ -1477,77 +1473,121 @@ function renderGuide(): void {
   }
 
   const now = new Date();
-  const cu = {
-    days: lastPlayed.catchupDays,
-    source: lastPlayed.catchupSource,
-  };
   for (const p of progs) {
-    const start = Date.parse(p.start);
-    const stop = Date.parse(p.stop);
-    const isLive = start <= now.getTime() && now.getTime() < stop;
-    const watchable = isLive || canWatchPast(cu, p, now);
+    guideList.append(programmeRow(p, now, () => (guideOverlay.hidden = true)));
+  }
+}
 
-    const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
-    const row = document.createElement("button");
-    // Приглушаем только прошедшее без архива: будущие передачи тоже нельзя
-    // включить, но это нормальная программа, а не «недоступное».
-    row.className =
-      programRowClass(state) + (state === "past" && !watchable ? " dim" : "");
-    // Нельзя включить — не кнопка для клавиатуры и мыши.
-    row.disabled = !watchable;
-    const t = document.createElement("span");
-    t.className = "time";
-    t.textContent = formatRange(p);
-    const title = document.createElement("span");
-    title.className = "title t-body";
-    title.textContent = p.title;
-    if (isLive) {
-      // Эфир помечается акцентной плашкой дизайн-системы, а не символом
-      // в тексте: title приходит из EPG и в разметку не попадает.
-      const live = document.createElement("span");
-      live.className = "live";
-      live.textContent = "Эфир";
-      title.append(" ", live);
-    }
-    row.append(t, title);
+/**
+ * Строка передачи — одна и для шторки с программой, и для блока под
+ * плеером. Эфир включается, прошедшее с архивом — открывается из архива,
+ * прошедшее без архива приглушено, будущее просто подписано.
+ */
+function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLButtonElement {
+  const c = lastPlayed!;
+  const cu = { days: c.catchupDays, source: c.catchupSource };
+  const start = Date.parse(p.start);
+  const stop = Date.parse(p.stop);
+  const isLive = start <= now.getTime() && now.getTime() < stop;
+  const watchable = isLive || canWatchPast(cu, p, now);
+  const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
 
-    if (watchable) {
-      row.title = isLive
-        ? "Смотреть сейчас"
-        : "Смотреть из архива (catchup)";
-      row.addEventListener("click", () => {
-        if (isLive) {
-          playChannel(lastPlayed!);
-          guideOverlay.hidden = true;
-          return;
-        }
-        const url = buildCatchupUrl(cu, p, now);
-        if (!url) {
-          showToast("Провайдер не дал шаблон архива для этого канала");
-          return;
-        }
-        nowTitle.textContent = `${lastPlayed!.name} · архив`;
-        nowTitle.title = url;
-        playerBar.hidden = false;
-        setWatching(true);
-        const refusedCatchup = player.play({ ...lastPlayed!, url });
-        if (refusedCatchup) {
-          showToast(refusedCatchup);
-          return;
-        }
-        guideOverlay.hidden = true;
-      });
-    } else {
-      row.title =
-        cu.days > 0
-          ? "Вне глубины архива"
-          : "Архив недоступен на этом канале (нет tvg-rec)";
-    }
-    guideList.append(row);
+  const row = document.createElement("button");
+  // Приглушаем только прошедшее без архива: будущие передачи тоже нельзя
+  // включить, но это нормальная программа, а не «недоступное».
+  row.className =
+    programRowClass(state) + (state === "past" && !watchable ? " dim" : "");
+  // Нельзя включить — не кнопка для клавиатуры и мыши.
+  row.disabled = !watchable;
+
+  const t = document.createElement("span");
+  t.className = "time";
+  t.textContent = formatRange(p);
+  const body = document.createElement("span");
+  body.className = "prog-body";
+  const title = document.createElement("span");
+  title.className = "title";
+  title.textContent = p.title;
+  body.append(title);
+  // Эфир и архив — плашками, а не символами в тексте: title приходит из EPG
+  if (isLive) {
+    const live = document.createElement("span");
+    live.className = "live";
+    live.textContent = "Эфир";
+    body.append(live);
+  } else if (state === "past" && watchable) {
+    const arch = document.createElement("span");
+    arch.className = "prog-arch";
+    arch.innerHTML = iconMarkup("archive", "i-sm");
+    arch.append("Смотреть из архива");
+    body.append(arch);
+  }
+  row.append(t, body);
+
+  if (watchable) {
+    row.title = isLive ? "Смотреть сейчас" : "Смотреть из архива (catchup)";
+    row.addEventListener("click", () => {
+      if (isLive) {
+        playChannel(c);
+        onPlayed();
+        return;
+      }
+      const url = buildCatchupUrl(cu, p, now);
+      if (!url) {
+        showToast("Провайдер не дал шаблон архива для этого канала");
+        return;
+      }
+      nowTitle.textContent = `${c.name} · архив`;
+      nowTitle.title = url;
+      playerBar.hidden = false;
+      setWatching(true);
+      const refusedCatchup = player.play({ ...c, url });
+      if (refusedCatchup) {
+        showToast(refusedCatchup);
+        return;
+      }
+      onPlayed();
+    });
+  } else if (state === "past") {
+    row.title =
+      cu.days > 0
+        ? "Вне глубины архива"
+        : "Архив недоступен на этом канале (нет tvg-rec)";
+  }
+  return row;
+}
+
+/** Передачи текущего канала по телепрограмме, по времени начала. */
+function channelProgrammes(): EpgProgramme[] {
+  if (!epg || !lastPlayed) return [];
+  return (
+    epg.get(`id:${lastPlayed.tvgId?.toLowerCase() ?? ""}`) ??
+    epg.get(`name:${lastPlayed.normalizedName}`) ??
+    []
+  );
+}
+
+/**
+ * Программа под плеером: одна прошедшая (её можно открыть из архива), та,
+ * что идёт, и три следующие. Полная — в шторке «Вся программа».
+ */
+let scheduleKey = "";
+function renderSchedule(): void {
+  const all = channelProgrammes();
+  const nowMs = Date.now();
+  const i = all.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
+  scheduleKey = lastPlayed && i >= 0 ? `${lastPlayed.url}|${all[i]!.start}` : "";
+  schedList.textContent = "";
+  nowSchedule.hidden = i < 0;
+  if (i < 0) return;
+  const now = new Date(nowMs);
+  for (const p of all.slice(Math.max(0, i - 1), i + 4)) {
+    schedList.append(programmeRow(p, now, () => undefined));
   }
 }
 
 btnGuide.addEventListener("click", openGuide);
+btnFullGuide.addEventListener("click", openGuide);
 guideClose.addEventListener("click", () => (guideOverlay.hidden = true));
 guideOverlay.addEventListener("click", (e) => {
   if (e.target === guideOverlay) guideOverlay.hidden = true;
@@ -1578,6 +1618,7 @@ function refreshScrub(): void {
   const prog =
     epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null;
   if (!prog) {
+    if (scheduleKey) renderSchedule();
     scrubFill.style.width = "0%";
     progStart.textContent = "";
     progEnd.textContent = "";
@@ -1592,6 +1633,9 @@ function refreshScrub(): void {
   miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
   progStart.textContent = clock(startMs);
   progEnd.textContent = clock(stopMs);
+
+  // Сменилась передача или канал — перестроить программу под плеером
+  if (`${lastPlayed!.url}|${prog.start}` !== scheduleKey) renderSchedule();
 
   // Под кадром — то же самое словами: что идёт и сколько осталось
   nowShow.textContent = prog.title;

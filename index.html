@@ -194,6 +194,16 @@
             <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
           </div>
         </div>
+
+        <!-- Программа рядом с плеером: прошедшая (из архива), текущая и три
+             следующие. Полная — в шторке «Вся программа». -->
+        <section id="now-schedule" class="now-schedule" hidden>
+          <div class="sched-head">
+            <h3 class="t-heading">Программа</h3>
+            <button id="btn-full-guide" class="sched-all">Вся программа</button>
+          </div>
+          <div id="sched-list" class="sched-list"></div>
+        </section>
       </div>
       <!-- Модалка программы передач -->
       <div id="guide-overlay" class="guide-overlay" hidden>
