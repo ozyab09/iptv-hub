@@ -15,6 +15,13 @@ export class Player {
   private onHlsState: (() => void) | null;
   /** Вызывается при фатальной ошибке потока (для retry-кнопки UI). */
   private onFatalError: (() => void) | null;
+  /**
+   * Вызывается на каждый загруженный сегмент — на этом строится запись эфира.
+   * `payload` живёт только внутри вызова: hls.js отдаёт буфер в воркер
+   * трансфером, после чего исходный ArrayBuffer отсоединяется. Сохранять
+   * нужно копию.
+   */
+  private onFragment: ((payload: ArrayBuffer, isInit: boolean) => void) | null = null;
 
   constructor(
     video: HTMLVideoElement,
@@ -26,6 +33,21 @@ export class Player {
     this.toast = toast;
     this.onHlsState = onHlsState ?? null;
     this.onFatalError = onFatalError ?? null;
+  }
+
+  /**
+   * Подписаться на загружаемые сегменты. Подписка переживает смену канала:
+   * обработчик вешается на каждый новый hls-инстанс.
+   */
+  setFragmentListener(cb: (payload: ArrayBuffer, isInit: boolean) => void): void {
+    this.onFragment = cb;
+  }
+
+  /** Повесить обработчик сегментов на текущий hls-инстанс. */
+  private attachFragmentListener(): void {
+    this.hls?.on(Hls.Events.FRAG_LOADED, (_e, data) => {
+      this.onFragment?.(data.payload, data.frag.sn === "initSegment");
+    });
   }
 
   /** Играть канал. True — попытка начата, false — URL не поддерживается. */
@@ -67,6 +89,7 @@ export class Player {
       this.hls.on(Hls.Events.LEVEL_UPDATED, notify);
       this.hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, notify);
       this.hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, notify);
+      this.attachFragmentListener();
     } else if (isDash) {
       this.toast("MPEG-DASH не поддерживается в MVP (см. ROADMAP)");
       return false;
@@ -179,6 +202,7 @@ export class Player {
       this.hls.on(Hls.Events.MANIFEST_PARSED, notify);
       this.hls.on(Hls.Events.LEVEL_SWITCHED, notify);
       this.hls.on(Hls.Events.LEVEL_UPDATED, notify);
+      this.attachFragmentListener();
     } else {
       this.video.src = url;
     }

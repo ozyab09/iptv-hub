@@ -18,13 +18,18 @@ const STOP_TIMEOUT_MS = 3000;
 
 /**
  * Имя файла записи: «Channel_2026-09-28_15-42.webm».
- * Небезопасные для ФС символы заменяются на «_».
+ * Небезопасные для ФС символы заменяются на «_». Расширение зависит от способа
+ * записи: перекодирование даёт webm, запись сегментами — ts или mp4.
  */
-export function recordingFileName(channelName: string, at: Date = new Date()): string {
+export function recordingFileName(
+  channelName: string,
+  at: Date = new Date(),
+  ext = "webm",
+): string {
   const safe = channelName.replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "");
   const pad = (n: number): string => String(n).padStart(2, "0");
   const ts = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}_${pad(at.getHours())}-${pad(at.getMinutes())}`;
-  return `${safe || "recording"}_${ts}.webm`;
+  return `${safe || "recording"}_${ts}.${ext}`;
 }
 
 /**
