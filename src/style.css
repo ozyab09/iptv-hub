@@ -361,20 +361,14 @@ html, body {
     margin-inline: auto;
   }
 
-  /* В узкой высокой колонке три зоны в строку не помещаются — ставим в столбец */
+  /* Контролы — одной строкой под кадром: колонка плеера широкая, и столбец
+     из трёх рядов только отъедал бы высоту у видео. wrap оставлен на случай
+     узкого окна у нижней границы режима. */
   .watch .player-bar:not(.theater) .player-bar-row {
-    flex-direction: column;
-    align-items: stretch;
+    flex-wrap: wrap;
     gap: var(--space-3);
     padding-top: 0;
   }
-  .watch .player-bar:not(.theater) .pb-zone {
-    flex: none;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-  .watch .player-bar:not(.theater) .now-playing { flex: none; text-align: center; }
-  .watch .player-bar:not(.theater) .volume { flex: none; }
 
   /* Сайдбар сворачивается в рельс: место нужнее списку и плееру */
   .watch .layout { grid-template-columns: var(--rail-w) var(--list-w); }
