@@ -1,5 +1,6 @@
 import "./style.css";
 import { installDebugLog } from "./debug-log";
+import { iconMarkup, spriteMarkup } from "./icons";
 import { createRecordingSink } from "./recording-sink";
 import { createSegmentSession } from "./segment-recorder";
 import {
@@ -70,6 +71,19 @@ import type { Channel, PlaylistSnapshot } from "./types";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
+
+// Спрайт иконок: один раз на страницу, до первого рендера.
+document.body.insertAdjacentHTML("afterbegin", spriteMarkup());
+
+/** Заменить содержимое кнопки иконкой (иконки живут в src/icons.ts). */
+function setIcon(el: HTMLElement, name: string): void {
+  el.innerHTML = iconMarkup(name);
+}
+
+/** Иконка звука по текущей громкости. */
+function refreshMuteIcon(): void {
+  setIcon(btnMute, player.getVolume() === 0 ? "mute" : "volume");
+}
 
 // ---------- DOM ----------
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -380,7 +394,7 @@ function renderChannelCard(c: Channel): HTMLElement {
     ? "Убрать из избранного"
     : "В избранное";
   star.setAttribute("aria-label", star.title);
-  star.textContent = isFavorite(favorites, c) ? "★" : "☆";
+  setIcon(star, isFavorite(favorites, c) ? "star-on" : "star");
   star.addEventListener("click", (ev) => {
     ev.stopPropagation(); // не запускать воспроизведение
     favorites = toggleFavorite(favorites, c);
@@ -436,7 +450,7 @@ function playChannel(c: Channel): void {
   nowCategory.textContent = c.group;
   playerBar.hidden = false;
   refreshNowFav();
-  btnPause.textContent = "❚❚"; // после play() обычно идёт воспроизведение
+  setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
   playerStatus.textContent = "—";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
   const refused = player.play(c);
@@ -475,8 +489,8 @@ btnClosePlayer.addEventListener("click", () => {
 btnPause.addEventListener("click", () => {
   player.togglePause();
 });
-videoEl.addEventListener("play", () => (btnPause.textContent = "❚❚"));
-videoEl.addEventListener("pause", () => (btnPause.textContent = "▶"));
+videoEl.addEventListener("play", () => setIcon(btnPause, "pause"));
+videoEl.addEventListener("pause", () => setIcon(btnPause, "play"));
 videoEl.addEventListener("loadedmetadata", () => {
   // нативный playback: разрешение становится известно здесь
   if (videoEl.videoWidth) {
@@ -504,12 +518,12 @@ btnRetry.addEventListener("click", () => {
 
 btnMute.addEventListener("click", () => {
   player.toggleMute();
-  btnMute.textContent = player.getVolume() === 0 ? "🔇" : "🔊";
+  refreshMuteIcon();
   volumeSlider.value = String(Math.round(player.getVolume() * 100));
 });
 volumeSlider.addEventListener("input", () => {
   player.setVolume(Number(volumeSlider.value) / 100);
-  btnMute.textContent = player.getVolume() === 0 ? "🔇" : "🔊";
+  refreshMuteIcon();
 });
 
 btnPip.addEventListener("click", () => void player.togglePip());
@@ -524,7 +538,7 @@ videoEl.addEventListener("click", () => {
 function refreshNowFav(): void {
   if (!lastPlayed) return;
   const fav = isFavorite(favorites, lastPlayed);
-  nowFav.textContent = fav ? "★" : "☆";
+  setIcon(nowFav, fav ? "star-on" : "star");
   nowFav.classList.toggle("active", fav);
   nowFav.title = fav ? "Убрать из избранного" : "В избранное";
 }
@@ -558,7 +572,7 @@ window.addEventListener("keydown", (e) => {
         Math.min(100, Number(volumeSlider.value) + 10),
       );
       player.setVolume(Number(volumeSlider.value) / 100);
-      btnMute.textContent = "🔊";
+      refreshMuteIcon();
       break;
     case "ArrowDown":
       e.preventDefault();
@@ -566,8 +580,7 @@ window.addEventListener("keydown", (e) => {
         Math.max(0, Number(volumeSlider.value) - 10),
       );
       player.setVolume(Number(volumeSlider.value) / 100);
-      btnMute.textContent =
-        Number(volumeSlider.value) === 0 ? "🔇" : "🔊";
+      refreshMuteIcon();
       break;
     case "m":
     case "ь": // ru-раскладка
@@ -1231,7 +1244,15 @@ function renderGuide(): void {
     t.textContent = formatRange(p);
     const title = document.createElement("span");
     title.className = "guide-name";
-    title.textContent = p.title + (isLive ? " ● сейчас" : "");
+    title.textContent = p.title;
+    if (isLive) {
+      // Эфир помечается акцентной плашкой дизайн-системы, а не символом
+      // в тексте: title приходит из EPG и в разметку не попадает.
+      const live = document.createElement("span");
+      live.className = "live";
+      live.textContent = "Эфир";
+      title.append(" ", live);
+    }
     row.append(t, title);
 
     if (watchable) {
@@ -1294,7 +1315,7 @@ btnFullscreen.addEventListener("click", () => {
   }
 });
 document.addEventListener("fullscreenchange", () => {
-  btnFullscreen.textContent = document.fullscreenElement ? "⛶" : "⛶"; // глиф одинаков; меняем title
+  // Иконка одна на оба состояния — меняется только подсказка.
   btnFullscreen.title = document.fullscreenElement
     ? "Выйти из полного экрана (F)"
     : "На весь экран (F)";
@@ -1341,12 +1362,12 @@ let currentTheme: Theme = resolveTheme(
     : null,
 );
 applyTheme(currentTheme);
-btnTheme.textContent = themeButtonLabel(currentTheme);
+setIcon(btnTheme, themeButtonLabel(currentTheme));
 btnTheme.addEventListener("click", () => {
   currentTheme = toggleTheme(currentTheme);
   applyTheme(currentTheme);
   saveTheme(currentTheme, localStorage);
-  btnTheme.textContent = themeButtonLabel(currentTheme);
+  setIcon(btnTheme, themeButtonLabel(currentTheme));
 });
 
 // ---------- Избранное ----------
@@ -1420,7 +1441,7 @@ function renderPlaylistManager(): void {
     const edit = document.createElement("button");
     edit.className = "icon-btn";
     edit.title = "Переименовать / изменить ссылки";
-    edit.textContent = "✎";
+    setIcon(edit, "edit");
     edit.addEventListener("click", () => {
       // Инлайн-редактирование: карточка превращается в форму
       row.textContent = "";
@@ -1447,7 +1468,7 @@ function renderPlaylistManager(): void {
       save.textContent = "Сохранить";
       const cancel = document.createElement("button");
       cancel.className = "icon-btn";
-      cancel.textContent = "✕";
+      setIcon(cancel, "close");
       cancel.title = "Отмена";
       btns.append(save, cancel);
       form.append(btns);
@@ -1480,7 +1501,7 @@ function renderPlaylistManager(): void {
     const del = document.createElement("button");
     del.className = "icon-btn pl-del";
     del.title = "Удалить плейлист (избранное тоже будет удалено)";
-    del.textContent = "🗑";
+    setIcon(del, "trash");
     del.addEventListener("click", () => {
       if (!window.confirm(`Удалить «${p.name}»?`)) return;
       if (typeof localStorage !== "undefined") {
@@ -1565,7 +1586,8 @@ function renderPlaylistSwitcher(): void {
   const active = activePlaylist(plState);
   plSwitch.hidden = !active;
   if (!active) return;
-  plSwitchBtn.textContent = `📺 ${active.name}`;
+  plSwitchBtn.innerHTML = iconMarkup("tv");
+  plSwitchBtn.append(` ${active.name}`);
   plSwitchMenu.textContent = "";
   for (const p of plState.items) {
     const b = document.createElement("button");
@@ -1681,7 +1703,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
         epg = parsed;
         renderChannels();
         refreshNowFav();
-        epgNow.textContent = `Каналов: ${snapshot!.channels.length} · Категорий: ${snapshot!.categories.length} · EPG ✓`;
+        epgNow.textContent = `Каналов: ${snapshot!.channels.length} · Категорий: ${snapshot!.categories.length} · EPG`;
       })
       .catch(() => {
         epgNow.textContent = `Каналов: ${snapshot!.channels.length} · Категорий: ${snapshot!.categories.length} · EPG недоступен`;

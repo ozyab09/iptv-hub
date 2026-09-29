@@ -60,7 +60,7 @@ export function applyTheme(theme: Theme, doc: Document = document): void {
 
 /** Синхронизировать иконку кнопки-переключателя: показывает целевую тему. */
 export function themeButtonLabel(current: Theme): string {
-  return current === "dark" ? "☀️" : "🌙";
+  return current === "dark" ? "sun" : "moon";
 }
 
 export const THEME_STORAGE_KEY = THEME_KEY;

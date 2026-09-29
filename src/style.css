@@ -92,6 +92,42 @@
   color-scheme: light;
 }
 
+/* Иконки: параметры штриха заданы здесь, фигуры — в src/icons.ts */
+.i {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.2em;
+}
+.i-sm { width: 16px; height: 16px; }
+.i-lg { width: 24px; height: 24px; }
+.i-fill { fill: currentColor; stroke: none; }
+
+/* Плашка «Эфир»: точка + капслок, единственный акцентный элемент в строке */
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+
 * { box-sizing: border-box; }
 
 html, body {
