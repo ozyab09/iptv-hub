@@ -1419,7 +1419,7 @@ function renderGuide(): void {
   wins.forEach((w, i) => {
     const b = document.createElement("button");
     b.textContent = w.label;
-    b.className = i === guideDayIdx ? "guide-day active" : "guide-day";
+    b.className = i === guideDayIdx ? "chip on" : "chip";
     b.addEventListener("click", () => {
       guideDayIdx = i;
       renderGuide();
@@ -1458,7 +1458,12 @@ function renderGuide(): void {
 
     const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
     const row = document.createElement("button");
-    row.className = programRowClass(state) + (watchable ? "" : " dim");
+    // Приглушаем только прошедшее без архива: будущие передачи тоже нельзя
+    // включить, но это нормальная программа, а не «недоступное».
+    row.className =
+      programRowClass(state) + (state === "past" && !watchable ? " dim" : "");
+    // Нельзя включить — не кнопка для клавиатуры и мыши.
+    row.disabled = !watchable;
     const t = document.createElement("span");
     t.className = "time";
     t.textContent = formatRange(p);
