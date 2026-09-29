@@ -92,6 +92,8 @@
   color-scheme: light;
 }
 
+@import "./components.css";
+
 /* Иконки: параметры штриха заданы здесь, фигуры — в src/icons.ts */
 .i {
   width: 20px;
@@ -179,12 +181,9 @@ html, body {
 .screen[hidden] { display: none; }
 
 .card {
-  max-width: 520px;
-  margin: 12vh auto 0;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 28px;
+  padding: 20px;
+  max-width: 560px;
+  margin: 32px auto;
 }
 .card h1 { margin: 0 0 8px; font-size: 22px; }
 .card label {
@@ -262,32 +261,6 @@ html, body {
     overflow-y: visible;
   }
 }
-.category-btn {
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  color: var(--muted);
-  padding: 8px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  /* Внутри flex-колонки со скроллом кнопки обязаны сохранять свою высоту:
-   flex-shrink по умолчанию сжимает их, и текст обрезается по вертикали. */
-  flex: 0 0 auto;
-  min-height: 2.4em;
-  line-height: 1.4;
-  overflow-wrap: normal;
-}
-.category-btn:hover { background: var(--bg2); color: var(--text); }
-.category-btn.active {
-  background: var(--bg2);
-  border-color: var(--accent2);
-  color: var(--text);
-}
 
 /* ---------- channels ---------- */
 .epg-now {
@@ -316,39 +289,6 @@ html, body {
 /* Высота карточки детерминирована (питч виртуального списка = 56px):
    36px контент + 20px паддинг + 2px борд. Не менять без virtual-list.ts.
    row-gap сетки (10px) добавляется к питчу строк — см. .virtual-inner. */
-.channel-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  padding: 10px 12px;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  min-width: 0;
-  height: 56px;
-}
-.channel-card:hover { border-color: var(--accent2); }
-.channel-card.active { border-color: var(--accent); }
-.channel-logo { width: 36px; height: 36px; object-fit: contain; flex: none; }
-.channel-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.channel-epg {
-  flex-basis: 100%;
-  font-size: 12px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .fav-star {
   flex: none;
   width: 28px;
@@ -364,28 +304,8 @@ html, body {
 .fav-star:hover { background: var(--bg2); color: var(--text); }
 .fav-star.active { color: var(--accent); }
 
-.fav-toggle {
-  margin-bottom: 8px;
-  border: 1px dashed var(--border);
-}
-.fav-toggle.active {
-  border-style: solid;
-  border-color: var(--accent);
-  color: var(--accent);
-}
+.fav-toggle { margin-bottom: var(--space-2); }
 
-.badge {
-  flex: none;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 2px 6px;
-  background: var(--bg2);
-  color: var(--muted);
-}
-.badge.q-4k { color: #ffb84f; }
-.badge.q-fhd { color: var(--accent); }
-.badge.q-hd { color: var(--accent2); }
 
 /* ---------- player bar ---------- */
 .player-bar {
@@ -466,8 +386,7 @@ html, body {
   /* Touch-цели не тоньше 40px (Apple HIG / Material). */
   .player-bar .icon-btn { width: 40px; height: 40px; }
   .fav-star { width: 36px; height: 36px; }
-  .category-btn { min-height: 44px; }
-
+  
   /* Инпуты < 16px → iOS Safari авто-зумит страницу при фокусе. */
   #search,
   .card input,
@@ -508,8 +427,7 @@ video { cursor: pointer; }
 
 /* Кнопка качества + выпадающее меню в палитре сайта */
 .quality-wrap { position: relative; }
-.quality-btn { min-width: 88px; text-align: center; cursor: pointer; }
-.quality-btn[aria-expanded="true"] { border-color: var(--accent2); }
+/* Только позиционирование: вид меню задаёт .menu дизайн-системы */
 .quality-menu {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -518,26 +436,9 @@ video { cursor: pointer; }
   min-width: 190px;
   max-height: 260px;
   overflow-y: auto;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--overlay);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
 }
-.quality-item {
-  background: transparent;
-  border: 0;
-  color: var(--text);
-  text-align: left;
-  font: inherit;
-  font-size: 13px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.quality-item:hover { background: var(--bg2); }
+.quality-btn { min-width: 88px; text-align: center; cursor: pointer; }
+.quality-btn[aria-expanded="true"] { border-color: var(--focus); }
 .quality-item.active { color: var(--accent); font-weight: 600; }
 .icon-btn {
   background: var(--bg2);
@@ -631,30 +532,8 @@ video { cursor: pointer; }
   gap: 4px;
   min-height: 120px;
 }
-.guide-row {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  color: var(--text);
-  padding: 8px 10px;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-.guide-row:hover { background: var(--bg2); }
-.guide-row.live { border-color: var(--accent); }
-.guide-row.dim { opacity: 0.45; cursor: default; }
-.guide-row.dim:hover { background: transparent; }
-.guide-time {
-  flex: none;
-  color: var(--muted);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.guide-name { flex: 1; min-width: 0; }
+.prog-row.dim { opacity: 0.45; cursor: default; }
+.prog-row.dim:hover { background: transparent; }
 
 /* ---------- менеджер плейлистов (setup) ---------- */
 .pl-list {
@@ -867,5 +746,4 @@ video { cursor: pointer; }
     border-bottom: 0;
     padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
-  .guide-name { white-space: normal; }
-}
+  }

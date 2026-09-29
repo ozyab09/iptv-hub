@@ -1,6 +1,14 @@
 import "./style.css";
 import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
+import {
+  channelRowClass,
+  chipClass,
+  menuItemClass,
+  programRowClass,
+  qualityBadgeClass,
+  starClass,
+} from "./ui-classes";
 import { createRecordingSink } from "./recording-sink";
 import { createSegmentSession } from "./segment-recorder";
 import {
@@ -264,16 +272,19 @@ btnBackToPlayer.addEventListener("click", () => {
 function renderCategories(): void {
   if (!snapshot) return;
   categoriesNav.textContent = "";
-  btnFavorites.classList.toggle("active", favFilter);
+  btnFavorites.classList.toggle("on", favFilter);
   btnFavorites.setAttribute("aria-pressed", String(favFilter));
-  btnFavorites.textContent = favFilter
-    ? "★ Показать все"
-    : "☆ Показать избранное";
+  // innerHTML, а не textContent: иначе затрётся иконка внутри кнопки
+  btnFavorites.innerHTML = iconMarkup(favFilter ? "star-on" : "star");
+  btnFavorites.append(favFilter ? " Показать все" : " Показать избранное");
   const mk = (label: string, value: string | null, count: number) => {
     const b = document.createElement("button");
-    b.textContent = `${label} (${count})`;
-    b.className =
-      activeCategory === value ? "category-btn active" : "category-btn";
+    b.textContent = label;
+    const n = document.createElement("span");
+    n.className = "count";
+    n.textContent = String(count);
+    b.append(n);
+    b.className = chipClass(activeCategory === value);
     b.addEventListener("click", () => {
       activeCategory = value;
       renderCategories();
@@ -367,34 +378,61 @@ function renderChannels(): void {
 
 function renderChannelCard(c: Channel): HTMLElement {
   const card = document.createElement("button");
-  card.className = "channel-card";
+  card.className = channelRowClass(lastPlayed?.url === c.url);
   card.setAttribute("role", "listitem");
 
+  // Плитка логотипа есть всегда: без неё строки прыгают по высоте, а с
+  // монограммой канал опознаётся и когда картинка не загрузилась.
+  const logo = document.createElement("span");
+  logo.className = "logo sm";
+  logo.textContent = c.name.trim().slice(0, 2).toUpperCase();
   if (c.logo) {
     const img = document.createElement("img");
     img.src = c.logo;
     img.alt = "";
     img.loading = "lazy";
-    img.className = "channel-logo";
     img.addEventListener("error", () => img.remove());
-    card.append(img);
+    logo.textContent = "";
+    logo.append(img);
   }
+  card.append(logo);
+
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  const line = document.createElement("span");
+  line.className = "line";
 
   const name = document.createElement("span");
-  name.className = "channel-name";
+  name.className = "t-strong ellipsis";
   name.textContent = c.name;
   name.title = c.url; // ссылка на поток при наведении
-  card.append(name);
+  line.append(name);
+
+  if (c.quality) {
+    const q = document.createElement("span");
+    q.className = qualityBadgeClass(c.quality);
+    q.textContent = c.quality;
+    line.append(q);
+  }
+  meta.append(line);
+
+  if (epg) {
+    const { now } = getNowNext(epg, c, snapshot!);
+    if (now) {
+      const e = document.createElement("span");
+      e.className = "t-label muted ellipsis num";
+      e.textContent = `${formatRange(now)} · ${now.title}`;
+      meta.append(e);
+    }
+  }
+  card.append(meta);
 
   const star = document.createElement("button");
-  star.className = isFavorite(favorites, c)
-    ? "fav-star active"
-    : "fav-star";
-  star.title = isFavorite(favorites, c)
-    ? "Убрать из избранного"
-    : "В избранное";
+  const fav = isFavorite(favorites, c);
+  star.className = starClass(fav);
+  star.title = fav ? "Убрать из избранного" : "В избранное";
   star.setAttribute("aria-label", star.title);
-  setIcon(star, isFavorite(favorites, c) ? "star-on" : "star");
+  setIcon(star, fav ? "star-on" : "star");
   star.addEventListener("click", (ev) => {
     ev.stopPropagation(); // не запускать воспроизведение
     favorites = toggleFavorite(favorites, c);
@@ -404,23 +442,6 @@ function renderChannelCard(c: Channel): HTMLElement {
     renderChannels();
   });
   card.append(star);
-
-  if (c.quality) {
-    const q = document.createElement("span");
-    q.className = `badge q-${c.quality.toLowerCase()}`;
-    q.textContent = c.quality;
-    card.append(q);
-  }
-
-  if (epg) {
-    const { now } = getNowNext(epg, c, snapshot!);
-    if (now) {
-      const e = document.createElement("span");
-      e.className = "channel-epg";
-      e.textContent = `${formatRange(now)} · ${now.title}`;
-      card.append(e);
-    }
-  }
 
   card.addEventListener("click", () => playChannel(c));
   return card;
@@ -635,7 +656,7 @@ function refreshQualityUi(): void {
   qualityBtn.textContent = qualityButtonLabel(hls.autoLevelEnabled, currentLv);
   const mkItem = (label: string, levelIndex: number, active: boolean) => {
     const b = document.createElement("button");
-    b.className = active ? "quality-item active" : "quality-item";
+    b.className = menuItemClass(active);
     b.setAttribute("role", "option");
     b.textContent = label;
     b.addEventListener("click", () => {
@@ -668,7 +689,7 @@ function refreshQualityUi(): void {
     audioTracks.forEach((t, i) => {
       const b = document.createElement("button");
       b.className =
-        i === hls.audioTrack ? "quality-item active" : "quality-item";
+        menuItemClass(i === hls.audioTrack);
       b.textContent = trackLabel(t, i);
       b.addEventListener("click", () => {
         player.setAudioTrack(i);
@@ -685,7 +706,7 @@ function refreshQualityUi(): void {
     subtitleMenu.textContent = "";
     const off = document.createElement("button");
     off.className =
-      hls.subtitleTrack === -1 ? "quality-item active" : "quality-item";
+      menuItemClass(hls.subtitleTrack === -1);
     off.textContent = "Выключены";
     off.addEventListener("click", () => {
       player.setSubtitleTrack(-1);
@@ -695,7 +716,7 @@ function refreshQualityUi(): void {
     subTracks.forEach((t, i) => {
       const b = document.createElement("button");
       b.className =
-        i === hls.subtitleTrack ? "quality-item active" : "quality-item";
+        menuItemClass(i === hls.subtitleTrack);
       b.textContent = trackLabel(t, i);
       b.addEventListener("click", () => {
         player.setSubtitleTrack(i);
@@ -1236,14 +1257,14 @@ function renderGuide(): void {
     const isLive = start <= now.getTime() && now.getTime() < stop;
     const watchable = isLive || canWatchPast(cu, p, now);
 
+    const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
     const row = document.createElement("button");
-    row.className =
-      "guide-row" + (isLive ? " live" : "") + (watchable ? "" : " dim");
+    row.className = programRowClass(state) + (watchable ? "" : " dim");
     const t = document.createElement("span");
-    t.className = "guide-time";
+    t.className = "time";
     t.textContent = formatRange(p);
     const title = document.createElement("span");
-    title.className = "guide-name";
+    title.className = "title t-body";
     title.textContent = p.title;
     if (isLive) {
       // Эфир помечается акцентной плашкой дизайн-системы, а не символом
@@ -1592,7 +1613,7 @@ function renderPlaylistSwitcher(): void {
   for (const p of plState.items) {
     const b = document.createElement("button");
     b.className =
-      p.id === plState.activeId ? "quality-item active" : "quality-item";
+      menuItemClass(p.id === plState.activeId);
     b.textContent = p.name;
     b.addEventListener("click", () => {
       plSwitchMenu.hidden = true;
@@ -1629,7 +1650,7 @@ setupLoad.addEventListener("click", () => {
   // такой запрос (mixed content) — предупредим заранее, но не блокируем.
   if (isMixedContent(window.location.href, pUrl)) {
     showToast(
-      "⚠️ Плейлист по http://: страница открыта по https://, браузер может заблокировать запрос. Если загрузка упадёт — используйте https-ссылку.",
+      "Плейлист по http://: страница открыта по https://, браузер может заблокировать запрос. Если загрузка упадёт — используйте https-ссылку.",
     );
   }
   plState = addPlaylist(plState, name || "Плейлист", pUrl, eUrl || null);

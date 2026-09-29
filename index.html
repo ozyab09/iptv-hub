@@ -35,8 +35,8 @@
         <div class="topbar-right">
           <button id="btn-manage" class="icon-btn" title="Список плейлистов (управление)" aria-label="Список плейлистов"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-playlist"></use></svg></button>
           <div class="pl-switch" id="pl-switch" hidden>
-            <button id="pl-switch-btn" class="select pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></button>
-            <div id="pl-switch-menu" class="quality-menu pl-switch-menu" role="listbox" hidden></div>
+            <button id="pl-switch-btn" class="btn btn-sm pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></button>
+            <div id="pl-switch-menu" class="quality-menu menu pl-switch-menu" role="listbox" hidden></div>
           </div>
           <button id="btn-theme" class="icon-btn" title="Переключить тему" aria-label="Переключить тему"></button>
         </div>
@@ -83,10 +83,10 @@
         <section id="player-screen" class="screen" hidden>
           <div class="layout">
             <aside class="sidebar">
-              <button id="btn-favorites" class="category-btn fav-toggle" aria-pressed="false" title="Показать только избранные"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg> Показать избранное</button>
+              <button id="btn-favorites" class="chip fav-toggle" aria-pressed="false" title="Показать только избранные"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg> Показать избранное</button>
               <nav id="categories" class="categories" aria-label="Категории"></nav>
             </aside>
-            <div class="content">
+            <div>
               <div id="epg-now" class="epg-now" hidden></div>
               <div id="recents-block" class="recents-block" hidden>
                 <div class="recents-title muted">Недавно просмотренные</div>
@@ -106,18 +106,18 @@
           <!-- Левая зона: качество, дорожки, статус, гайд, запись -->
           <div class="pb-zone pb-left">
             <div id="quality-wrap" class="quality-wrap">
-              <button id="quality-btn" class="select quality-btn" title="Качество" aria-label="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
-              <div id="quality-menu" class="quality-menu" role="listbox" hidden></div>
+              <button id="quality-btn" class="btn btn-sm quality-btn" title="Качество" aria-label="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
+              <div id="quality-menu" class="quality-menu menu" role="listbox" hidden></div>
             </div>
             <div id="audio-wrap" class="quality-wrap" hidden>
-              <button id="audio-btn" class="select quality-btn" title="Аудиодорожка" aria-label="Аудиодорожка" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-music"></use></svg></button>
-              <div id="audio-menu" class="quality-menu" role="listbox" hidden></div>
+              <button id="audio-btn" class="btn btn-sm quality-btn" title="Аудиодорожка" aria-label="Аудиодорожка" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-music"></use></svg></button>
+              <div id="audio-menu" class="quality-menu menu" role="listbox" hidden></div>
             </div>
             <div id="subtitle-wrap" class="quality-wrap" hidden>
-              <button id="subtitle-btn" class="select quality-btn" title="Субтитры" aria-label="Субтитры" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-subtitles"></use></svg></button>
-              <div id="subtitle-menu" class="quality-menu" role="listbox" hidden></div>
+              <button id="subtitle-btn" class="btn btn-sm quality-btn" title="Субтитры" aria-label="Субтитры" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-subtitles"></use></svg></button>
+              <div id="subtitle-menu" class="quality-menu menu" role="listbox" hidden></div>
             </div>
-            <span id="player-status" class="player-status muted" title="Разрешение и скорость потока">—</span>
+            <span id="player-status" class="t-caption muted" title="Разрешение и скорость потока">—</span>
             <button id="btn-retry" class="icon-btn" title="Перезапустить поток" aria-label="Перезапустить поток" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></button>
             <button id="btn-guide" class="icon-btn" title="Программа передач" aria-label="Программа передач"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></button>
             <button id="btn-rec" class="icon-btn rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
