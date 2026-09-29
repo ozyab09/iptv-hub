@@ -1,0 +1,142 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * Токены — контракт с дизайн-системой IPTV Hub v2, а не просто цвета в CSS.
+ * Тест читает style.css напрямую и сверяет значения: если кто-то подправит
+ * хекс «на глаз», сборка упадёт и напомнит, что правят систему, а не код.
+ */
+const here = dirname(fileURLToPath(import.meta.url));
+const root = (...p: string[]): string => join(here, "..", ...p);
+const css = readFileSync(root("src", "style.css"), "utf-8");
+
+/** Вытащить тело блока: `:root {` или `:root[data-theme="light"] {`. */
+function block(selector: string): string {
+  const at = css.indexOf(`${selector} {`);
+  if (at < 0) throw new Error(`блок ${selector} не найден`);
+  const open = css.indexOf("{", at);
+  const close = css.indexOf("\n}", open);
+  return css.slice(open, close);
+}
+
+function tokens(selector: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const line of block(selector).split("\n")) {
+    const m = /^\s*(--[a-z0-9-]+):\s*(.+?);\s*(?:\/\*.*)?$/i.exec(line);
+    if (m?.[1] && m[2]) map.set(m[1], m[2].trim());
+  }
+  return map;
+}
+
+const dark = tokens(":root");
+const light = tokens(':root[data-theme="light"]');
+
+/** Значения из project/tokens.json дизайн-системы, версия 2. */
+const DARK: Record<string, string> = {
+  "--bg": "#0c0d10",
+  "--surface-1": "#15161a",
+  "--surface-2": "#1d1e23",
+  "--surface-3": "#27282e",
+  "--border": "#2c2d33",
+  "--text": "#f2f2f4",
+  "--muted": "#9c9da6",
+  "--accent": "#ff4fa3",
+  "--accent-soft": "rgba(255, 79, 163, 0.14)",
+  "--on-accent": "#0c0d10",
+  "--focus": "#5b93ff",
+  "--danger": "#ff6363",
+  "--warning": "#f5b041",
+  "--scrim": "rgba(0, 0, 0, 0.6)",
+  "--video": "#060709",
+};
+
+const LIGHT: Record<string, string> = {
+  "--bg": "#f6f6f8",
+  "--surface-1": "#ffffff",
+  "--surface-2": "#eeeef1",
+  "--surface-3": "#e3e3e8",
+  "--border": "#dcdce2",
+  "--text": "#111216",
+  "--muted": "#5b5c65",
+  "--accent": "#d0176f",
+  "--accent-soft": "rgba(208, 23, 111, 0.10)",
+  "--on-accent": "#ffffff",
+  "--focus": "#2f6ce0",
+  "--danger": "#c62828",
+  "--warning": "#8a5200",
+  "--scrim": "rgba(17, 18, 22, 0.4)",
+};
+
+describe("цветовые токены", () => {
+  it.each(Object.entries(DARK))("dark %s = %s", (name, value) => {
+    expect(dark.get(name)).toBe(value);
+  });
+
+  it.each(Object.entries(LIGHT))("light %s = %s", (name, value) => {
+    expect(light.get(name)).toBe(value);
+  });
+
+  it("video одинаков в обеих темах — это леттербокс за видео", () => {
+    expect(dark.get("--video")).toBe("#060709");
+    expect(light.has("--video")).toBe(false); // наследуется из dark
+  });
+
+  it("от палитры v1 не осталось следов", () => {
+    for (const gone of ["#0b0e14", "#121722", "#161c2a", "#e6eaf2", "#8b94a7"]) {
+      expect(css).not.toContain(gone);
+    }
+  });
+});
+
+describe("сетка и радиусы", () => {
+  it("шаги отступов кратны 4px", () => {
+    for (const [name, value] of dark) {
+      if (!name.startsWith("--space-")) continue;
+      const px = Number(value.replace("px", ""));
+      expect(px % 4, `${name} = ${value}`).toBe(0);
+    }
+  });
+
+  it("шкала радиусов на месте", () => {
+    expect(dark.get("--radius-xs")).toBe("6px");
+    expect(dark.get("--radius-md")).toBe("12px");
+    expect(dark.get("--radius-lg")).toBe("16px");
+    expect(dark.get("--radius-full")).toBe("999px");
+  });
+});
+
+describe("шрифт", () => {
+  it("Onest объявлен первым в стеке", () => {
+    expect(dark.get("--font-sans")).toMatch(/^Onest,/);
+  });
+
+  it("файлы, на которые ссылается @font-face, существуют", () => {
+    const refs = [...css.matchAll(/url\("\.\/(fonts\/[^"]+)"\)/g)].map((m) => m[1]);
+    expect(refs.length, "должны быть latin и cyrillic").toBe(2);
+    for (const ref of refs) {
+      expect(existsSync(root("public", ref!)), `нет файла ${ref}`).toBe(true);
+    }
+  });
+
+  it("кириллический сабсет покрывает русский алфавит", () => {
+    expect(css).toContain("U+0400-045F");
+  });
+});
+
+describe("тема PWA совпадает с фоном", () => {
+  const manifest = JSON.parse(
+    readFileSync(root("public", "manifest.webmanifest"), "utf-8"),
+  ) as { theme_color: string; background_color: string };
+
+  it("manifest использует --bg тёмной темы", () => {
+    expect(manifest.theme_color).toBe(DARK["--bg"]);
+    expect(manifest.background_color).toBe(DARK["--bg"]);
+  });
+
+  it("meta theme-color в index.html — то же значение", () => {
+    const html = readFileSync(root("index.html"), "utf-8");
+    expect(html).toContain(`<meta name="theme-color" content="${DARK["--bg"]}" />`);
+  });
+});
