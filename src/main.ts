@@ -52,11 +52,14 @@ import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
+  clearTheme,
   resolveTheme,
   saveTheme,
   themeButtonLabel,
+  themeChoice,
   toggleTheme,
   type Theme,
+  type ThemeChoice,
 } from "./theme";
 import {
   buildBackup,
@@ -123,7 +126,9 @@ const plList = $("pl-list");
 const plSwitch = $("pl-switch");
 const plSwitchBtn = $<HTMLButtonElement>("pl-switch-btn");
 const plSwitchMenu = $("pl-switch-menu");
-const btnBackToPlayer = $<HTMLButtonElement>("btn-back-to-player");
+const addForm = $<HTMLFormElement>("add-form");
+const btnAddPl = $<HTMLButtonElement>("btn-add-pl");
+const themeSeg = $("theme-seg");
 const setupError = $("setup-error");
 const searchInput = $<HTMLInputElement>("search");
 const categoriesNav = $("categories");
@@ -291,11 +296,27 @@ function showPlayer(): void {
   setView(activeView === "settings" ? "channels" : activeView);
 }
 
-btnBackToPlayer.addEventListener("click", () => {
-  const active = activePlaylist(plState);
-  if (active) void openPlaylist(active.playlistUrl, active.epgUrl);
-  else showSetup();
-});
+/**
+ * Экран настроек в двух видах. Пока плейлистов нет, это первый запуск:
+ * приветствие и одно поле со ссылкой. Потом — настройки, где форма
+ * добавления открывается кнопкой «Добавить плейлист».
+ */
+function renderSettingsMode(): void {
+  const firstRun = plState.items.length === 0;
+  setupScreen.classList.toggle("first-run", firstRun);
+  // Без плейлиста разделы, поиск и таб-бар вести некуда — прячем их
+  appEl.classList.toggle("no-playlist", firstRun);
+  setupLoad.textContent = firstRun ? "Открыть каналы" : "Добавить и открыть";
+  if (firstRun) addForm.hidden = false;
+}
+
+function setAddFormOpen(open: boolean): void {
+  addForm.hidden = !open;
+  btnAddPl.setAttribute("aria-expanded", String(open));
+  if (open) setupPlaylist.focus();
+}
+
+btnAddPl.addEventListener("click", () => setAddFormOpen(addForm.hasAttribute("hidden")));
 
 // ---------- Разделы ----------
 /** Кнопка раздела: одна и та же модель для таб-бара и сайдбара. */
@@ -344,7 +365,9 @@ function setView(view: View, persist = true): void {
     setupError.hidden = true;
     renderPlaylistManager();
     renderPlaylistSwitcher();
-    btnBackToPlayer.hidden = !activePlaylist(plState);
+    renderSettingsMode();
+    if (plState.items.length > 0 && !setupError.textContent) setAddFormOpen(false);
+    renderThemeSeg();
   }
   categoriesNav.hidden = !showsCategories(view);
   catLabel.hidden = !showsCategories(view);
@@ -1906,7 +1929,50 @@ btnTheme.addEventListener("click", () => {
   applyTheme(currentTheme);
   saveTheme(currentTheme, localStorage);
   setIcon(btnTheme, themeButtonLabel(currentTheme));
+  renderThemeSeg();
 });
+
+/** Переключатель темы в настройках: своя тема или «как в системе». */
+function renderThemeSeg(): void {
+  const choice = themeChoice(typeof localStorage !== "undefined" ? localStorage : null);
+  for (const b of themeSeg.querySelectorAll<HTMLButtonElement>("[data-theme-choice]")) {
+    const on = b.dataset.themeChoice === choice;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", String(on));
+  }
+}
+
+function systemPrefersDark(): boolean | null {
+  return typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)").matches
+    : null;
+}
+
+themeSeg.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-theme-choice]");
+  if (!b) return;
+  const choice = b.dataset.themeChoice as ThemeChoice;
+  if (choice === "system") {
+    clearTheme(localStorage);
+    currentTheme = resolveTheme(null, systemPrefersDark());
+  } else {
+    currentTheme = choice;
+    saveTheme(currentTheme, localStorage);
+  }
+  applyTheme(currentTheme);
+  setIcon(btnTheme, themeButtonLabel(currentTheme));
+  renderThemeSeg();
+});
+
+// «Как в системе» — значит и следом за системой, когда она переключится
+if (typeof window.matchMedia === "function") {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+    if (themeChoice(localStorage) !== "system") return;
+    currentTheme = e.matches ? "dark" : "light";
+    applyTheme(currentTheme);
+    setIcon(btnTheme, themeButtonLabel(currentTheme));
+  });
+}
 
 // ---------- Избранное ----------
 /** Загрузить избранное по ключу плейлиста (localStorage, нестандартный ключ). */
@@ -1946,74 +2012,88 @@ function activatePlaylist(id: string): void {
 // ---------- Менеджер плейлистов (setup-экран) ----------
 function renderPlaylistManager(): void {
   plList.textContent = "";
-  if (plState.items.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "Пока ни одного плейлиста — добавьте первый ниже.";
-    plList.append(empty);
-  }
   for (const p of plState.items) {
+    const active = p.id === plState.activeId;
     const row = document.createElement("div");
-    row.className = "pl-row" + (p.id === plState.activeId ? " active" : "");
-    const name = document.createElement("div");
+    row.className = active ? "item pl-row active" : "item pl-row";
+
+    // Вся строка — выбор плейлиста: радиокнопка, название, откуда он
+    const pick = document.createElement("button");
+    pick.className = "pl-pick";
+    pick.setAttribute("role", "radio");
+    pick.setAttribute("aria-checked", String(active));
+    pick.title = active ? "Этот плейлист открыт" : "Открыть этот плейлист";
+    const radio = document.createElement("span");
+    radio.className = "radio";
+    const text = document.createElement("span");
+    text.className = "pl-text";
+    const name = document.createElement("span");
     name.className = "pl-name";
     name.textContent = p.name;
-    const url = document.createElement("div");
+    const url = document.createElement("span");
     url.className = "pl-url muted";
-    url.textContent = p.playlistUrl;
-    name.append(url);
-    const actions = document.createElement("div");
-    actions.className = "pl-actions";
-    const open = document.createElement("button");
-    open.className = "primary pl-open";
-    open.textContent = p.id === plState.activeId ? "Открыт" : "Открыть";
-    open.disabled = p.id === plState.activeId;
-    open.addEventListener("click", () => activatePlaylist(p.id));
+    url.textContent = urlLabel(p.playlistUrl, p.epgUrl);
+    text.append(name, url);
+    pick.append(radio, text);
+    pick.addEventListener("click", () => {
+      if (!active) activatePlaylist(p.id);
+      else showPlayer();
+    });
+
     const edit = document.createElement("button");
-    edit.className = "icon-btn";
-    edit.title = "Переименовать / изменить ссылки";
+    edit.className = "icon-btn pl-act";
+    edit.title = "Переименовать или изменить ссылки";
+    edit.setAttribute("aria-label", `Изменить «${p.name}»`);
     setIcon(edit, "edit");
     edit.addEventListener("click", () => {
-      // Инлайн-редактирование: карточка превращается в форму
+      // Инлайн-редактирование: строка превращается в форму
       row.textContent = "";
       row.classList.add("editing");
-      const form = document.createElement("div");
+      const form = document.createElement("form");
       form.className = "pl-edit";
+      form.noValidate = true;
       const mk = (label: string, value: string, type = "text"): HTMLInputElement => {
-        const l = document.createElement("label");
+        const field = document.createElement("label");
+        field.className = "field";
+        const l = document.createElement("span");
+        l.className = "field-label";
         l.textContent = label;
+        const box = document.createElement("span");
+        box.className = "input";
         const input = document.createElement("input");
         input.type = type;
         input.value = value;
-        l.append(input);
-        form.append(l);
+        box.append(input);
+        field.append(l, box);
+        form.append(field);
         return input;
       };
       const nameIn = mk("Название", p.name);
-      const urlIn = mk("URL плейлиста", p.playlistUrl, "url");
-      const epgIn = mk("URL EPG (необязательно)", p.epgUrl ?? "", "url");
+      const urlIn = mk("Ссылка на плейлист", p.playlistUrl, "url");
+      const epgIn = mk("Ссылка на телепрограмму (необязательно)", p.epgUrl ?? "", "url");
       const btns = document.createElement("div");
       btns.className = "pl-edit-actions";
       const save = document.createElement("button");
-      save.className = "primary pl-open";
+      save.className = "btn btn-primary btn-sm";
+      save.type = "submit";
       save.textContent = "Сохранить";
       const cancel = document.createElement("button");
-      cancel.className = "icon-btn";
-      setIcon(cancel, "close");
-      cancel.title = "Отмена";
+      cancel.className = "btn btn-ghost btn-sm";
+      cancel.type = "button";
+      cancel.textContent = "Отмена";
       btns.append(save, cancel);
       form.append(btns);
       row.append(form);
       nameIn.focus();
 
-      const closeEditor = (): void => renderPlaylistManager();
-      cancel.addEventListener("click", closeEditor);
-      save.addEventListener("click", () => {
+      cancel.addEventListener("click", () => renderPlaylistManager());
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
         const newName = nameIn.value.trim();
         const newUrl = urlIn.value.trim();
         const newEpg = epgIn.value.trim();
         if (!/^https?:\/\//.test(newUrl)) {
-          setupError.textContent = "Нужен http(s)-URL плейлиста";
+          setupError.textContent = "Нужна ссылка, начинающаяся с http:// или https://";
           setupError.hidden = false;
           return;
         }
@@ -2026,12 +2106,13 @@ function renderPlaylistManager(): void {
         setupError.hidden = true;
         renderPlaylistManager();
         renderPlaylistSwitcher();
-        btnBackToPlayer.hidden = !activePlaylist(plState);
       });
     });
+
     const del = document.createElement("button");
-    del.className = "icon-btn pl-del";
-    del.title = "Удалить плейлист (избранное тоже будет удалено)";
+    del.className = "icon-btn pl-act pl-del";
+    del.title = "Удалить плейлист (его избранное тоже удалится)";
+    del.setAttribute("aria-label", `Удалить «${p.name}»`);
     setIcon(del, "trash");
     del.addEventListener("click", () => {
       if (!window.confirm(`Удалить «${p.name}»?`)) return;
@@ -2042,11 +2123,23 @@ function renderPlaylistManager(): void {
       savePlaylists(localStorage, plState);
       renderPlaylistManager();
       renderPlaylistSwitcher();
+      renderSettingsMode();
     });
-    actions.append(open, edit, del);
-    row.append(name, actions);
+
+    row.append(pick, edit, del);
     plList.append(row);
   }
+}
+
+/** «storage.yandexcloud.net · с телепрограммой» — откуда плейлист, коротко. */
+function urlLabel(playlistUrl: string, epgUrl: string | null): string {
+  let host = playlistUrl;
+  try {
+    host = new URL(playlistUrl).host;
+  } catch {
+    // оставим как есть
+  }
+  return epgUrl ? `${host} · с телепрограммой` : host;
 }
 
 // ---------- Экспорт / импорт настроек ----------
@@ -2150,7 +2243,8 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- Setup ----------
-setupLoad.addEventListener("click", () => {
+addForm.addEventListener("submit", (e) => {
+  e.preventDefault();
   const pUrl = setupPlaylist.value.trim();
   const eUrl = setupEpg.value.trim();
   const name = setupName.value.trim();

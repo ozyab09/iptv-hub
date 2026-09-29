@@ -53,30 +53,72 @@
       </header>
 
       <main id="main" class="screens">
-            <!-- Экран 1: стартовый — менеджер плейлистов -->
+            <!-- Экран 1: «Настройки». Пока нет ни одного плейлиста, он же первый
+                 запуск (класс first-run): приветствие и одно поле со ссылкой. -->
             <section id="setup-screen" class="screen">
-              <div class="card">
-                <h1><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg> IPTV Hub</h1>
-                <p class="muted">
-                  Self-hosted плеер для ваших плейлистов. Ссылки хранятся <b>только в этом браузере</b>.
-                </p>
-                <div id="pl-list" class="pl-list"></div>
-                <button id="btn-back-to-player" class="primary" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg> Вернуться к просмотру</button>
-                <div class="pl-io">
-                  <button id="btn-export" class="icon-btn io-btn" title="Экспорт настроек в JSON" aria-label="Экспорт настроек"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg> Экспорт</button>
-                  <button id="btn-import" class="icon-btn io-btn" title="Импорт настроек из JSON" aria-label="Импорт настроек"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg> Импорт</button>
+              <div class="settings-inner">
+                <div class="onboard">
+                  <span class="onboard-mark"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></span>
+                  <h1 class="t-display">Ваше ТВ — в&nbsp;одном месте</h1>
+                  <p class="muted">Вставьте ссылку на плейлист M3U. Если в нём указана телепрограмма, она подтянется сама.</p>
+                </div>
+                <h1 class="t-display settings-title">Настройки</h1>
+
+                <section class="set-group pl-group">
+                  <h2 class="set-label t-overline">Плейлисты</h2>
+                  <div class="group">
+                    <div id="pl-list" class="pl-list"></div>
+                    <button id="btn-add-pl" class="item add-pl" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg><span>Добавить плейлист</span></button>
+                  </div>
+                </section>
+
+                <form id="add-form" class="add-form" novalidate>
+                  <div class="field">
+                    <label for="setup-playlist">Ссылка на плейлист</label>
+                    <div class="input"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg><input id="setup-playlist" type="url" inputmode="url" placeholder="https://…/playlist.m3u" autocomplete="off" required /></div>
+                  </div>
+                  <details class="more">
+                    <summary><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg>Название и телепрограмма <span class="muted">(необязательно)</span></summary>
+                    <div class="more-fields">
+                      <div class="field">
+                        <label for="setup-name">Название</label>
+                        <div class="input"><input id="setup-name" type="text" placeholder="Например, Домашний" autocomplete="off" /></div>
+                      </div>
+                      <div class="field">
+                        <label for="setup-epg">Ссылка на телепрограмму (XMLTV)</label>
+                        <div class="input"><input id="setup-epg" type="url" inputmode="url" placeholder="https://…/epg.xml.gz" autocomplete="off" /></div>
+                      </div>
+                    </div>
+                  </details>
+                  <p id="setup-error" class="error" role="alert" hidden></p>
+                  <button id="setup-load" class="btn btn-primary btn-block" type="submit">Открыть каналы</button>
+                </form>
+                <p class="privacy"><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>Ссылки хранятся только на этом устройстве. Без аккаунтов и аналитики.</p>
+
+                <section class="set-group theme-group">
+                  <h2 class="set-label t-overline">Оформление</h2>
+                  <div class="group">
+                    <div class="item">
+                      <span class="item-label">Тема</span>
+                      <div id="theme-seg" class="seg" role="radiogroup" aria-label="Тема">
+                        <button type="button" role="radio" data-theme-choice="system">Как в системе</button>
+                        <button type="button" role="radio" data-theme-choice="dark">Тёмная</button>
+                        <button type="button" role="radio" data-theme-choice="light">Светлая</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="set-group backup-group">
+                  <h2 class="set-label t-overline">Резервная копия</h2>
+                  <div class="group">
+                    <button id="btn-export" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg><span>Сохранить в файл</span></button>
+                    <button id="btn-import" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span>Восстановить из файла</span></button>
+                  </div>
                   <input id="import-file" type="file" accept="application/json,.json" hidden />
-                </div>
-                <div class="pl-form">
-                  <label for="setup-name">Название</label>
-                  <input id="setup-name" type="text" placeholder="Мой IPTV" />
-                  <label for="setup-playlist">URL плейлиста (M3U)</label>
-                  <input id="setup-playlist" type="url" placeholder="https://…/playlist.m3u" required />
-                  <label for="setup-epg">URL телепрограммы (XMLTV, опционально)</label>
-                  <input id="setup-epg" type="url" placeholder="https://…/epg.xml.gz (необязательно)" />
-                  <button id="setup-load" class="primary">Добавить и открыть</button>
-                </div>
-                <p id="setup-error" class="error" hidden></p>
+                  <p class="set-note muted">Файл хранит плейлисты, избранное и тему — удобно перенести на другое устройство.</p>
+                </section>
+
                 <details class="hint">
                   <summary>Как это работает</summary>
                   <ul>

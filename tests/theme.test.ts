@@ -6,6 +6,8 @@ import {
   isTheme,
   themeButtonLabel,
   THEME_STORAGE_KEY,
+  themeChoice,
+  clearTheme,
 } from "../src/theme";
 
 const store = () => {
@@ -67,5 +69,35 @@ describe("themeButtonLabel", () => {
 describe("storage key", () => {
   it("is versioned", () => {
     expect(THEME_STORAGE_KEY).toBe("iptv-hub.theme.v1");
+  });
+});
+
+describe("выбор темы в настройках", () => {
+  const mem = () => {
+    const m = new Map<string, string>();
+    return {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+    };
+  };
+
+  it("без сохранённой темы — «как в системе»", () => {
+    expect(themeChoice(mem())).toBe("system");
+    expect(themeChoice(null)).toBe("system");
+  });
+
+  it("сохранённая тема читается как выбор", () => {
+    const s = mem();
+    saveTheme("light", s);
+    expect(themeChoice(s)).toBe("light");
+  });
+
+  it("«как в системе» стирает выбор, и тема снова идёт от системы", () => {
+    const s = mem();
+    saveTheme("light", s);
+    clearTheme(s);
+    expect(themeChoice(s)).toBe("system");
+    expect(resolveTheme(s, true)).toBe("dark");
   });
 });

@@ -64,3 +64,27 @@ export function themeButtonLabel(current: Theme): string {
 }
 
 export const THEME_STORAGE_KEY = THEME_KEY;
+
+/** Выбор в настройках: своя тема или «как в системе» (ничего не сохранено). */
+export type ThemeChoice = Theme | "system";
+
+/** Что выбрано сейчас: сохранённая тема или «как в системе». */
+export function themeChoice(storage: ThemeStorage): ThemeChoice {
+  if (!storage) return "system";
+  try {
+    const raw = storage.getItem(THEME_KEY);
+    return isTheme(raw) ? raw : "system";
+  } catch {
+    return "system";
+  }
+}
+
+/** Забыть выбор: дальше тема следует за системой. */
+export function clearTheme(storage: (ThemeStorage & Pick<Storage, "removeItem">) | null): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(THEME_KEY);
+  } catch {
+    // приватный режим — выбор и так не сохранялся
+  }
+}
