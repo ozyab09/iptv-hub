@@ -1,3 +1,5 @@
+@import "./components.css";
+
 /* Дизайн-система IPTV Hub v2. Значения — из tokens.json системы,
    менять их здесь руками нельзя: правь систему и переноси сюда целиком.
    Тема dark идёт первой — она по умолчанию. */
@@ -91,8 +93,6 @@
   --shadow-pop: 0 12px 32px rgba(17, 18, 22, 0.14);
   color-scheme: light;
 }
-
-@import "./components.css";
 
 /* Иконки: параметры штриха заданы здесь, фигуры — в src/icons.ts */
 .i {
@@ -277,14 +277,33 @@ html, body {
   display: block;
 }
 .virtual-spacer { position: relative; width: 100%; }
+/* Высота фиксирована: её знает виртуализация (CHANNEL_ROW_HEIGHT в main.ts) */
+.row.channel-card {
+  height: 64px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.row.channel-card:hover { background: var(--surface-2); }
+.row.channel-card.on { background: var(--accent-soft); }
+.row .star {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: var(--space-2);
+  display: inline-flex;
+}
 .virtual-inner {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
 }
 /* Высота карточки детерминирована (питч виртуального списка = 56px):
    36px контент + 20px паддинг + 2px борд. Не менять без virtual-list.ts.

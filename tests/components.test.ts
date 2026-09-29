@@ -119,3 +119,37 @@ describe("эмодзи не возвращаются через код", () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe("подключение стилей", () => {
+  it("@import идёт первым правилом — иначе браузер его отбрасывает", () => {
+    // Спецификация: @import должен предшествовать всем правилам, кроме
+    // @charset и @layer. Стоял 95-й строкой — components.css молча не
+    // загружался, и вся вёрстка осталась без компонентных стилей.
+    const firstRule = style.search(/^\s*[@.:#*a-z]/im);
+    const importAt = style.indexOf('@import "./components.css"');
+    expect(importAt, "components.css не подключён").toBeGreaterThanOrEqual(0);
+    expect(importAt).toBe(firstRule);
+  });
+
+  it("до @import нет ничего, кроме комментариев и пустых строк", () => {
+    const before = style.slice(0, style.indexOf("@import"));
+    expect(before.replace(/\/\*[\s\S]*?\*\//g, "").trim()).toBe("");
+  });
+});
+
+describe("виртуализация и вёрстка согласованы", () => {
+  it("высота .row.channel-card совпадает с CHANNEL_ROW_HEIGHT", () => {
+    // Виртуализация позиционирует строки арифметикой: разойдись эти числа,
+    // и прокрутка поедет тем сильнее, чем длиннее список.
+    const fromJs = /const CHANNEL_ROW_HEIGHT = (\d+);/.exec(mainTs)?.[1];
+    const fromCss = /\.row\.channel-card\s*\{[^}]*height:\s*(\d+)px/.exec(style)?.[1];
+    expect(fromJs, "константа не найдена в main.ts").toBeDefined();
+    expect(fromCss, "height не найден в style.css").toBeDefined();
+    expect(fromCss).toBe(fromJs);
+  });
+
+  it("список каналов — одна колонка строк", () => {
+    expect(mainTs).toMatch(/const CHANNEL_COLUMNS = 1;/);
+    expect(style).toMatch(/\.virtual-inner\s*\{[^}]*flex-direction:\s*column/);
+  });
+});

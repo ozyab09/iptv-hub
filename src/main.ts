@@ -33,7 +33,6 @@ import {
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import {
-  columnsForWidth,
   computeWindow,
   spacerHeight,
 } from "./virtual-list";
@@ -174,6 +173,15 @@ let favorites = new Set<string>();
 let favFilter = false;
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
+/**
+ * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
+ * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
+ * прокрутку. Тест сверяет оба значения.
+ */
+const CHANNEL_ROW_HEIGHT = 64;
+/** Список каналов — одна колонка строк, как требует дизайн-система. */
+const CHANNEL_COLUMNS = 1;
+
 /** Недавно просмотренные (url → имя берём из snapshot при рендере). */
 let recents: string[] = [];
 const player = new Player(
@@ -325,22 +333,22 @@ function ensureVirtualShell(): void {
 function renderVirtualWindow(): void {
   if (!virtualInner || !virtualSpacer) return;
   const vh = channelList.clientHeight || 600;
-  // Колонки сетки зависят от ширины контейнера (как auto-fill в CSS).
-  const cols = columnsForWidth(channelList.clientWidth || 360);
   const win = computeWindow(
     channelList.scrollTop,
     vh,
     visibleChannels.length,
+    CHANNEL_ROW_HEIGHT,
     undefined,
-    undefined,
-    cols,
+    CHANNEL_COLUMNS,
   );
-  virtualSpacer.style.height = `${spacerHeight(visibleChannels.length, undefined, cols)}px`;
+  virtualSpacer.style.height = `${spacerHeight(visibleChannels.length, CHANNEL_ROW_HEIGHT, CHANNEL_COLUMNS)}px`;
   virtualInner.style.transform = `translateY(${win.offset}px)`;
   virtualInner.textContent = "";
-  // win.count — это СТРОКИ сетки; карточек в строке до cols, рендерим с запасом.
-  const first = win.start * cols;
-  const last = Math.min(visibleChannels.length, first + win.count * cols);
+  const first = win.start * CHANNEL_COLUMNS;
+  const last = Math.min(
+    visibleChannels.length,
+    first + win.count * CHANNEL_COLUMNS,
+  );
   for (let i = first; i < last; i++) {
     const c = visibleChannels[i];
     if (c) virtualInner.append(renderChannelCard(c));
