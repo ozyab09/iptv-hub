@@ -116,7 +116,7 @@ describe("шрифт", () => {
     const refs = [...css.matchAll(/url\("\.\/(fonts\/[^"]+)"\)/g)].map((m) => m[1]);
     expect(refs.length, "должны быть latin и cyrillic").toBe(2);
     for (const ref of refs) {
-      expect(existsSync(root("public", ref!)), `нет файла ${ref}`).toBe(true);
+      expect(existsSync(root("src", ref!)), `нет файла ${ref}`).toBe(true);
     }
   });
 

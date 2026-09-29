@@ -167,10 +167,10 @@ describe("виртуализация и вёрстка согласованы", 
 });
 
 describe("мини-плеер", () => {
-  it("телефонная ширина в коде и в CSS — одно число", () => {
+  it("узкая ширина в коде и в CSS — одно число", () => {
     // Разойдись они, и на промежуточной ширине получится мини-плеер,
     // который не разворачивается, либо страница без способа свернуться.
-    const fromJs = /const PHONE_BREAKPOINT = (\d+);/.exec(mainTs)?.[1];
+    const fromJs = /const COMPACT_BREAKPOINT = (\d+);/.exec(mainTs)?.[1];
     expect(fromJs, "константа не найдена").toBeDefined();
     expect(style).toContain(`@media (max-width: ${fromJs}px)`);
   });

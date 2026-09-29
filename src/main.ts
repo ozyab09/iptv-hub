@@ -3,7 +3,9 @@ import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
 import {
   channelsForView,
+  channelsWord,
   emptyMessage,
+  groupDigits,
   parseView,
   showsCategories,
   showsChannelList,
@@ -50,11 +52,14 @@ import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
+  clearTheme,
   resolveTheme,
   saveTheme,
   themeButtonLabel,
+  themeChoice,
   toggleTheme,
   type Theme,
+  type ThemeChoice,
 } from "./theme";
 import {
   buildBackup,
@@ -85,7 +90,7 @@ import {
   tierName,
   trackLabel,
 } from "./quality";
-import type { Channel, PlaylistSnapshot } from "./types";
+import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -121,8 +126,9 @@ const plList = $("pl-list");
 const plSwitch = $("pl-switch");
 const plSwitchBtn = $<HTMLButtonElement>("pl-switch-btn");
 const plSwitchMenu = $("pl-switch-menu");
-const btnManage = $<HTMLButtonElement>("btn-manage");
-const btnBackToPlayer = $<HTMLButtonElement>("btn-back-to-player");
+const addForm = $<HTMLFormElement>("add-form");
+const btnAddPl = $<HTMLButtonElement>("btn-add-pl");
+const themeSeg = $("theme-seg");
 const setupError = $("setup-error");
 const searchInput = $<HTMLInputElement>("search");
 const categoriesNav = $("categories");
@@ -142,6 +148,12 @@ const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
+const nowShow = $("now-show");
+const nowTime = $("now-time");
+const nowTimeRange = $("now-time-range");
+const nowTimeFill = $("now-time-fill");
+const nowTimeLeft = $("now-time-left");
+const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
 const toastEl = $("toast");
 const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
@@ -153,6 +165,10 @@ const importFile = $<HTMLInputElement>("import-file");
 const sideNav = $("side-nav");
 const tabbar = $("tabbar");
 const viewTitle = $("view-title");
+const viewCount = $("view-count");
+const catLabel = $("cat-label");
+const plSwitchName = $("pl-switch-name");
+const plSwitchCount = $("pl-switch-count");
 const catPicker = $("cat-picker");
 const btnCategories = $<HTMLButtonElement>("btn-categories");
 const catMenu = $("cat-menu");
@@ -179,6 +195,9 @@ const guideOverlay = $("guide-overlay");
 const guideTitle = $("guide-title");
 const guideDays = $("guide-days");
 const guideList = $("guide-list");
+const nowSchedule = $("now-schedule");
+const schedList = $("sched-list");
+const btnFullGuide = $<HTMLButtonElement>("btn-full-guide");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
 const nowFav = $<HTMLButtonElement>("now-fav");
@@ -205,7 +224,7 @@ let visibleChannels: Channel[] = [];
  * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
  * прокрутку. Тест сверяет оба значения.
  */
-const CHANNEL_ROW_HEIGHT = 64;
+const CHANNEL_ROW_HEIGHT = 72;
 /** Список каналов — одна колонка строк, как требует дизайн-система. */
 const CHANNEL_COLUMNS = 1;
 
@@ -277,17 +296,27 @@ function showPlayer(): void {
   setView(activeView === "settings" ? "channels" : activeView);
 }
 
-btnManage.addEventListener("click", () => {
-  // Кнопка в шапке — тот же раздел «Настройки», что и вкладка; повторное
-  // нажатие возвращает к каналам.
-  setView(activeView === "settings" ? "channels" : "settings");
-});
+/**
+ * Экран настроек в двух видах. Пока плейлистов нет, это первый запуск:
+ * приветствие и одно поле со ссылкой. Потом — настройки, где форма
+ * добавления открывается кнопкой «Добавить плейлист».
+ */
+function renderSettingsMode(): void {
+  const firstRun = plState.items.length === 0;
+  setupScreen.classList.toggle("first-run", firstRun);
+  // Без плейлиста разделы, поиск и таб-бар вести некуда — прячем их
+  appEl.classList.toggle("no-playlist", firstRun);
+  setupLoad.textContent = firstRun ? "Открыть каналы" : "Добавить и открыть";
+  if (firstRun) addForm.hidden = false;
+}
 
-btnBackToPlayer.addEventListener("click", () => {
-  const active = activePlaylist(plState);
-  if (active) void openPlaylist(active.playlistUrl, active.epgUrl);
-  else showSetup();
-});
+function setAddFormOpen(open: boolean): void {
+  addForm.hidden = !open;
+  btnAddPl.setAttribute("aria-expanded", String(open));
+  if (open) setupPlaylist.focus();
+}
+
+btnAddPl.addEventListener("click", () => setAddFormOpen(addForm.hasAttribute("hidden")));
 
 // ---------- Разделы ----------
 /** Кнопка раздела: одна и та же модель для таб-бара и сайдбара. */
@@ -336,9 +365,12 @@ function setView(view: View, persist = true): void {
     setupError.hidden = true;
     renderPlaylistManager();
     renderPlaylistSwitcher();
-    btnBackToPlayer.hidden = !activePlaylist(plState);
+    renderSettingsMode();
+    if (plState.items.length > 0 && !setupError.textContent) setAddFormOpen(false);
+    renderThemeSeg();
   }
   categoriesNav.hidden = !showsCategories(view);
+  catLabel.hidden = !showsCategories(view);
   catPicker.hidden = !showsCategories(view);
   // Категория — фильтр раздела «Каналы»; в избранном и недавних она
   // прятала бы половину списка без видимой причины.
@@ -484,6 +516,7 @@ function renderChannels(): void {
   const sorted =
     activeView === "recents" ? list : applyFavorites(list, favorites, false);
   visibleChannels = sorted;
+  viewCount.textContent = groupDigits(sorted.length);
   emptyState.textContent = emptyMessage(activeView, q !== "");
   emptyState.hidden = sorted.length > 0;
   ensureVirtualShell();
@@ -502,6 +535,7 @@ function renderChannelCard(c: Channel): HTMLElement {
   // монограммой канал опознаётся и когда картинка не загрузилась.
   const logo = document.createElement("span");
   logo.className = "logo sm";
+  logo.title = c.name; // подсказка, когда список свёрнут до логотипов
   logo.textContent = c.name.trim().slice(0, 2).toUpperCase();
   if (c.logo) {
     const img = document.createElement("img");
@@ -533,16 +567,35 @@ function renderChannelCard(c: Channel): HTMLElement {
   }
   meta.append(line);
 
+  // Что идёт сейчас, сколько прошло и (на широком экране) что дальше:
+  // канал выбирают по передаче, а не по названию.
+  let nextText = "";
   if (epg) {
-    const { now } = getNowNext(epg, c, snapshot!);
+    const { now, next } = getNowNext(epg, c, snapshot!);
     if (now) {
       const e = document.createElement("span");
-      e.className = "t-label muted ellipsis num";
-      e.textContent = `${formatRange(now)} · ${now.title}`;
+      e.className = "row-now ellipsis";
+      const t = document.createElement("span");
+      t.className = "num muted";
+      t.textContent = clock(Date.parse(now.start));
+      e.append(t, ` ${now.title}`);
       meta.append(e);
+
+      const bar = document.createElement("span");
+      bar.className = "prog";
+      const fill = document.createElement("span");
+      fill.style.width = `${(programmeProgress(Date.now(), Date.parse(now.start), Date.parse(now.stop)) * 100).toFixed(1)}%`;
+      bar.append(fill);
+      meta.append(bar);
     }
+    if (next) nextText = `${clock(Date.parse(next.start))}  ${next.title}`;
   }
   card.append(meta);
+
+  const nextEl = document.createElement("span");
+  nextEl.className = "row-next ellipsis muted num";
+  nextEl.textContent = nextText;
+  card.append(nextEl);
 
   const star = document.createElement("button");
   const fav = isFavorite(favorites, c);
@@ -747,10 +800,15 @@ window.addEventListener("keydown", (e) => {
       break;
     case "c":
     case "с": // ru-раскладка
-      // Возврат к списку: на телефоне сворачиваем плеер, иначе прокрутка
-      // к списку под развёрнутым плеером ничего бы не показала.
+      // На широком экране C сворачивает и разворачивает список рядом с
+      // плеером. На узком — возврат к списку: сворачиваем страницу плеера,
+      // иначе прокрутка к списку под ней ничего бы не показала.
       e.preventDefault();
-      if (isPhone()) togglePlayerPage(false);
+      if (!isCompact()) {
+        setListCollapsed(!appEl.classList.contains("list-collapsed"));
+        break;
+      }
+      togglePlayerPage(false);
       channelList.scrollIntoView({ block: "nearest" });
       (channelList.querySelector("button") as HTMLElement | null)?.focus();
       break;
@@ -1224,6 +1282,40 @@ function setWatching(on: boolean): void {
   appEl.classList.toggle("watch", on);
 }
 
+/**
+ * Свернуть список каналов рядом с плеером в колонку логотипов: плеер
+ * забирает освободившееся место. Выбор запоминается — кто смотрит без
+ * списка, тот и в следующий раз хочет без него.
+ */
+const LIST_COLLAPSED_KEY = "iptv-hub.list-collapsed.v1";
+
+function setListCollapsed(on: boolean): void {
+  appEl.classList.toggle("list-collapsed", on);
+  btnCollapseList.setAttribute("aria-expanded", String(!on));
+  btnCollapseList.title = on ? "Развернуть список (C)" : "Свернуть список (C)";
+  btnCollapseList.setAttribute(
+    "aria-label",
+    on ? "Развернуть список каналов" : "Свернуть список каналов",
+  );
+  btnCollapseList
+    .querySelector("use")
+    ?.setAttribute("href", on ? "#i-panel-open" : "#i-panel-close");
+  try {
+    localStorage.setItem(LIST_COLLAPSED_KEY, on ? "1" : "0");
+  } catch {
+    // приватный режим — живём без памяти
+  }
+}
+
+btnCollapseList.addEventListener("click", () =>
+  setListCollapsed(!appEl.classList.contains("list-collapsed")),
+);
+try {
+  if (localStorage.getItem(LIST_COLLAPSED_KEY) === "1") setListCollapsed(true);
+} catch {
+  // storage недоступен — список развёрнут
+}
+
 /** Вид кнопки ⏺ — общий для обоих способов записи. */
 function renderRecButton(active: boolean): void {
   btnRec.classList.toggle("recording", active);
@@ -1384,7 +1476,7 @@ function renderGuide(): void {
   wins.forEach((w, i) => {
     const b = document.createElement("button");
     b.textContent = w.label;
-    b.className = i === guideDayIdx ? "guide-day active" : "guide-day";
+    b.className = i === guideDayIdx ? "chip on" : "chip";
     b.addEventListener("click", () => {
       guideDayIdx = i;
       renderGuide();
@@ -1394,14 +1486,7 @@ function renderGuide(): void {
 
   guideList.textContent = "";
   const window: DayWindow = wins[guideDayIdx]!;
-  const progs = epg
-    ? programmesInDay(
-        epg.get(`id:${lastPlayed.tvgId?.toLowerCase() ?? ""}`) ??
-          epg.get(`name:${lastPlayed.normalizedName}`) ??
-          [],
-        window,
-      )
-    : [];
+  const progs = epg ? programmesInDay(channelProgrammes(), window) : [];
   if (progs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "muted";
@@ -1411,72 +1496,121 @@ function renderGuide(): void {
   }
 
   const now = new Date();
-  const cu = {
-    days: lastPlayed.catchupDays,
-    source: lastPlayed.catchupSource,
-  };
   for (const p of progs) {
-    const start = Date.parse(p.start);
-    const stop = Date.parse(p.stop);
-    const isLive = start <= now.getTime() && now.getTime() < stop;
-    const watchable = isLive || canWatchPast(cu, p, now);
+    guideList.append(programmeRow(p, now, () => (guideOverlay.hidden = true)));
+  }
+}
 
-    const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
-    const row = document.createElement("button");
-    row.className = programRowClass(state) + (watchable ? "" : " dim");
-    const t = document.createElement("span");
-    t.className = "time";
-    t.textContent = formatRange(p);
-    const title = document.createElement("span");
-    title.className = "title t-body";
-    title.textContent = p.title;
-    if (isLive) {
-      // Эфир помечается акцентной плашкой дизайн-системы, а не символом
-      // в тексте: title приходит из EPG и в разметку не попадает.
-      const live = document.createElement("span");
-      live.className = "live";
-      live.textContent = "Эфир";
-      title.append(" ", live);
-    }
-    row.append(t, title);
+/**
+ * Строка передачи — одна и для шторки с программой, и для блока под
+ * плеером. Эфир включается, прошедшее с архивом — открывается из архива,
+ * прошедшее без архива приглушено, будущее просто подписано.
+ */
+function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLButtonElement {
+  const c = lastPlayed!;
+  const cu = { days: c.catchupDays, source: c.catchupSource };
+  const start = Date.parse(p.start);
+  const stop = Date.parse(p.stop);
+  const isLive = start <= now.getTime() && now.getTime() < stop;
+  const watchable = isLive || canWatchPast(cu, p, now);
+  const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
 
-    if (watchable) {
-      row.title = isLive
-        ? "Смотреть сейчас"
-        : "Смотреть из архива (catchup)";
-      row.addEventListener("click", () => {
-        if (isLive) {
-          playChannel(lastPlayed!);
-          guideOverlay.hidden = true;
-          return;
-        }
-        const url = buildCatchupUrl(cu, p, now);
-        if (!url) {
-          showToast("Провайдер не дал шаблон архива для этого канала");
-          return;
-        }
-        nowTitle.textContent = `${lastPlayed!.name} · архив`;
-        nowTitle.title = url;
-        playerBar.hidden = false;
-        setWatching(true);
-        const refusedCatchup = player.play({ ...lastPlayed!, url });
-        if (refusedCatchup) {
-          showToast(refusedCatchup);
-          return;
-        }
-        guideOverlay.hidden = true;
-      });
-    } else {
-      row.title =
-        cu.days > 0
-          ? "Вне глубины архива"
-          : "Архив недоступен на этом канале (нет tvg-rec)";
-    }
-    guideList.append(row);
+  const row = document.createElement("button");
+  // Приглушаем только прошедшее без архива: будущие передачи тоже нельзя
+  // включить, но это нормальная программа, а не «недоступное».
+  row.className =
+    programRowClass(state) + (state === "past" && !watchable ? " dim" : "");
+  // Нельзя включить — не кнопка для клавиатуры и мыши.
+  row.disabled = !watchable;
+
+  const t = document.createElement("span");
+  t.className = "time";
+  t.textContent = formatRange(p);
+  const body = document.createElement("span");
+  body.className = "prog-body";
+  const title = document.createElement("span");
+  title.className = "title";
+  title.textContent = p.title;
+  body.append(title);
+  // Эфир и архив — плашками, а не символами в тексте: title приходит из EPG
+  if (isLive) {
+    const live = document.createElement("span");
+    live.className = "live";
+    live.textContent = "Эфир";
+    body.append(live);
+  } else if (state === "past" && watchable) {
+    const arch = document.createElement("span");
+    arch.className = "prog-arch";
+    arch.innerHTML = iconMarkup("archive", "i-sm");
+    arch.append("Смотреть из архива");
+    body.append(arch);
+  }
+  row.append(t, body);
+
+  if (watchable) {
+    row.title = isLive ? "Смотреть сейчас" : "Смотреть из архива (catchup)";
+    row.addEventListener("click", () => {
+      if (isLive) {
+        playChannel(c);
+        onPlayed();
+        return;
+      }
+      const url = buildCatchupUrl(cu, p, now);
+      if (!url) {
+        showToast("Провайдер не дал шаблон архива для этого канала");
+        return;
+      }
+      nowTitle.textContent = `${c.name} · архив`;
+      nowTitle.title = url;
+      playerBar.hidden = false;
+      setWatching(true);
+      const refusedCatchup = player.play({ ...c, url });
+      if (refusedCatchup) {
+        showToast(refusedCatchup);
+        return;
+      }
+      onPlayed();
+    });
+  } else if (state === "past") {
+    row.title =
+      cu.days > 0
+        ? "Вне глубины архива"
+        : "Архив недоступен на этом канале (нет tvg-rec)";
+  }
+  return row;
+}
+
+/** Передачи текущего канала по телепрограмме, по времени начала. */
+function channelProgrammes(): EpgProgramme[] {
+  if (!epg || !lastPlayed) return [];
+  return (
+    epg.get(`id:${lastPlayed.tvgId?.toLowerCase() ?? ""}`) ??
+    epg.get(`name:${lastPlayed.normalizedName}`) ??
+    []
+  );
+}
+
+/**
+ * Программа под плеером: одна прошедшая (её можно открыть из архива), та,
+ * что идёт, и три следующие. Полная — в шторке «Вся программа».
+ */
+let scheduleKey = "";
+function renderSchedule(): void {
+  const all = channelProgrammes();
+  const nowMs = Date.now();
+  const i = all.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
+  scheduleKey = lastPlayed && i >= 0 ? `${lastPlayed.url}|${all[i]!.start}` : "";
+  schedList.textContent = "";
+  nowSchedule.hidden = i < 0;
+  if (i < 0) return;
+  const now = new Date(nowMs);
+  for (const p of all.slice(Math.max(0, i - 1), i + 4)) {
+    schedList.append(programmeRow(p, now, () => undefined));
   }
 }
 
 btnGuide.addEventListener("click", openGuide);
+btnFullGuide.addEventListener("click", openGuide);
 guideClose.addEventListener("click", () => (guideOverlay.hidden = true));
 guideOverlay.addEventListener("click", (e) => {
   if (e.target === guideOverlay) guideOverlay.hidden = true;
@@ -1507,9 +1641,12 @@ function refreshScrub(): void {
   const prog =
     epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null;
   if (!prog) {
+    if (scheduleKey) renderSchedule();
     scrubFill.style.width = "0%";
     progStart.textContent = "";
     progEnd.textContent = "";
+    nowShow.textContent = "";
+    nowTime.hidden = true;
     return;
   }
   const startMs = Date.parse(prog.start);
@@ -1519,6 +1656,25 @@ function refreshScrub(): void {
   miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
   progStart.textContent = clock(startMs);
   progEnd.textContent = clock(stopMs);
+
+  // Сменилась передача или канал — перестроить программу под плеером
+  if (`${lastPlayed!.url}|${prog.start}` !== scheduleKey) renderSchedule();
+
+  // Под кадром — то же самое словами: что идёт и сколько осталось
+  nowShow.textContent = prog.title;
+  nowTime.hidden = false;
+  nowTimeRange.textContent = `${clock(startMs)}–${clock(stopMs)}`;
+  nowTimeFill.style.width = pct;
+  nowTimeLeft.textContent = timeLeft(stopMs - Date.now());
+}
+
+/** «ещё 58 мин», «ещё 1 ч 5 мин» — до конца передачи. */
+function timeLeft(ms: number): string {
+  const min = Math.max(0, Math.round(ms / 60_000));
+  if (min < 60) return `ещё ${min} мин`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `ещё ${h} ч` : `ещё ${h} ч ${m} мин`;
 }
 
 /**
@@ -1545,6 +1701,12 @@ function renderContinue(): void {
 
     const frame = document.createElement("div");
     frame.className = "continue-frame";
+    // Монограмма — пока нет логотипа или он не загрузился: пустая серая
+    // плашка выглядела поломкой.
+    const mark = document.createElement("span");
+    mark.className = "continue-mark";
+    mark.textContent = c.name.trim().slice(0, 2).toUpperCase();
+    frame.append(mark);
     if (c.logo) {
       const img = document.createElement("img");
       img.src = c.logo;
@@ -1556,7 +1718,7 @@ function renderContinue(): void {
     const prog = epg && snapshot ? getNowNext(epg, c, snapshot).now : null;
     if (prog) {
       const live = document.createElement("span");
-      live.className = "live";
+      live.className = "live on-video";
       live.textContent = "Эфир";
       frame.append(live);
 
@@ -1622,7 +1784,7 @@ videoStage.addEventListener("pointerup", (e) => {
     else if (swipe === "down") {
       // На развёрнутой странице свайп вниз возвращает в мини, иначе —
       // предыдущий канал: закрывать нечего.
-      if (isPhone() && playerBar.classList.contains("open")) togglePlayerPage(false);
+      if (isCompact() && playerBar.classList.contains("open")) togglePlayerPage(false);
       else playNeighbor(-1);
     }
     return;
@@ -1689,36 +1851,35 @@ videoStage.addEventListener("pointerleave", () => {
 });
 
 /**
- * Телефонная ширина. Должна совпадать с медиазапросом в style.css —
- * иначе мини-плеер и его поведение разойдутся. Тест сверяет оба числа.
+ * Узкая ширина (телефон и планшет в портрете): плеер живёт мини-плеером и
+ * разворачивается в страницу. Шире — колонкой рядом со списком. Должна
+ * совпадать с медиазапросом в style.css — тест сверяет оба числа.
  */
-const PHONE_BREAKPOINT = 719;
+const COMPACT_BREAKPOINT = 1023;
 
-function isPhone(): boolean {
-  return window.matchMedia(`(max-width: ${PHONE_BREAKPOINT}px)`).matches;
+function isCompact(): boolean {
+  return window.matchMedia(`(max-width: ${COMPACT_BREAKPOINT}px)`).matches;
 }
 
 /** Развернуть мини-плеер в страницу или свернуть обратно. */
 function togglePlayerPage(open?: boolean): void {
   const next = open ?? !playerBar.classList.contains("open");
   playerBar.classList.toggle("open", next);
-  btnExpand.title = next ? "Свернуть плеер" : "Театральный режим";
 }
 
 // Тап по свёрнутому плееру разворачивает его в страницу. Кнопки внутри
 // продолжают работать сами по себе — иначе пауза открывала бы плеер.
 playerBar.addEventListener("click", (e) => {
-  if (!isPhone() || playerBar.classList.contains("open")) return;
+  if (!isCompact() || playerBar.classList.contains("open")) return;
   if ((e.target as HTMLElement).closest("button, input, a")) return;
   togglePlayerPage(true);
 });
 
 btnExpand.addEventListener("click", (e) => {
   e.stopPropagation();
-  // На телефоне та же кнопка сворачивает страницу плеера обратно в мини:
-  // театральный режим там не нужен — развёрнутый плеер и так во весь экран.
-  if (isPhone()) togglePlayerPage();
-  else playerBar.classList.toggle("theater");
+  // Кнопка есть только на узком экране: сворачивает страницу плеера в мини.
+  // Театра больше нет — на широком место плееру даёт сворачивание списка.
+  togglePlayerPage(false);
 });
 
 // Нативный fullscreen: применяем к #player-bar, чтобы контролы остались поверх
@@ -1768,7 +1929,50 @@ btnTheme.addEventListener("click", () => {
   applyTheme(currentTheme);
   saveTheme(currentTheme, localStorage);
   setIcon(btnTheme, themeButtonLabel(currentTheme));
+  renderThemeSeg();
 });
+
+/** Переключатель темы в настройках: своя тема или «как в системе». */
+function renderThemeSeg(): void {
+  const choice = themeChoice(typeof localStorage !== "undefined" ? localStorage : null);
+  for (const b of themeSeg.querySelectorAll<HTMLButtonElement>("[data-theme-choice]")) {
+    const on = b.dataset.themeChoice === choice;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", String(on));
+  }
+}
+
+function systemPrefersDark(): boolean | null {
+  return typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)").matches
+    : null;
+}
+
+themeSeg.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-theme-choice]");
+  if (!b) return;
+  const choice = b.dataset.themeChoice as ThemeChoice;
+  if (choice === "system") {
+    clearTheme(localStorage);
+    currentTheme = resolveTheme(null, systemPrefersDark());
+  } else {
+    currentTheme = choice;
+    saveTheme(currentTheme, localStorage);
+  }
+  applyTheme(currentTheme);
+  setIcon(btnTheme, themeButtonLabel(currentTheme));
+  renderThemeSeg();
+});
+
+// «Как в системе» — значит и следом за системой, когда она переключится
+if (typeof window.matchMedia === "function") {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+    if (themeChoice(localStorage) !== "system") return;
+    currentTheme = e.matches ? "dark" : "light";
+    applyTheme(currentTheme);
+    setIcon(btnTheme, themeButtonLabel(currentTheme));
+  });
+}
 
 // ---------- Избранное ----------
 /** Загрузить избранное по ключу плейлиста (localStorage, нестандартный ключ). */
@@ -1808,74 +2012,88 @@ function activatePlaylist(id: string): void {
 // ---------- Менеджер плейлистов (setup-экран) ----------
 function renderPlaylistManager(): void {
   plList.textContent = "";
-  if (plState.items.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "Пока ни одного плейлиста — добавьте первый ниже.";
-    plList.append(empty);
-  }
   for (const p of plState.items) {
+    const active = p.id === plState.activeId;
     const row = document.createElement("div");
-    row.className = "pl-row" + (p.id === plState.activeId ? " active" : "");
-    const name = document.createElement("div");
+    row.className = active ? "item pl-row active" : "item pl-row";
+
+    // Вся строка — выбор плейлиста: радиокнопка, название, откуда он
+    const pick = document.createElement("button");
+    pick.className = "pl-pick";
+    pick.setAttribute("role", "radio");
+    pick.setAttribute("aria-checked", String(active));
+    pick.title = active ? "Этот плейлист открыт" : "Открыть этот плейлист";
+    const radio = document.createElement("span");
+    radio.className = "radio";
+    const text = document.createElement("span");
+    text.className = "pl-text";
+    const name = document.createElement("span");
     name.className = "pl-name";
     name.textContent = p.name;
-    const url = document.createElement("div");
+    const url = document.createElement("span");
     url.className = "pl-url muted";
-    url.textContent = p.playlistUrl;
-    name.append(url);
-    const actions = document.createElement("div");
-    actions.className = "pl-actions";
-    const open = document.createElement("button");
-    open.className = "primary pl-open";
-    open.textContent = p.id === plState.activeId ? "Открыт" : "Открыть";
-    open.disabled = p.id === plState.activeId;
-    open.addEventListener("click", () => activatePlaylist(p.id));
+    url.textContent = urlLabel(p.playlistUrl, p.epgUrl);
+    text.append(name, url);
+    pick.append(radio, text);
+    pick.addEventListener("click", () => {
+      if (!active) activatePlaylist(p.id);
+      else showPlayer();
+    });
+
     const edit = document.createElement("button");
-    edit.className = "icon-btn";
-    edit.title = "Переименовать / изменить ссылки";
+    edit.className = "icon-btn pl-act";
+    edit.title = "Переименовать или изменить ссылки";
+    edit.setAttribute("aria-label", `Изменить «${p.name}»`);
     setIcon(edit, "edit");
     edit.addEventListener("click", () => {
-      // Инлайн-редактирование: карточка превращается в форму
+      // Инлайн-редактирование: строка превращается в форму
       row.textContent = "";
       row.classList.add("editing");
-      const form = document.createElement("div");
+      const form = document.createElement("form");
       form.className = "pl-edit";
+      form.noValidate = true;
       const mk = (label: string, value: string, type = "text"): HTMLInputElement => {
-        const l = document.createElement("label");
+        const field = document.createElement("label");
+        field.className = "field";
+        const l = document.createElement("span");
+        l.className = "field-label";
         l.textContent = label;
+        const box = document.createElement("span");
+        box.className = "input";
         const input = document.createElement("input");
         input.type = type;
         input.value = value;
-        l.append(input);
-        form.append(l);
+        box.append(input);
+        field.append(l, box);
+        form.append(field);
         return input;
       };
       const nameIn = mk("Название", p.name);
-      const urlIn = mk("URL плейлиста", p.playlistUrl, "url");
-      const epgIn = mk("URL EPG (необязательно)", p.epgUrl ?? "", "url");
+      const urlIn = mk("Ссылка на плейлист", p.playlistUrl, "url");
+      const epgIn = mk("Ссылка на телепрограмму (необязательно)", p.epgUrl ?? "", "url");
       const btns = document.createElement("div");
       btns.className = "pl-edit-actions";
       const save = document.createElement("button");
-      save.className = "primary pl-open";
+      save.className = "btn btn-primary btn-sm";
+      save.type = "submit";
       save.textContent = "Сохранить";
       const cancel = document.createElement("button");
-      cancel.className = "icon-btn";
-      setIcon(cancel, "close");
-      cancel.title = "Отмена";
+      cancel.className = "btn btn-ghost btn-sm";
+      cancel.type = "button";
+      cancel.textContent = "Отмена";
       btns.append(save, cancel);
       form.append(btns);
       row.append(form);
       nameIn.focus();
 
-      const closeEditor = (): void => renderPlaylistManager();
-      cancel.addEventListener("click", closeEditor);
-      save.addEventListener("click", () => {
+      cancel.addEventListener("click", () => renderPlaylistManager());
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
         const newName = nameIn.value.trim();
         const newUrl = urlIn.value.trim();
         const newEpg = epgIn.value.trim();
         if (!/^https?:\/\//.test(newUrl)) {
-          setupError.textContent = "Нужен http(s)-URL плейлиста";
+          setupError.textContent = "Нужна ссылка, начинающаяся с http:// или https://";
           setupError.hidden = false;
           return;
         }
@@ -1888,12 +2106,13 @@ function renderPlaylistManager(): void {
         setupError.hidden = true;
         renderPlaylistManager();
         renderPlaylistSwitcher();
-        btnBackToPlayer.hidden = !activePlaylist(plState);
       });
     });
+
     const del = document.createElement("button");
-    del.className = "icon-btn pl-del";
-    del.title = "Удалить плейлист (избранное тоже будет удалено)";
+    del.className = "icon-btn pl-act pl-del";
+    del.title = "Удалить плейлист (его избранное тоже удалится)";
+    del.setAttribute("aria-label", `Удалить «${p.name}»`);
     setIcon(del, "trash");
     del.addEventListener("click", () => {
       if (!window.confirm(`Удалить «${p.name}»?`)) return;
@@ -1904,11 +2123,23 @@ function renderPlaylistManager(): void {
       savePlaylists(localStorage, plState);
       renderPlaylistManager();
       renderPlaylistSwitcher();
+      renderSettingsMode();
     });
-    actions.append(open, edit, del);
-    row.append(name, actions);
+
+    row.append(pick, edit, del);
     plList.append(row);
   }
+}
+
+/** «storage.yandexcloud.net · с телепрограммой» — откуда плейлист, коротко. */
+function urlLabel(playlistUrl: string, epgUrl: string | null): string {
+  let host = playlistUrl;
+  try {
+    host = new URL(playlistUrl).host;
+  } catch {
+    // оставим как есть
+  }
+  return epgUrl ? `${host} · с телепрограммой` : host;
 }
 
 // ---------- Экспорт / импорт настроек ----------
@@ -1979,8 +2210,10 @@ function renderPlaylistSwitcher(): void {
   const active = activePlaylist(plState);
   plSwitch.hidden = !active;
   if (!active) return;
-  plSwitchBtn.innerHTML = iconMarkup("tv");
-  plSwitchBtn.append(` ${active.name}`);
+  plSwitchName.textContent = active.name;
+  // Видимый текст — название, а имя кнопки для скринридера — её действие
+  plSwitchBtn.setAttribute("aria-label", `Плейлист «${active.name}», переключить`);
+  plSwitchCount.textContent = snapshot ? channelsWord(snapshot.channels.length) : "";
   plSwitchMenu.textContent = "";
   for (const p of plState.items) {
     const b = document.createElement("button");
@@ -2010,7 +2243,8 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- Setup ----------
-setupLoad.addEventListener("click", () => {
+addForm.addEventListener("submit", (e) => {
+  e.preventDefault();
   const pUrl = setupPlaylist.value.trim();
   const eUrl = setupEpg.value.trim();
   const name = setupName.value.trim();
@@ -2092,20 +2326,24 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
 
   renderCategories();
   renderChannels();
-  epgNow.textContent = `Каналов: ${snapshot.channels.length} · Категорий: ${snapshot.categories.length}`;
+  renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
+  // Служебная строка нужна, только пока что-то грузится или не удалось:
+  // счётчики «Каналов: N · Категорий: M» уже видны в шапке и у категорий.
+  epgNow.hidden = true;
 
   const finalEpgUrl = epgUrl ?? snapshot.headerTvgUrl;
   if (finalEpgUrl) {
-    epgNow.textContent += " · Загрузка телепрограммы…";
+    epgNow.hidden = false;
+    epgNow.textContent = "Загружаем телепрограмму…";
     loadEpg(finalEpgUrl)
       .then((parsed) => {
         epg = parsed;
         renderChannels();
         refreshNowFav();
-        epgNow.textContent = `Каналов: ${snapshot!.channels.length} · Категорий: ${snapshot!.categories.length} · EPG`;
+        epgNow.hidden = true;
       })
       .catch(() => {
-        epgNow.textContent = `Каналов: ${snapshot!.channels.length} · Категорий: ${snapshot!.categories.length} · EPG недоступен`;
+        epgNow.textContent = "Телепрограмма не загрузилась — каналы работают без неё";
       });
   }
 }
