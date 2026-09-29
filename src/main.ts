@@ -46,6 +46,7 @@ import {
   spacerHeight,
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
+import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -136,6 +137,9 @@ const scrubFill = $("scrub-fill");
 const progStart = $("prog-start");
 const progEnd = $("prog-end");
 const btnLive = $<HTMLButtonElement>("btn-live");
+const miniProgFill = $("mini-prog-fill");
+const continueBlock = $("continue-block");
+const continueRow = $("continue-row");
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
 const toastEl = $("toast");
@@ -484,6 +488,7 @@ function renderChannels(): void {
   emptyState.hidden = sorted.length > 0;
   ensureVirtualShell();
   // при смене фильтра сбрасываем прокрутку, чтобы окно пересчиталось с нуля
+  renderContinue();
   channelList.scrollTop = 0;
   renderVirtualWindow();
 }
@@ -1509,9 +1514,79 @@ function refreshScrub(): void {
   }
   const startMs = Date.parse(prog.start);
   const stopMs = Date.parse(prog.stop);
-  scrubFill.style.width = `${(programmeProgress(Date.now(), startMs, stopMs) * 100).toFixed(1)}%`;
+  const pct = `${(programmeProgress(Date.now(), startMs, stopMs) * 100).toFixed(1)}%`;
+  scrubFill.style.width = pct;
+  miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
   progStart.textContent = clock(startMs);
   progEnd.textContent = clock(stopMs);
+}
+
+/**
+ * Ряд «Продолжить»: до четырёх последних каналов карточками 16:9.
+ * Показывается только в разделе «Каналы» и без активного поиска — иначе
+ * дублировал бы результаты и занимал бы экран вместо них.
+ */
+function renderContinue(): void {
+  const show =
+    activeView === "channels" &&
+    searchInput.value.trim() === "" &&
+    activeCategory === null &&
+    snapshot !== null;
+  const items = show
+    ? channelsForView("recents", snapshot!.channels, favorites, recents).slice(0, 4)
+    : [];
+  continueBlock.hidden = items.length === 0;
+  continueRow.textContent = "";
+
+  for (const c of items) {
+    const card = document.createElement("button");
+    card.className = "continue-card";
+    card.title = c.name;
+
+    const frame = document.createElement("div");
+    frame.className = "continue-frame";
+    if (c.logo) {
+      const img = document.createElement("img");
+      img.src = c.logo;
+      img.alt = "";
+      img.loading = "lazy";
+      img.addEventListener("error", () => img.remove());
+      frame.append(img);
+    }
+    const prog = epg && snapshot ? getNowNext(epg, c, snapshot).now : null;
+    if (prog) {
+      const live = document.createElement("span");
+      live.className = "live";
+      live.textContent = "Эфир";
+      frame.append(live);
+
+      const bar = document.createElement("div");
+      bar.className = "prog";
+      const fill = document.createElement("span");
+      fill.style.width = `${(programmeProgress(Date.now(), Date.parse(prog.start), Date.parse(prog.stop)) * 100).toFixed(1)}%`;
+      bar.append(fill);
+      frame.append(bar);
+    }
+    card.append(frame);
+
+    const meta = document.createElement("div");
+    meta.className = "continue-meta";
+    const name = document.createElement("span");
+    name.className = "t-strong ellipsis";
+    name.textContent = c.name;
+    meta.append(name);
+    card.append(meta);
+
+    if (prog) {
+      const nowLine = document.createElement("span");
+      nowLine.className = "t-caption muted ellipsis num";
+      nowLine.textContent = `${formatRange(prog)} · ${prog.title}`;
+      card.append(nowLine);
+    }
+
+    card.addEventListener("click", () => playChannel(c));
+    continueRow.append(card);
+  }
 }
 
 btnLive.addEventListener("click", () => {
@@ -1524,6 +1599,60 @@ videoEl.addEventListener("timeupdate", refreshScrub);
 // Передача идёт и без событий видео: без таймера полоса замирала бы на паузе
 // и между timeupdate, которые HLS шлёт нерегулярно.
 window.setInterval(refreshScrub, 10_000);
+
+// ---- Жесты на кадре (телефон) ----
+let touchStart: { x: number; y: number } | null = null;
+let lastTapMs: number | null = null;
+
+videoStage.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "mouse") return; // мышью жесты не нужны
+  touchStart = { x: e.clientX, y: e.clientY };
+});
+
+videoStage.addEventListener("pointerup", (e) => {
+  if (e.pointerType === "mouse" || !touchStart) return;
+  const dx = e.clientX - touchStart.x;
+  const dy = e.clientY - touchStart.y;
+  touchStart = null;
+
+  const swipe = classifySwipe(dx, dy);
+  if (swipe) {
+    lastTapMs = null; // это движение, а не тап
+    if (swipe === "up") playNeighbor(1);
+    else if (swipe === "down") {
+      // На развёрнутой странице свайп вниз возвращает в мини, иначе —
+      // предыдущий канал: закрывать нечего.
+      if (isPhone() && playerBar.classList.contains("open")) togglePlayerPage(false);
+      else playNeighbor(-1);
+    }
+    return;
+  }
+
+  // Двойной тап у края — перемотка. Одиночный оставляем контролам.
+  const rect = videoStage.getBoundingClientRect();
+  const side = tapSide(e.clientX - rect.left, rect.width);
+  if (side && isDoubleTap(lastTapMs, e.timeStamp)) {
+    lastTapMs = null;
+    seekBy(videoEl, side === "left" ? -15 : 15);
+    showToast(side === "left" ? "−15 секунд" : "+15 секунд");
+    return;
+  }
+  lastTapMs = e.timeStamp;
+});
+
+// Свайп вбок по свёрнутому плееру переключает канал
+playerBar.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "mouse" || playerBar.classList.contains("open")) return;
+  touchStart = { x: e.clientX, y: e.clientY };
+});
+playerBar.addEventListener("pointerup", (e) => {
+  if (e.pointerType === "mouse" || !touchStart) return;
+  if (playerBar.classList.contains("open")) return;
+  const swipe = classifySwipe(e.clientX - touchStart.x, e.clientY - touchStart.y);
+  touchStart = null;
+  if (swipe === "left") playNeighbor(1);
+  else if (swipe === "right") playNeighbor(-1);
+});
 
 /** Через сколько контролы на видео прячутся, мс (правило дизайн-системы). */
 const CONTROLS_HIDE_MS = 3000;

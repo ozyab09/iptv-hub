@@ -100,6 +100,10 @@
                 <div id="cat-menu" class="quality-menu menu cat-menu" role="listbox" hidden></div>
               </div>
               <div id="epg-now" class="epg-now" hidden></div>
+              <section id="continue-block" class="continue-block" hidden>
+                <h3 class="t-heading">Продолжить</h3>
+                <div id="continue-row" class="continue-row"></div>
+              </section>
               <div id="channel-list" class="channel-list" role="list"></div>
               <div id="empty-state" class="muted" hidden>Ничего не найдено</div>
             </section>
@@ -165,6 +169,10 @@
           </div>
         </div>
 
+        <!-- Прогресс передачи по нижнему краю: в свёрнутом виде полосы
+             перемотки не видно, а понимать «сколько осталось» надо -->
+        <div id="mini-prog" class="mini-prog"><span id="mini-prog-fill"></span></div>
+
         <!-- Под кадром — действия приложения, а не плеера -->
         <div class="player-bar-row">
           <div class="pb-zone pb-left">
@@ -190,6 +198,7 @@
       <!-- Модалка программы передач -->
       <div id="guide-overlay" class="guide-overlay" hidden>
         <div class="guide" role="dialog" aria-modal="true" aria-label="Программа передач">
+          <div class="grabber" aria-hidden="true"></div>
           <div class="guide-head">
             <div id="guide-title" class="guide-title">Программа</div>
             <button id="guide-close" class="icon-btn" title="Закрыть" aria-label="Закрыть программу"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>

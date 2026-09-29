@@ -158,6 +158,15 @@ html, body {
 .view-title { margin: 0 0 var(--space-3); }
 
 @media (max-width: 719px) {
+  /* Лента карточек: на телефоне они прокручиваются вбок, а не жмутся в сетку */
+  .continue-row {
+    display: flex;
+    gap: var(--space-3);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+  .continue-card { flex: none; width: 156px; scroll-snap-align: start; }
+
   .side-nav { display: none; }
   .tabbar { display: flex; min-height: var(--tabbar-h); }
   /* Место под таб-бар и мини-плеер: иначе конец списка уходит под них */
@@ -220,6 +229,7 @@ html, body {
     height: 44px;
     background: rgba(255, 255, 255, 0.12);
   }
+  .player-bar:not(.open) .mini-prog { display: block; margin-top: var(--space-2); }
   .player-bar:not(.open) .pb-zone { flex: none; }
   .player-bar:not(.open) .pb-left { flex: 1; min-width: 0; }
   .player-bar:not(.open) .now-playing { flex: 1; min-width: 0; }
@@ -521,6 +531,42 @@ html, body {
 }
 /* Кадр со сцены контролов: размеры теперь на обёртке, а не на <video> */
 .video-stage, #video-stage { width: 100%; }
+/* Полоска прогресса мини-плеера: видна только в свёрнутом виде */
+.mini-prog { display: none; height: 2px; background: var(--surface-3); border-radius: var(--radius-full); }
+.mini-prog > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: var(--radius-full); }
+
+/* «Продолжить»: 4 карточки на десктопе, горизонтальная лента на телефоне */
+.continue-block { margin-bottom: var(--space-5); }
+.continue-block > h3 { margin: 0 0 var(--space-3); }
+.continue-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+.continue-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.continue-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+  background: var(--surface-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.continue-frame > img { max-width: 60%; max-height: 60%; object-fit: contain; }
+.continue-frame > .live { position: absolute; left: var(--space-2); top: var(--space-2); }
+.continue-frame > .prog { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0; }
+.continue-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+
 .scrub-row { display: flex; align-items: center; gap: var(--space-3); }
 /* «К эфиру» — единственная акцентная кнопка на кадре: она зовёт к действию */
 .btn-live { background: var(--accent); color: var(--on-accent); border: 0; flex: none; }
@@ -711,22 +757,46 @@ video { cursor: pointer; }
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: var(--overlay);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: var(--space-4);
 }
 .guide {
   width: min(640px, 100%);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  background: var(--card);
+  background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
-  gap: 12px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  gap: var(--space-3);
+}
+/* Ручка нужна только шторке — на десктопе это обычный диалог */
+.grabber { display: none; }
+
+/* На телефоне программа — шторка снизу, как требует дизайн-система:
+   до неё дотягивается большой палец, а модалка по центру — нет. */
+@media (max-width: 719px) {
+  .guide-overlay { align-items: flex-end; padding: 0; }
+  .guide {
+    width: 100%;
+    max-height: 80vh;
+    max-height: 80dvh;
+    border: 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  }
+  .grabber {
+    display: block;
+    width: 40px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background: var(--surface-3);
+    margin: 0 auto var(--space-1);
+  }
 }
 .guide-head {
   display: flex;
