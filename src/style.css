@@ -60,7 +60,9 @@ html, body {
 .brand-icon { color: var(--accent); }
 #search {
   flex: 1;
-  min-width: 120px;
+  /* min-width: 0 обязателен: без него инпут не сжимается ниже контента
+     и рвёт топбар на узких экранах (issue #62) */
+  min-width: 0;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -212,6 +214,9 @@ html, body {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
 }
+/* Высота карточки детерминирована (питч виртуального списка = 56px):
+   36px контент + 20px паддинг + 2px борд. Не менять без virtual-list.ts.
+   row-gap сетки (10px) добавляется к питчу строк — см. .virtual-inner. */
 .channel-card {
   display: flex;
   align-items: center;
@@ -225,6 +230,7 @@ html, body {
   font: inherit;
   text-align: left;
   min-width: 0;
+  height: 56px;
 }
 .channel-card:hover { border-color: var(--accent2); }
 .channel-card.active { border-color: var(--accent); }
@@ -290,7 +296,10 @@ html, body {
   background: var(--bar);
   border-top: 1px solid var(--border);
   backdrop-filter: blur(8px);
-  padding: 8px 16px;
+  /* safe-area: не залезать под home-indicator и вырезы (viewport-fit=cover) */
+  padding: 8px max(16px, env(safe-area-inset-right, 0px))
+    calc(8px + env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
 }
 .player-bar video {
   display: none;
@@ -313,12 +322,68 @@ html, body {
 .pb-center { flex: 0 0 auto; justify-content: center; gap: 6px; }
 .pb-right { flex: 1; justify-content: flex-end; flex-wrap: wrap; }
 .btn-pause-main { width: 44px; height: 44px; font-size: 19px; }
+
+/* Мобильный портрет: зоны СТРОГО в столбец, каждая во всю ширину.
+   Прежняя схема (flex:1 у всех трёх зон + wrap) на 360–430px сажала
+   лево и право в одну полупустую строку — кнопки выдавливались друг
+   на друга (issue #62). wrap внутри зоны допустим: перенос — не наезд. */
 @media (max-width: 900px) {
-  /* На узких экранах центр уходит на первую строку, лево/право ниже */
-  .player-bar-row { flex-wrap: wrap; }
-  .pb-center { order: -1; flex: 1; }
-  .pb-left { order: 2; flex: 1; }
-  .pb-right { order: 3; flex: 1; }
+  .player-bar:not(.theater) {
+    max-height: 80vh;
+    max-height: 80dvh;
+    overflow-y: auto;
+  }
+  .player-bar:not(.theater) video {
+    /* видео не должно вытеснять контролы за пределы экрана */
+    max-height: 38vh;
+    max-height: 38dvh;
+  }
+  .player-bar-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .pb-left,
+  .pb-center,
+  .pb-right {
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: center;
+    flex-wrap: wrap;
+    order: 0;
+    min-width: 0;
+  }
+  .pb-center { flex-wrap: nowrap; gap: 4px; }
+  .pb-left { order: 1; }
+  .pb-right { order: 2; }
+}
+
+@media (max-width: 720px) {
+  /* Слайдер громкости вытесняет название канала из правой зоны на 360px.
+     Оставляем 🔊/🔇 (тап = мьют, уровень 100/0), точная регулировка —
+     на десктопе и платформах с курсором. */
+  #volume-slider { display: none; }
+
+  /* Touch-цели не тоньше 40px (Apple HIG / Material). */
+  .player-bar .icon-btn { width: 40px; height: 40px; }
+  .fav-star { width: 36px; height: 36px; }
+  .category-btn { min-height: 44px; }
+
+  /* Инпуты < 16px → iOS Safari авто-зумит страницу при фокусе. */
+  #search,
+  .card input,
+  .pl-form input,
+  .pl-edit input {
+    font-size: 16px;
+  }
+
+  /* Топбар: поиск уходит на вторую строку во всю ширину. */
+  .topbar { flex-wrap: wrap; gap: 8px 12px; padding: 10px 0; }
+  #search { flex: 1 1 140px; order: 3; }
+  .topbar-right { order: 2; margin-left: auto; }
+
+  .card { margin: 5vh auto 0; padding: 20px; width: min(520px, 100%); }
+  #app { padding: 0 12px 96px; }
 }
 .volume {
   display: flex;
@@ -329,10 +394,7 @@ html, body {
   width: 90px;
   accent-color: var(--accent);
 }
-@media (max-width: 720px) {
-  #volume-slider { width: 64px; }
-  .player-bar-row { gap: 8px; }
-}
+
 .now-playing { flex: 1; min-width: 0; }
 .now-line {
   display: flex;
@@ -677,5 +739,34 @@ video { cursor: pointer; }
   border-radius: var(--radius);
   padding: 10px 18px;
   z-index: 100;
-  max-width: 90vw;
+  max-width: calc(100vw - 32px);
+}
+
+@media (max-width: 720px) {
+  /* На мобиле не центрируем transform-ом (может вылезти за край), а растягиваем
+     с полями; текст + кнопка действия переносятся, не наезжая (issue #62). */
+  .toast {
+    left: 16px;
+    right: 16px;
+    transform: none;
+    flex-wrap: wrap;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Гайд на мобиле — bottom-sheet во всю ширину (узкая колонка по центру
+   теряла полстроки заголовков) */
+@media (max-width: 720px) {
+  .guide-overlay { padding: 0; align-items: flex-end; }
+  .guide {
+    width: 100%;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: 16px 16px 0 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .guide-name { white-space: normal; }
 }

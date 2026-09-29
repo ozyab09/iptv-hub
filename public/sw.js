@@ -10,7 +10,7 @@
  * Медиа-потоки (hls.js сегменты, .ts/.m3u8) НЕ кешируются осознанно:
  * живой телевизор в оффлайне не существует, а кеш сегментов раздувает storage.
  */
-const VERSION = "v0.2.1";
+const VERSION = "v0.2.2";
 const SHELL_CACHE = `iptv-hub-shell-${VERSION}`;
 const DATA_CACHE = `iptv-hub-data-${VERSION}`;
 
