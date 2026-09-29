@@ -44,7 +44,7 @@ export const ICONS: Record<string, string> = {
   theater: '<rect x="2" y="6.5" width="20" height="11" rx="2.5"/>',
   fullscreen: '<path d="M9 3.5H4.5a1 1 0 0 0-1 1V9M15 3.5h4.5a1 1 0 0 1 1 1V9M20.5 15v4.5a1 1 0 0 1-1 1H15M9 20.5H4.5a1 1 0 0 1-1-1V15"/><path d="m4 4 5 5M20 4l-5 5M20 20l-5-5M4 20l5-5"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
-  collapse: '<path d="m6 9 6 6 6-6"/>',
+  'chevron-down': '<path d="m6 9 6 6 6-6"/>',
   'panel-close': '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M16 10l-2 2 2 2"/>',
   'panel-open': '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M14 10l2 2-2 2"/>',
   edit: '<path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/>',

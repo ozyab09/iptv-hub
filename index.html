@@ -29,31 +29,30 @@
     </script>
   <body>
     <div id="app">
+      <!-- Боковая панель (десктоп и планшет): бренд, разделы, категории.
+           На телефоне от неё остаётся только строка чипов категорий. -->
+      <aside class="sidebar">
+        <a class="brand" href="./" title="На главную"><span class="brand-mark"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></span><span class="brand-name">IPTV Hub</span></a>
+        <nav id="side-nav" class="side-nav" aria-label="Разделы"></nav>
+        <div id="cat-label" class="side-label t-overline">Категории</div>
+        <nav id="categories" class="categories" aria-label="Категории"></nav>
+      </aside>
+
+      <!-- Шапка: какой плейлист открыт (он же переключатель), поиск, тема -->
       <header class="topbar">
-        <a class="brand" href="./" title="На главную"><span class="brand-icon"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></span> IPTV Hub</a>
-        <div class="search-wrap">
-          <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
+        <div class="pl-switch" id="pl-switch" hidden>
+          <button id="pl-switch-btn" class="pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false"><span id="pl-switch-name" class="pl-switch-name"></span><span id="pl-switch-count" class="pl-switch-count num"></span><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-chevron-down"></use></svg></button>
+          <div id="pl-switch-menu" class="menu pl-switch-menu" role="listbox" hidden></div>
+        </div>
+        <label class="search-wrap">
+          <svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+          <input id="search" type="search" placeholder="Поиск каналов" autocomplete="off" aria-label="Поиск каналов" />
           <span class="kbd" aria-hidden="true">/</span>
-        </div>
-        <div class="topbar-right">
-          <button id="btn-manage" class="icon-btn" title="Список плейлистов (управление)" aria-label="Список плейлистов"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-playlist"></use></svg></button>
-          <div class="pl-switch" id="pl-switch" hidden>
-            <button id="pl-switch-btn" class="btn btn-sm pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></button>
-            <div id="pl-switch-menu" class="quality-menu menu pl-switch-menu" role="listbox" hidden></div>
-          </div>
-          <button id="btn-theme" class="icon-btn" title="Переключить тему" aria-label="Переключить тему"></button>
-        </div>
+        </label>
+        <button id="btn-theme" class="icon-btn theme-btn" title="Переключить тему" aria-label="Переключить тему"></button>
       </header>
 
-      <main id="main">
-        <!-- Раскладка живёт ВЫШЕ экранов: иначе на «Настройках» вместе
-             с экраном пропадала бы и навигация по разделам. -->
-        <div class="layout">
-          <aside class="sidebar">
-            <nav id="side-nav" class="side-nav" aria-label="Разделы"></nav>
-            <nav id="categories" class="categories" aria-label="Категории"></nav>
-          </aside>
-          <div class="screens">
+      <main id="main" class="screens">
             <!-- Экран 1: стартовый — менеджер плейлистов -->
             <section id="setup-screen" class="screen">
               <div class="card">
@@ -92,8 +91,12 @@
 
             <!-- Экран 2: основной — список каналов раздела -->
             <section id="player-screen" class="screen" hidden>
+              <section id="continue-block" class="continue-block" hidden>
+                <h3 class="t-heading">Продолжить</h3>
+                <div id="continue-row" class="continue-row"></div>
+              </section>
               <div class="view-head">
-                <h2 id="view-title" class="t-heading view-title">Каналы</h2>
+                <h2 class="t-heading view-title"><span id="view-title">Каналы</span> <span id="view-count" class="view-count num"></span></h2>
                 <!-- Только в режиме просмотра на широком экране: список
                      сворачивается в колонку логотипов, плеер растёт (C) -->
                 <button id="btn-collapse-list" class="icon-btn sm list-toggle" title="Свернуть список (C)" aria-label="Свернуть список каналов" aria-expanded="true"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-panel-close"></use></svg></button>
@@ -105,15 +108,9 @@
                 <div id="cat-menu" class="quality-menu menu cat-menu" role="listbox" hidden></div>
               </div>
               <div id="epg-now" class="epg-now" hidden></div>
-              <section id="continue-block" class="continue-block" hidden>
-                <h3 class="t-heading">Продолжить</h3>
-                <div id="continue-row" class="continue-row"></div>
-              </section>
               <div id="channel-list" class="channel-list" role="list"></div>
               <div id="empty-state" class="muted" hidden>Ничего не найдено</div>
             </section>
-          </div>
-        </div>
       </main>
 
       <!-- Навигация по разделам: таб-бар на телефоне, сайдбар на десктопе.
@@ -172,7 +169,7 @@
                 </div>
                 <button id="btn-rec" class="vbtn ghost rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
                 <button id="btn-pip" class="vbtn ghost" title="Плавающее окно (PiP)" aria-label="Плавающее окно"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-pip"></use></svg></button>
-                <button id="btn-expand" class="vbtn ghost" title="Свернуть плеер" aria-label="Свернуть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-collapse"></use></svg></button>
+                <button id="btn-expand" class="vbtn ghost" title="Свернуть плеер" aria-label="Свернуть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-chevron-down"></use></svg></button>
                 <button id="btn-fullscreen" class="vbtn ghost" title="На весь экран (F)" aria-label="На весь экран"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-fullscreen"></use></svg></button>
               </div>
             </div>

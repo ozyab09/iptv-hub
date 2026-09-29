@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   channelsForView,
+  channelsWord,
+  groupDigits,
   DEFAULT_VIEW,
   emptyMessage,
   parseView,
@@ -135,5 +137,23 @@ describe("текст пустого состояния", () => {
   it("при поиске причина в запросе, а не в разделе", () => {
     expect(emptyMessage("favorites", true)).toBe("Ничего не найдено");
     expect(emptyMessage("recents", true)).toBe("Ничего не найдено");
+  });
+});
+
+describe("счётчик каналов", () => {
+  it("склоняет слово по числу", () => {
+    expect(channelsWord(1)).toBe("1 канал");
+    expect(channelsWord(2)).toBe("2 канала");
+    expect(channelsWord(5)).toBe("5 каналов");
+    expect(channelsWord(11)).toBe("11 каналов");
+    expect(channelsWord(22)).toBe("22 канала");
+    expect(channelsWord(112)).toBe("112 каналов");
+    expect(channelsWord(121)).toBe("121 канал");
+  });
+
+  it("разбивает разряды неразрывным тонким пробелом", () => {
+    expect(channelsWord(1240)).toBe("1 240 каналов");
+    expect(groupDigits(1240)).toBe("1 240");
+    expect(groupDigits(999)).toBe("999");
   });
 });

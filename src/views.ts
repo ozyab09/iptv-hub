@@ -77,3 +77,25 @@ export function emptyMessage(view: View, hasQuery: boolean): string {
   if (view === "recents") return "Вы ещё ничего не смотрели";
   return "Ничего не найдено";
 }
+
+/**
+ * «1 240 каналов»: число с неразрывным тонким пробелом между разрядами и
+ * слово в нужном падеже (1 канал, 2 канала, 5 каналов, 11 каналов).
+ */
+export function channelsWord(n: number): string {
+  const num = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  const word =
+    mod10 === 1 && mod100 !== 11
+      ? "канал"
+      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? "канала"
+        : "каналов";
+  return `${num} ${word}`;
+}
+
+/** То же число без слова — для счётчиков рядом с заголовком. */
+export function groupDigits(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}

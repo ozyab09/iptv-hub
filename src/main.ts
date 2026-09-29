@@ -3,7 +3,9 @@ import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
 import {
   channelsForView,
+  channelsWord,
   emptyMessage,
+  groupDigits,
   parseView,
   showsCategories,
   showsChannelList,
@@ -121,7 +123,6 @@ const plList = $("pl-list");
 const plSwitch = $("pl-switch");
 const plSwitchBtn = $<HTMLButtonElement>("pl-switch-btn");
 const plSwitchMenu = $("pl-switch-menu");
-const btnManage = $<HTMLButtonElement>("btn-manage");
 const btnBackToPlayer = $<HTMLButtonElement>("btn-back-to-player");
 const setupError = $("setup-error");
 const searchInput = $<HTMLInputElement>("search");
@@ -159,6 +160,10 @@ const importFile = $<HTMLInputElement>("import-file");
 const sideNav = $("side-nav");
 const tabbar = $("tabbar");
 const viewTitle = $("view-title");
+const viewCount = $("view-count");
+const catLabel = $("cat-label");
+const plSwitchName = $("pl-switch-name");
+const plSwitchCount = $("pl-switch-count");
 const catPicker = $("cat-picker");
 const btnCategories = $<HTMLButtonElement>("btn-categories");
 const catMenu = $("cat-menu");
@@ -211,7 +216,7 @@ let visibleChannels: Channel[] = [];
  * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
  * прокрутку. Тест сверяет оба значения.
  */
-const CHANNEL_ROW_HEIGHT = 64;
+const CHANNEL_ROW_HEIGHT = 72;
 /** Список каналов — одна колонка строк, как требует дизайн-система. */
 const CHANNEL_COLUMNS = 1;
 
@@ -283,12 +288,6 @@ function showPlayer(): void {
   setView(activeView === "settings" ? "channels" : activeView);
 }
 
-btnManage.addEventListener("click", () => {
-  // Кнопка в шапке — тот же раздел «Настройки», что и вкладка; повторное
-  // нажатие возвращает к каналам.
-  setView(activeView === "settings" ? "channels" : "settings");
-});
-
 btnBackToPlayer.addEventListener("click", () => {
   const active = activePlaylist(plState);
   if (active) void openPlaylist(active.playlistUrl, active.epgUrl);
@@ -345,6 +344,7 @@ function setView(view: View, persist = true): void {
     btnBackToPlayer.hidden = !activePlaylist(plState);
   }
   categoriesNav.hidden = !showsCategories(view);
+  catLabel.hidden = !showsCategories(view);
   catPicker.hidden = !showsCategories(view);
   // Категория — фильтр раздела «Каналы»; в избранном и недавних она
   // прятала бы половину списка без видимой причины.
@@ -490,6 +490,7 @@ function renderChannels(): void {
   const sorted =
     activeView === "recents" ? list : applyFavorites(list, favorites, false);
   visibleChannels = sorted;
+  viewCount.textContent = groupDigits(sorted.length);
   emptyState.textContent = emptyMessage(activeView, q !== "");
   emptyState.hidden = sorted.length > 0;
   ensureVirtualShell();
@@ -540,16 +541,35 @@ function renderChannelCard(c: Channel): HTMLElement {
   }
   meta.append(line);
 
+  // Что идёт сейчас, сколько прошло и (на широком экране) что дальше:
+  // канал выбирают по передаче, а не по названию.
+  let nextText = "";
   if (epg) {
-    const { now } = getNowNext(epg, c, snapshot!);
+    const { now, next } = getNowNext(epg, c, snapshot!);
     if (now) {
       const e = document.createElement("span");
-      e.className = "t-label muted ellipsis num";
-      e.textContent = `${formatRange(now)} · ${now.title}`;
+      e.className = "row-now ellipsis";
+      const t = document.createElement("span");
+      t.className = "num muted";
+      t.textContent = clock(Date.parse(now.start));
+      e.append(t, ` ${now.title}`);
       meta.append(e);
+
+      const bar = document.createElement("span");
+      bar.className = "prog";
+      const fill = document.createElement("span");
+      fill.style.width = `${(programmeProgress(Date.now(), Date.parse(now.start), Date.parse(now.stop)) * 100).toFixed(1)}%`;
+      bar.append(fill);
+      meta.append(bar);
     }
+    if (next) nextText = `${clock(Date.parse(next.start))}  ${next.title}`;
   }
   card.append(meta);
+
+  const nextEl = document.createElement("span");
+  nextEl.className = "row-next ellipsis muted num";
+  nextEl.textContent = nextText;
+  card.append(nextEl);
 
   const star = document.createElement("button");
   const fav = isFavorite(favorites, c);
@@ -1614,6 +1634,12 @@ function renderContinue(): void {
 
     const frame = document.createElement("div");
     frame.className = "continue-frame";
+    // Монограмма — пока нет логотипа или он не загрузился: пустая серая
+    // плашка выглядела поломкой.
+    const mark = document.createElement("span");
+    mark.className = "continue-mark";
+    mark.textContent = c.name.trim().slice(0, 2).toUpperCase();
+    frame.append(mark);
     if (c.logo) {
       const img = document.createElement("img");
       img.src = c.logo;
@@ -1625,7 +1651,7 @@ function renderContinue(): void {
     const prog = epg && snapshot ? getNowNext(epg, c, snapshot).now : null;
     if (prog) {
       const live = document.createElement("span");
-      live.className = "live";
+      live.className = "live on-video";
       live.textContent = "Эфир";
       frame.append(live);
 
@@ -2047,8 +2073,10 @@ function renderPlaylistSwitcher(): void {
   const active = activePlaylist(plState);
   plSwitch.hidden = !active;
   if (!active) return;
-  plSwitchBtn.innerHTML = iconMarkup("tv");
-  plSwitchBtn.append(` ${active.name}`);
+  plSwitchName.textContent = active.name;
+  // Видимый текст — название, а имя кнопки для скринридера — её действие
+  plSwitchBtn.setAttribute("aria-label", `Плейлист «${active.name}», переключить`);
+  plSwitchCount.textContent = snapshot ? channelsWord(snapshot.channels.length) : "";
   plSwitchMenu.textContent = "";
   for (const p of plState.items) {
     const b = document.createElement("button");
@@ -2160,20 +2188,24 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
 
   renderCategories();
   renderChannels();
-  epgNow.textContent = `Каналов: ${snapshot.channels.length} · Категорий: ${snapshot.categories.length}`;
+  renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
+  // Служебная строка нужна, только пока что-то грузится или не удалось:
+  // счётчики «Каналов: N · Категорий: M» уже видны в шапке и у категорий.
+  epgNow.hidden = true;
 
   const finalEpgUrl = epgUrl ?? snapshot.headerTvgUrl;
   if (finalEpgUrl) {
-    epgNow.textContent += " · Загрузка телепрограммы…";
+    epgNow.hidden = false;
+    epgNow.textContent = "Загружаем телепрограмму…";
     loadEpg(finalEpgUrl)
       .then((parsed) => {
         epg = parsed;
         renderChannels();
         refreshNowFav();
-        epgNow.textContent = `Каналов: ${snapshot!.channels.length} · Категорий: ${snapshot!.categories.length} · EPG`;
+        epgNow.hidden = true;
       })
       .catch(() => {
-        epgNow.textContent = `Каналов: ${snapshot!.channels.length} · Категорий: ${snapshot!.categories.length} · EPG недоступен`;
+        epgNow.textContent = "Телепрограмма не загрузилась — каналы работают без неё";
       });
   }
 }
