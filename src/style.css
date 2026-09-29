@@ -378,6 +378,11 @@ html, body {
   .watch .side-item { justify-content: center; padding: 0; }
   .watch .side-item > span { display: none; }
   .watch .categories { display: none; }
+  /* Взамен скрытых чипов — компактный выбор категории над списком */
+  #app.watch #cat-picker:not([hidden]) { display: block; }
+  /* Театральный режим в режиме просмотра бессмыслен: плеер и так занимает
+     большую часть экрана, а кнопка дублировала бы полный экран. */
+  #app.watch .player-bar:not(.theater) #btn-expand { display: none; }
 }
 @media (max-width: 720px) {
   .layout { grid-template-columns: 1fr; }
@@ -601,6 +606,9 @@ video { cursor: pointer; }
 
 /* Кнопка качества + выпадающее меню в палитре сайта */
 .quality-wrap { position: relative; }
+.cat-picker { position: relative; display: none; margin-bottom: var(--space-3); }
+/* Раскрывается вниз: над ним заголовок раздела, а не край окна */
+.cat-menu { top: calc(100% + 6px); bottom: auto; }
 /* Только позиционирование: вид меню задаёт .menu дизайн-системы */
 .quality-menu {
   position: absolute;

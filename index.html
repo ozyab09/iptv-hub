@@ -93,6 +93,12 @@
             <!-- Экран 2: основной — список каналов раздела -->
             <section id="player-screen" class="screen" hidden>
               <h2 id="view-title" class="t-heading view-title">Каналы</h2>
+              <!-- Выбор категории в режиме просмотра: сайдбар там сжат
+                   в рельс, и списку чипов места не остаётся. -->
+              <div id="cat-picker" class="cat-picker" hidden>
+                <button id="btn-categories" class="btn btn-sm" aria-haspopup="listbox" aria-expanded="false">Все</button>
+                <div id="cat-menu" class="quality-menu menu cat-menu" role="listbox" hidden></div>
+              </div>
               <div id="epg-now" class="epg-now" hidden></div>
               <div id="channel-list" class="channel-list" role="list"></div>
               <div id="empty-state" class="muted" hidden>Ничего не найдено</div>

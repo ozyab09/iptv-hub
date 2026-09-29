@@ -142,6 +142,9 @@ const importFile = $<HTMLInputElement>("import-file");
 const sideNav = $("side-nav");
 const tabbar = $("tabbar");
 const viewTitle = $("view-title");
+const catPicker = $("cat-picker");
+const btnCategories = $<HTMLButtonElement>("btn-categories");
+const catMenu = $("cat-menu");
 const btnPause = $<HTMLButtonElement>("btn-pause");
 const btnPrev = $<HTMLButtonElement>("btn-prev");
 const btnNext = $<HTMLButtonElement>("btn-next");
@@ -325,6 +328,7 @@ function setView(view: View, persist = true): void {
     btnBackToPlayer.hidden = !activePlaylist(plState);
   }
   categoriesNav.hidden = !showsCategories(view);
+  catPicker.hidden = !showsCategories(view);
   // Категория — фильтр раздела «Каналы»; в избранном и недавних она
   // прятала бы половину списка без видимой причины.
   if (!showsCategories(view)) activeCategory = null;
@@ -354,17 +358,51 @@ function renderCategories(): void {
     });
     return b;
   };
-  categoriesNav.append(
-    mk("Все", null, snapshot.channels.length),
-    ...snapshot.categories.map((g) =>
-      mk(
-        g,
-        g,
-        snapshot!.channels.filter((c) => c.group === g).length,
-      ),
+  const entries: Array<[string, string | null, number]> = [
+    ["Все", null, snapshot.channels.length],
+    ...snapshot.categories.map(
+      (g) =>
+        [g, g, snapshot!.channels.filter((c) => c.group === g).length] as [
+          string,
+          string,
+          number,
+        ],
     ),
-  );
+  ];
+  categoriesNav.append(...entries.map(([l, v, n]) => mk(l, v, n)));
+
+  // Тот же список пунктами меню — для режима просмотра, где чипов нет.
+  catMenu.textContent = "";
+  for (const [label, value, count] of entries) {
+    const item = document.createElement("button");
+    item.className = menuItemClass(activeCategory === value);
+    item.setAttribute("role", "option");
+    item.textContent = `${label} (${count})`;
+    item.addEventListener("click", () => {
+      activeCategory = value;
+      catMenu.hidden = true;
+      btnCategories.setAttribute("aria-expanded", "false");
+      renderCategories();
+      renderChannels();
+    });
+    catMenu.append(item);
+  }
+  const current = entries.find(([, v]) => v === activeCategory);
+  btnCategories.textContent = current ? current[0] : "Все";
 }
+
+btnCategories.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = catMenu.hidden;
+  catMenu.hidden = !willOpen;
+  btnCategories.setAttribute("aria-expanded", String(willOpen));
+});
+document.addEventListener("click", (e) => {
+  if (!catMenu.hidden && !catPicker.contains(e.target as Node)) {
+    catMenu.hidden = true;
+    btnCategories.setAttribute("aria-expanded", "false");
+  }
+});
 
 // ---------- Рендер каналов (виртуализированный) ----------
 /** Карточки держим живыми только в видимом окне; остальное — спейсер. */
