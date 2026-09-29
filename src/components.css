@@ -184,6 +184,55 @@
 .prog-row.now { background: var(--accent-soft); }
 .prog-row.now .time { color: var(--accent); font-weight: 600; }
 
+/* ---- навигация ---- */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-around;
+  padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  z-index: 55;
+}
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: 80px;
+  padding-top: var(--space-1);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.tab.on { color: var(--text); }
+.tab.on .i { color: var(--accent); }
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 40px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  width: 100%;
+  cursor: pointer;
+}
+.side-item .n { margin-left: auto; font-size: 12px; font-weight: 400; }
+.side-item.on { background: var(--surface-2); color: var(--text); }
+.side-item.on .i { color: var(--accent); }
+
 /* ---- группы настроек ---- */
 .group { background: var(--surface-1); border-radius: var(--radius-lg); overflow: hidden; }
 .item {

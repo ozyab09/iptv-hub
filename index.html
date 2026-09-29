@@ -43,61 +43,64 @@
       </header>
 
       <main id="main">
-        <!-- Экран 1: стартовый — менеджер плейлистов -->
-        <section id="setup-screen" class="screen">
-          <div class="card">
-            <h1><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg> IPTV Hub</h1>
-            <p class="muted">
-              Self-hosted плеер для ваших плейлистов. Ссылки хранятся <b>только в этом браузере</b>.
-            </p>
-            <div id="pl-list" class="pl-list"></div>
-            <button id="btn-back-to-player" class="primary" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg> Вернуться к просмотру</button>
-            <div class="pl-io">
-              <button id="btn-export" class="icon-btn io-btn" title="Экспорт настроек в JSON" aria-label="Экспорт настроек"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg> Экспорт</button>
-              <button id="btn-import" class="icon-btn io-btn" title="Импорт настроек из JSON" aria-label="Импорт настроек"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg> Импорт</button>
-              <input id="import-file" type="file" accept="application/json,.json" hidden />
-            </div>
-            <div class="pl-form">
-              <label for="setup-name">Название</label>
-              <input id="setup-name" type="text" placeholder="Мой IPTV" />
-              <label for="setup-playlist">URL плейлиста (M3U)</label>
-              <input id="setup-playlist" type="url" placeholder="https://…/playlist.m3u" required />
-              <label for="setup-epg">URL телепрограммы (XMLTV, опционально)</label>
-              <input id="setup-epg" type="url" placeholder="https://…/epg.xml.gz (необязательно)" />
-              <button id="setup-load" class="primary">Добавить и открыть</button>
-            </div>
-            <p id="setup-error" class="error" hidden></p>
-            <details class="hint">
-              <summary>Как это работает</summary>
-              <ul>
-                <li>Приложение — статика (GitHub Pages), бэкенда нет.</li>
-                <li>Плейлистов может быть несколько — переключение в шапке.</li>
-                <li>Избранное у каждого плейлиста своё.</li>
-                <li>На бакете должен быть включён CORS (см. README).</li>
-              </ul>
-            </details>
-          </div>
-        </section>
-
-        <!-- Экран 2: основной — каналы + плеер -->
-        <section id="player-screen" class="screen" hidden>
-          <div class="layout">
-            <aside class="sidebar">
-              <button id="btn-favorites" class="chip fav-toggle" aria-pressed="false" title="Показать только избранные"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg> Показать избранное</button>
-              <nav id="categories" class="categories" aria-label="Категории"></nav>
-            </aside>
-            <div>
-              <div id="epg-now" class="epg-now" hidden></div>
-              <div id="recents-block" class="recents-block" hidden>
-                <div class="recents-title muted">Недавно просмотренные</div>
-                <div id="recents-list" class="recents-list"></div>
+        <!-- Раскладка живёт ВЫШЕ экранов: иначе на «Настройках» вместе
+             с экраном пропадала бы и навигация по разделам. -->
+        <div class="layout">
+          <aside class="sidebar">
+            <nav id="side-nav" class="side-nav" aria-label="Разделы"></nav>
+            <nav id="categories" class="categories" aria-label="Категории"></nav>
+          </aside>
+          <div class="screens">
+            <!-- Экран 1: стартовый — менеджер плейлистов -->
+            <section id="setup-screen" class="screen">
+              <div class="card">
+                <h1><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg> IPTV Hub</h1>
+                <p class="muted">
+                  Self-hosted плеер для ваших плейлистов. Ссылки хранятся <b>только в этом браузере</b>.
+                </p>
+                <div id="pl-list" class="pl-list"></div>
+                <button id="btn-back-to-player" class="primary" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg> Вернуться к просмотру</button>
+                <div class="pl-io">
+                  <button id="btn-export" class="icon-btn io-btn" title="Экспорт настроек в JSON" aria-label="Экспорт настроек"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg> Экспорт</button>
+                  <button id="btn-import" class="icon-btn io-btn" title="Импорт настроек из JSON" aria-label="Импорт настроек"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg> Импорт</button>
+                  <input id="import-file" type="file" accept="application/json,.json" hidden />
+                </div>
+                <div class="pl-form">
+                  <label for="setup-name">Название</label>
+                  <input id="setup-name" type="text" placeholder="Мой IPTV" />
+                  <label for="setup-playlist">URL плейлиста (M3U)</label>
+                  <input id="setup-playlist" type="url" placeholder="https://…/playlist.m3u" required />
+                  <label for="setup-epg">URL телепрограммы (XMLTV, опционально)</label>
+                  <input id="setup-epg" type="url" placeholder="https://…/epg.xml.gz (необязательно)" />
+                  <button id="setup-load" class="primary">Добавить и открыть</button>
+                </div>
+                <p id="setup-error" class="error" hidden></p>
+                <details class="hint">
+                  <summary>Как это работает</summary>
+                  <ul>
+                    <li>Приложение — статика (GitHub Pages), бэкенда нет.</li>
+                    <li>Плейлистов может быть несколько — переключение в шапке.</li>
+                    <li>Избранное у каждого плейлиста своё.</li>
+                    <li>На бакете должен быть включён CORS (см. README).</li>
+                  </ul>
+                </details>
               </div>
+            </section>
+
+            <!-- Экран 2: основной — список каналов раздела -->
+            <section id="player-screen" class="screen" hidden>
+              <h2 id="view-title" class="t-heading view-title">Каналы</h2>
+              <div id="epg-now" class="epg-now" hidden></div>
               <div id="channel-list" class="channel-list" role="list"></div>
               <div id="empty-state" class="muted" hidden>Ничего не найдено</div>
-            </div>
+            </section>
           </div>
-        </section>
+        </div>
       </main>
+
+      <!-- Навигация по разделам: таб-бар на телефоне, сайдбар на десктопе.
+           Содержимое обоих строится из VIEWS в src/views.ts. -->
+      <nav id="tabbar" class="tabbar" aria-label="Разделы"></nav>
 
       <!-- Плеер: закреплён снизу (мобайл-first), разворачивается в полноэкранный театр -->
       <div id="player-bar" class="player-bar" hidden>

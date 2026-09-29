@@ -2,6 +2,15 @@ import "./style.css";
 import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
 import {
+  channelsForView,
+  emptyMessage,
+  parseView,
+  showsCategories,
+  showsChannelList,
+  VIEWS,
+  type View,
+} from "./views";
+import {
   channelRowClass,
   chipClass,
   menuItemClass,
@@ -129,9 +138,9 @@ const btnRetry = $<HTMLButtonElement>("btn-retry");
 const btnExport = $<HTMLButtonElement>("btn-export");
 const btnImport = $<HTMLButtonElement>("btn-import");
 const importFile = $<HTMLInputElement>("import-file");
-const recentsBlock = $("recents-block");
-const recentsList = $("recents-list");
-const btnFavorites = $<HTMLButtonElement>("btn-favorites");
+const sideNav = $("side-nav");
+const tabbar = $("tabbar");
+const viewTitle = $("view-title");
 const btnPause = $<HTMLButtonElement>("btn-pause");
 const btnPrev = $<HTMLButtonElement>("btn-prev");
 const btnNext = $<HTMLButtonElement>("btn-next");
@@ -170,7 +179,10 @@ let plState: PlaylistsState = loadPlaylists(
 let favKey: string | null = null; // favoritesKey(id) активного плейлиста (legacy)
 void favKey;
 let favorites = new Set<string>();
-let favFilter = false;
+const VIEW_KEY = "iptv-hub.view.v1";
+let activeView: View = parseView(
+  typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null,
+);
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
 /**
@@ -238,36 +250,22 @@ function showToastAction(
 }
 
 function showSetup(message?: string): void {
+  setView("settings", false);
   if (message) {
     setupError.textContent = message;
     setupError.hidden = false;
   }
-  playerScreen.hidden = true;
-  setupScreen.hidden = false;
 }
 
+/** Вернуться из настроек в последний список каналов. */
 function showPlayer(): void {
-  setupScreen.hidden = true;
-  playerScreen.hidden = false;
-}
-
-/** Экран менеджера плейлистов (плеер продолжает играть в фоне). */
-function showManager(): void {
-  setupError.hidden = true;
-  renderPlaylistManager();
-  renderPlaylistSwitcher();
-  btnBackToPlayer.hidden = !activePlaylist(plState);
-  playerScreen.hidden = true;
-  setupScreen.hidden = false;
+  setView(activeView === "settings" ? "channels" : activeView);
 }
 
 btnManage.addEventListener("click", () => {
-  const wasHidden = playerScreen.hidden;
-  if (wasHidden) {
-    showPlayer(); // менеджер уже открыт — сворачиваем обратно
-  } else {
-    showManager();
-  }
+  // Кнопка в шапке — тот же раздел «Настройки», что и вкладка; повторное
+  // нажатие возвращает к каналам.
+  setView(activeView === "settings" ? "channels" : "settings");
 });
 
 btnBackToPlayer.addEventListener("click", () => {
@@ -276,15 +274,70 @@ btnBackToPlayer.addEventListener("click", () => {
   else showSetup();
 });
 
+// ---------- Разделы ----------
+/** Кнопка раздела: одна и та же модель для таб-бара и сайдбара. */
+function navButton(view: (typeof VIEWS)[number], cls: string): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.className = activeView === view.id ? `${cls} on` : cls;
+  b.setAttribute("aria-current", activeView === view.id ? "page" : "false");
+  b.innerHTML = iconMarkup(view.icon);
+  const label = document.createElement("span");
+  label.textContent = view.label;
+  b.append(label);
+  b.addEventListener("click", () => setView(view.id));
+  return b;
+}
+
+function renderNav(): void {
+  tabbar.textContent = "";
+  sideNav.textContent = "";
+  for (const v of VIEWS) {
+    tabbar.append(navButton(v, "tab"));
+    sideNav.append(navButton(v, "side-item"));
+  }
+  viewTitle.textContent = VIEWS.find((v) => v.id === activeView)?.label ?? "";
+}
+
+/**
+ * Переключить раздел: и экран, и видимость фильтров, и список.
+ *
+ * `persist: false` — для вынужденных переходов (плейлист не настроен, значит
+ * показываем настройки). Такой переход не должен затирать раздел, который
+ * пользователь выбрал сам, иначе выбор теряется при каждом пустом старте.
+ */
+function setView(view: View, persist = true): void {
+  activeView = view;
+  if (persist) {
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      /* приватный режим */
+    }
+  }
+  const settings = view === "settings";
+  setupScreen.hidden = !settings;
+  playerScreen.hidden = settings;
+  if (settings) {
+    setupError.hidden = true;
+    renderPlaylistManager();
+    renderPlaylistSwitcher();
+    btnBackToPlayer.hidden = !activePlaylist(plState);
+  }
+  categoriesNav.hidden = !showsCategories(view);
+  // Категория — фильтр раздела «Каналы»; в избранном и недавних она
+  // прятала бы половину списка без видимой причины.
+  if (!showsCategories(view)) activeCategory = null;
+  renderNav();
+  if (showsChannelList(view) && snapshot) {
+    renderCategories();
+    renderChannels();
+  }
+}
+
 // ---------- Рендер категорий ----------
 function renderCategories(): void {
   if (!snapshot) return;
   categoriesNav.textContent = "";
-  btnFavorites.classList.toggle("on", favFilter);
-  btnFavorites.setAttribute("aria-pressed", String(favFilter));
-  // innerHTML, а не textContent: иначе затрётся иконка внутри кнопки
-  btnFavorites.innerHTML = iconMarkup(favFilter ? "star-on" : "star");
-  btnFavorites.append(favFilter ? " Показать все" : " Показать избранное");
   const mk = (label: string, value: string | null, count: number) => {
     const b = document.createElement("button");
     b.textContent = label;
@@ -366,7 +419,8 @@ window.addEventListener("resize", () => {
 function renderChannels(): void {
   if (!snapshot) return;
   const q = searchInput.value.trim().toLowerCase();
-  const list = snapshot.channels.filter((c) => {
+  const inView = channelsForView(activeView, snapshot.channels, favorites, recents);
+  const list = inView.filter((c) => {
     if (activeCategory && c.group !== activeCategory) return false;
     if (!q) return true;
     return (
@@ -375,8 +429,12 @@ function renderChannels(): void {
       c.group.toLowerCase().includes(q)
     );
   });
-  const sorted = applyFavorites(list, favorites, favFilter);
+  // «Недавние» уже в порядке просмотра — пересортировка сделала бы раздел
+  // бессмысленным; в остальных избранное поднимается наверх.
+  const sorted =
+    activeView === "recents" ? list : applyFavorites(list, favorites, false);
   visibleChannels = sorted;
+  emptyState.textContent = emptyMessage(activeView, q !== "");
   emptyState.hidden = sorted.length > 0;
   ensureVirtualShell();
   // при смене фильтра сбрасываем прокрутку, чтобы окно пересчиталось с нуля
@@ -472,7 +530,8 @@ function playChannel(c: Channel): void {
         JSON.stringify(recents),
       );
     } catch { /* приватный режим */ }
-    renderRecents();
+    // Раздел «Недавние» показывает этот список — обновляем, если он открыт.
+    if (activeView === "recents") renderChannels();
   }
   nowTitle.textContent = c.name;
   nowTitle.title = c.url; // ссылка на поток текущего канала
@@ -1354,22 +1413,6 @@ document.addEventListener("fullscreenchange", () => {
 searchInput.addEventListener("input", () => renderChannels());
 
 // ---------- Недавно просмотренные ----------
-function renderRecents(): void {
-  const urls = recents.filter((u) => visibleChannels.some((c) => c.url === u));
-  recentsBlock.hidden = urls.length === 0;
-  recentsList.textContent = "";
-  for (const url of urls) {
-    const ch = visibleChannels.find((c) => c.url === url);
-    if (!ch) continue;
-    const chip = document.createElement("button");
-    chip.className = "recent-chip";
-    chip.textContent = ch.name;
-    chip.title = ch.group;
-    chip.addEventListener("click", () => playChannel(ch));
-    recentsList.append(chip);
-  }
-}
-
 function loadRecentsFor(id: string): void {
   try {
     const raw = localStorage.getItem(`iptv-hub.recents.v1:${id}`);
@@ -1380,7 +1423,6 @@ function loadRecentsFor(id: string): void {
   } catch {
     recents = [];
   }
-  renderRecents();
 }
 
 // ---------- Тема ----------
@@ -1400,12 +1442,6 @@ btnTheme.addEventListener("click", () => {
 });
 
 // ---------- Избранное ----------
-btnFavorites.addEventListener("click", () => {
-  favFilter = !favFilter;
-  renderCategories();
-  renderChannels();
-});
-
 /** Загрузить избранное по ключу плейлиста (localStorage, нестандартный ключ). */
 function loadFavoritesFor(id: string): Set<string> {
   try {
@@ -1433,7 +1469,6 @@ function activatePlaylist(id: string): void {
   plState = { ...plState, activeId: id };
   savePlaylists(localStorage, plState);
   favorites = loadFavoritesFor(id);
-  favFilter = false;
   loadRecentsFor(id);
   const pl = activePlaylist(plState);
   if (pl) {
@@ -1798,4 +1833,7 @@ window.addEventListener("offline", () => {
 });
 window.addEventListener("online", () => showToast("Сеть вернулась"));
 
+// Навигация рисуется до загрузки плейлиста: пустой таб-бар в первые секунды
+// выглядел бы поломкой.
+renderNav();
 bootstrap();

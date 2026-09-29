@@ -26,6 +26,7 @@ export const ICONS: Record<string, string> = {
   music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
   subtitles: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M6.5 14h4M13.5 14h4"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.2 2"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   record: '<circle cx="12" cy="12" r="6.5"/>',
   play: '<path d="M8 5.5v13l11-6.5Z"/>',

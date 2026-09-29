@@ -141,7 +141,26 @@ html, body {
   min-height: 100%;
 }
 
-#app { max-width: 1200px; margin: 0 auto; padding: 0 16px 96px; }
+#app { max-width: 1200px; margin: 0 auto; padding: 0 var(--space-5) 96px; }
+
+/* Навигация по разделам. Таб-бар — телефонная, сайдбар — десктопная:
+   показан ровно один, иначе одни и те же кнопки дублировались бы. */
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-4);
+}
+.tabbar { display: none; }
+.view-title { margin: 0 0 var(--space-3); }
+
+@media (max-width: 719px) {
+  .side-nav { display: none; }
+  .tabbar { display: flex; }
+  /* место под таб-бар, чтобы он не накрывал конец списка */
+  #app { padding-bottom: 148px; }
+  .view-title { display: none; } /* вкладка и так подписана */
+}
 
 /* ---------- topbar ---------- */
 .topbar {
@@ -179,6 +198,7 @@ html, body {
 [hidden] { display: none !important; }
 
 .screen[hidden] { display: none; }
+.screens { min-width: 0; }
 
 .card {
   padding: 20px;
@@ -612,28 +632,6 @@ video { cursor: pointer; }
 }
 
 /* Недавно просмотренные */
-.recents-block { margin-bottom: 12px; }
-.recents-title { font-size: 12px; margin-bottom: 6px; }
-.recents-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.recent-chip {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text);
-  padding: 5px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.recent-chip:hover { border-color: var(--accent2); }
 
 .pl-form { display: flex; flex-direction: column; }
 .pl-form label {
