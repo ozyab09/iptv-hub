@@ -388,7 +388,6 @@ html, body {
   .watch .player-bar:not(.theater) {
     --frame-w: calc(62vh * 16 / 9);
   }
-  #app.watch #btn-toggle-list { display: inline-flex; }
   .watch .player-bar:not(.theater) video {
     aspect-ratio: 16 / 9;
     height: auto;
@@ -405,16 +404,6 @@ html, body {
     gap: var(--space-3);
     padding-top: 0;
   }
-
-  /* Список убран: плеер занимает всё, кроме рельса навигации. Смотреть
-     на весь экран — не то же самое, что полноэкранный режим: рельс
-     остаётся, и разделы под рукой. */
-  #app.watch.list-hidden {
-    --player-w: calc(100vw - var(--rail-w) - var(--space-6) - var(--space-5) * 2);
-  }
-  #app.watch.list-hidden .layout { grid-template-columns: var(--rail-w); }
-  #app.watch.list-hidden .screens { display: none; }
-  #app.watch.list-hidden #btn-toggle-list { background: rgba(255, 255, 255, 0.24); }
 
   /* Сайдбар сворачивается в рельс: место нужнее списку и плееру */
   .watch .layout { grid-template-columns: var(--rail-w) var(--list-w); }
@@ -586,8 +575,6 @@ html, body {
 .video-actions-right { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 .video .volume { display: flex; align-items: center; gap: var(--space-2); }
 .video .quality-btn { background: rgba(255, 255, 255, 0.12); border: 0; color: #fff; }
-/* Прятать список имеет смысл только там, где он занимает место рядом */
-#btn-toggle-list { display: none; }
 
 .player-bar video {
   /* Канал открывают, чтобы смотреть: видео видно сразу, без лишнего действия */
