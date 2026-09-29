@@ -1,5 +1,46 @@
 import { describe, it, expect } from "vitest";
-import { neighborIndex, shouldRetryNetwork, skipTarget } from "../src/player";
+import {
+  httpToHttps,
+  neighborIndex,
+  shouldRetryNetwork,
+  skipTarget,
+} from "../src/player";
+
+describe("httpToHttps (mixed content rescue)", () => {
+  it("upgrades public http URLs", () => {
+    expect(httpToHttps("http://cdn.example.com/live.m3u8")).toBe(
+      "https://cdn.example.com/live.m3u8",
+    );
+    expect(httpToHttps("http://cdn.example.com:80/live.m3u8?tok=1")).toBe(
+      "https://cdn.example.com/live.m3u8?tok=1",
+    );
+  });
+
+  it("keeps explicit non-80 ports", () => {
+    expect(httpToHttps("http://cdn.example.com:8080/live.m3u8")).toBe(
+      "https://cdn.example.com:8080/live.m3u8",
+    );
+  });
+
+  it("returns null for local/private hosts (no TLS expected)", () => {
+    expect(httpToHttps("http://localhost:5173/x.m3u8")).toBeNull();
+    expect(httpToHttps("http://127.0.0.1/x.m3u8")).toBeNull();
+    expect(httpToHttps("http://[::1]/x.m3u8")).toBeNull();
+    expect(httpToHttps("http://10.0.0.5/x.m3u8")).toBeNull();
+    expect(httpToHttps("http://192.168.1.10:8000/x.m3u8")).toBeNull();
+    expect(httpToHttps("http://172.16.0.1/x.m3u8")).toBeNull();
+    expect(httpToHttps("http://172.31.255.1/x.m3u8")).toBeNull();
+    expect(httpToHttps("http://mybox.local/x.m3u8")).toBeNull();
+  });
+
+  it("returns null for non-http schemes and garbage", () => {
+    expect(httpToHttps("https://a.tv/x.m3u8")).toBeNull();
+    expect(httpToHttps("ftp://a.tv/x")).toBeNull();
+    expect(httpToHttps("javascript:alert(1)")).toBeNull();
+    expect(httpToHttps("not a url")).toBeNull();
+    expect(httpToHttps("")).toBeNull();
+  });
+});
 
 describe("shouldRetryNetwork", () => {
   it("даёт несколько попыток восстановиться", () => {
