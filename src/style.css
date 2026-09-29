@@ -322,7 +322,14 @@ html, body {
      то есть селектором по id — он перебил бы класс, и отступ под плеер
      просто не применился бы. */
   #app.watch {
-    --player-w: clamp(460px, 42vw, 720px);
+    /* Ширины из дизайн-системы: рельс 72, колонка каналов 368, а плеер
+       забирает ВСЁ остальное. Наоборот не годится — список из коротких
+       строк растягивался бы на полэкрана, оставляя плееру огрызок. */
+    --rail-w: 72px;
+    --list-w: 368px;
+    --player-w: calc(
+      100vw - var(--rail-w) - var(--list-w) - var(--space-6) - var(--space-5) * 2
+    );
     /* Страница раздвигается на всё окно: при max-width 1200 плеер вставал
        у края экрана, а список упирался в край макета — между ними зияла
        пустая полоса тем шире, чем больше монитор. */
@@ -344,7 +351,15 @@ html, body {
     padding: var(--space-6);
     overflow-y: auto;
   }
-  .watch .player-bar:not(.theater) video { max-height: 52vh; }
+  /* Кадр 16:9 по высоте окна: width:100% в широкой колонке давал бы
+     чёрные поля по бокам вместо картинки. */
+  .watch .player-bar:not(.theater) video {
+    aspect-ratio: 16 / 9;
+    height: auto;
+    max-height: 62vh;
+    max-width: min(100%, calc(62vh * 16 / 9));
+    margin-inline: auto;
+  }
 
   /* В узкой высокой колонке три зоны в строку не помещаются — ставим в столбец */
   .watch .player-bar:not(.theater) .player-bar-row {
@@ -358,10 +373,11 @@ html, body {
     justify-content: center;
     flex-wrap: wrap;
   }
-  .watch .player-bar:not(.theater) .now-playing { text-align: center; }
+  .watch .player-bar:not(.theater) .now-playing { flex: none; text-align: center; }
+  .watch .player-bar:not(.theater) .volume { flex: none; }
 
   /* Сайдбар сворачивается в рельс: место нужнее списку и плееру */
-  .watch .layout { grid-template-columns: 72px 1fr; }
+  .watch .layout { grid-template-columns: var(--rail-w) var(--list-w); }
   .watch .side-item { justify-content: center; padding: 0; }
   .watch .side-item > span { display: none; }
   .watch .categories { display: none; }
