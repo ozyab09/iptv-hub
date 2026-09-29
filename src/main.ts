@@ -23,7 +23,11 @@ import {
 } from "./favorites";
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
-import { computeWindow, spacerHeight } from "./virtual-list";
+import {
+  columnsForWidth,
+  computeWindow,
+  spacerHeight,
+} from "./virtual-list";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -296,19 +300,35 @@ function ensureVirtualShell(): void {
 function renderVirtualWindow(): void {
   if (!virtualInner || !virtualSpacer) return;
   const vh = channelList.clientHeight || 600;
+  // Колонки сетки зависят от ширины контейнера (как auto-fill в CSS).
+  const cols = columnsForWidth(channelList.clientWidth || 360);
   const win = computeWindow(
     channelList.scrollTop,
     vh,
     visibleChannels.length,
+    undefined,
+    undefined,
+    cols,
   );
-  virtualSpacer.style.height = `${spacerHeight(visibleChannels.length)}px`;
+  virtualSpacer.style.height = `${spacerHeight(visibleChannels.length, undefined, cols)}px`;
   virtualInner.style.transform = `translateY(${win.offset}px)`;
   virtualInner.textContent = "";
-  for (let i = win.start; i < win.start + win.count; i++) {
+  // win.count — это СТРОКИ сетки; карточек в строке до cols, рендерим с запасом.
+  const first = win.start * cols;
+  const last = Math.min(visibleChannels.length, first + win.count * cols);
+  for (let i = first; i < last; i++) {
     const c = visibleChannels[i];
     if (c) virtualInner.append(renderChannelCard(c));
   }
 }
+
+// Поворот экрана / resize меняет ширину контейнера (число колонок) и питч —
+// пересчитываем окно, иначе спейсер остаётся со старой высотой и карточки
+// наезжают друг на друга (issue #62).
+window.addEventListener("resize", () => {
+  if (playerScreen.hidden) return;
+  renderVirtualWindow();
+});
 
 function renderChannels(): void {
   if (!snapshot) return;
