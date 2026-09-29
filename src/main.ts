@@ -138,6 +138,7 @@ const progStart = $("prog-start");
 const progEnd = $("prog-end");
 const btnLive = $<HTMLButtonElement>("btn-live");
 const miniProgFill = $("mini-prog-fill");
+const btnToggleList = $<HTMLButtonElement>("btn-toggle-list");
 const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
 const nowTitle = $("now-title");
@@ -747,9 +748,14 @@ window.addEventListener("keydown", (e) => {
       break;
     case "c":
     case "с": // ru-раскладка
-      // Возврат к списку: на телефоне сворачиваем плеер, иначе прокрутка
-      // к списку под развёрнутым плеером ничего бы не показала.
       e.preventDefault();
+      if (appEl.classList.contains("watch") && !isPhone()) {
+        // В режиме просмотра C — это ящик каналов: прячем или возвращаем.
+        setListHidden(!appEl.classList.contains("list-hidden"));
+        break;
+      }
+      // Иначе просто возврат к списку: на телефоне сворачиваем плеер, иначе
+      // прокрутка к списку под развёрнутым плеером ничего бы не показала.
       if (isPhone()) togglePlayerPage(false);
       channelList.scrollIntoView({ block: "nearest" });
       (channelList.querySelector("button") as HTMLElement | null)?.focus();
@@ -1222,7 +1228,36 @@ function offerDownload(blob: Blob, name: string): void {
  */
 function setWatching(on: boolean): void {
   appEl.classList.toggle("watch", on);
+  if (!on) setListHidden(false); // закрыли плеер — список обязан вернуться
 }
+
+/**
+ * Скрытие списка каналов в режиме просмотра.
+ *
+ * Выбор запоминается: кто смотрит на весь экран, обычно хочет так и дальше,
+ * а возвращать список каждым переключением канала — лишний клик.
+ */
+const LIST_HIDDEN_KEY = "iptv-hub.listHidden.v1";
+
+function setListHidden(hidden: boolean, persist = true): void {
+  appEl.classList.toggle("list-hidden", hidden);
+  btnToggleList.setAttribute("aria-pressed", String(hidden));
+  btnToggleList.title = hidden
+    ? "Показать список каналов (C)"
+    : "Скрыть список каналов (C)";
+  btnToggleList.setAttribute("aria-label", btnToggleList.title);
+  if (!persist) return;
+  try {
+    localStorage.setItem(LIST_HIDDEN_KEY, String(hidden));
+  } catch {
+    /* приватный режим */
+  }
+}
+
+btnToggleList.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setListHidden(!appEl.classList.contains("list-hidden"));
+});
 
 /** Вид кнопки ⏺ — общий для обоих способов записи. */
 function renderRecButton(active: boolean): void {
@@ -2171,4 +2206,5 @@ window.addEventListener("online", () => showToast("Сеть вернулась")
 // Навигация рисуется до загрузки плейлиста: пустой таб-бар в первые секунды
 // выглядел бы поломкой.
 renderNav();
+setListHidden(localStorage.getItem(LIST_HIDDEN_KEY) === "true", false);
 bootstrap();
