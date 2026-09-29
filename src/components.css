@@ -63,6 +63,16 @@
 }
 .input:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(91, 147, 255, 0.18); }
 
+.kbd {
+  font-size: 11px;
+  line-height: 16px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-weight: 500;
+}
+
 /* ---- чипы ---- */
 .chip {
   display: inline-flex;

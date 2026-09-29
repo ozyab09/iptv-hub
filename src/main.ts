@@ -108,6 +108,7 @@ const $ = <T extends HTMLElement>(id: string): T => {
   return el as T;
 };
 
+const appEl = $("app");
 const setupScreen = $("setup-screen");
 const playerScreen = $("player-screen");
 const setupPlaylist = $<HTMLInputElement>("setup-playlist");
@@ -537,6 +538,7 @@ function playChannel(c: Channel): void {
   nowTitle.title = c.url; // ссылка на поток текущего канала
   nowCategory.textContent = c.group;
   playerBar.hidden = false;
+  setWatching(true);
   refreshNowFav();
   setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
   playerStatus.textContent = "—";
@@ -570,6 +572,7 @@ btnClosePlayer.addEventListener("click", () => {
   if (document.fullscreenElement) void document.exitFullscreen();
   player.stop();
   playerBar.hidden = true;
+  setWatching(false);
   lastPlayed = null;
   renderChannels();
 });
@@ -640,9 +643,19 @@ nowFav.addEventListener("click", () => {
 
 // Горячие клавиши (когда фокус не в инпуте)
 window.addEventListener("keydown", (e) => {
-  if (playerBar.hidden) return;
   const t = e.target as HTMLElement | null;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  const typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA";
+
+  // «/» — поиск. Проверяем code, а не key: в русской раскладке на этой
+  // клавише другой символ, а палец жмёт ту же кнопку.
+  if (e.code === "Slash" && !typing && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    searchInput.focus();
+    searchInput.select();
+    return;
+  }
+
+  if (playerBar.hidden || typing) return;
   switch (e.key) {
     case " ":
       e.preventDefault();
@@ -675,6 +688,21 @@ window.addEventListener("keydown", (e) => {
         e.preventDefault();
         togglePlayerPage(false);
       }
+      break;
+    case "g":
+    case "п": // ru-раскладка
+      e.preventDefault();
+      if (guideOverlay.hidden) openGuide();
+      else guideOverlay.hidden = true;
+      break;
+    case "c":
+    case "с": // ru-раскладка
+      // Возврат к списку: на телефоне сворачиваем плеер, иначе прокрутка
+      // к списку под развёрнутым плеером ничего бы не показала.
+      e.preventDefault();
+      if (isPhone()) togglePlayerPage(false);
+      channelList.scrollIntoView({ block: "nearest" });
+      (channelList.querySelector("button") as HTMLElement | null)?.focus();
       break;
     case "m":
     case "ь": // ru-раскладка
@@ -1133,6 +1161,14 @@ function offerDownload(blob: Blob, name: string): void {
   showToastAction("Автоскачивание не началось?", `Скачать ${name}`, download, 15_000);
 }
 
+/**
+ * Режим просмотра: канал играет. На широком экране по нему раскладка
+ * перестраивается в «список слева, плеер справа».
+ */
+function setWatching(on: boolean): void {
+  appEl.classList.toggle("watch", on);
+}
+
 /** Вид кнопки ⏺ — общий для обоих способов записи. */
 function renderRecButton(active: boolean): void {
   btnRec.classList.toggle("recording", active);
@@ -1367,6 +1403,7 @@ function renderGuide(): void {
         nowTitle.textContent = `${lastPlayed!.name} · архив`;
         nowTitle.title = url;
         playerBar.hidden = false;
+        setWatching(true);
         const refusedCatchup = player.play({ ...lastPlayed!, url });
         if (refusedCatchup) {
           showToast(refusedCatchup);
@@ -1772,6 +1809,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   stopIfRecording();
   player.stop();
   playerBar.hidden = true;
+  setWatching(false);
   lastPlayed = null;
   snapshot = null;
   epg = null;

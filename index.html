@@ -31,7 +31,10 @@
     <div id="app">
       <header class="topbar">
         <a class="brand" href="./" title="На главную"><span class="brand-icon"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></span> IPTV Hub</a>
-        <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
+        <div class="search-wrap">
+          <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
+          <span class="kbd" aria-hidden="true">/</span>
+        </div>
         <div class="topbar-right">
           <button id="btn-manage" class="icon-btn" title="Список плейлистов (управление)" aria-label="Список плейлистов"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-playlist"></use></svg></button>
           <div class="pl-switch" id="pl-switch" hidden>
