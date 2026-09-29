@@ -670,6 +670,12 @@ window.addEventListener("keydown", (e) => {
       player.setVolume(Number(volumeSlider.value) / 100);
       refreshMuteIcon();
       break;
+    case "Escape":
+      if (playerBar.classList.contains("open")) {
+        e.preventDefault();
+        togglePlayerPage(false);
+      }
+      break;
     case "m":
     case "ь": // ru-раскладка
       btnMute.click();
@@ -1387,9 +1393,37 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !guideOverlay.hidden) guideOverlay.hidden = true;
 });
 
-// Театральный режим
-btnExpand.addEventListener("click", () => {
-  playerBar.classList.toggle("theater");
+/**
+ * Телефонная ширина. Должна совпадать с медиазапросом в style.css —
+ * иначе мини-плеер и его поведение разойдутся. Тест сверяет оба числа.
+ */
+const PHONE_BREAKPOINT = 719;
+
+function isPhone(): boolean {
+  return window.matchMedia(`(max-width: ${PHONE_BREAKPOINT}px)`).matches;
+}
+
+/** Развернуть мини-плеер в страницу или свернуть обратно. */
+function togglePlayerPage(open?: boolean): void {
+  const next = open ?? !playerBar.classList.contains("open");
+  playerBar.classList.toggle("open", next);
+  btnExpand.title = next ? "Свернуть плеер" : "Театральный режим";
+}
+
+// Тап по свёрнутому плееру разворачивает его в страницу. Кнопки внутри
+// продолжают работать сами по себе — иначе пауза открывала бы плеер.
+playerBar.addEventListener("click", (e) => {
+  if (!isPhone() || playerBar.classList.contains("open")) return;
+  if ((e.target as HTMLElement).closest("button, input, a")) return;
+  togglePlayerPage(true);
+});
+
+btnExpand.addEventListener("click", (e) => {
+  e.stopPropagation();
+  // На телефоне та же кнопка сворачивает страницу плеера обратно в мини:
+  // театральный режим там не нужен — развёрнутый плеер и так во весь экран.
+  if (isPhone()) togglePlayerPage();
+  else playerBar.classList.toggle("theater");
 });
 
 // Нативный fullscreen: применяем к #player-bar, чтобы контролы остались поверх

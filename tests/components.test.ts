@@ -153,3 +153,26 @@ describe("виртуализация и вёрстка согласованы", 
     expect(style).toMatch(/\.virtual-inner\s*\{[^}]*flex-direction:\s*column/);
   });
 });
+
+describe("мини-плеер", () => {
+  it("телефонная ширина в коде и в CSS — одно число", () => {
+    // Разойдись они, и на промежуточной ширине получится мини-плеер,
+    // который не разворачивается, либо страница без способа свернуться.
+    const fromJs = /const PHONE_BREAKPOINT = (\d+);/.exec(mainTs)?.[1];
+    expect(fromJs, "константа не найдена").toBeDefined();
+    expect(style).toContain(`@media (max-width: ${fromJs}px)`);
+  });
+
+  it("отступ страницы считается от высоты таб-бара, а не от числа", () => {
+    expect(style).toMatch(/--tabbar-h:\s*\d+px/);
+    expect(style).toMatch(/padding-bottom:\s*calc\(var\(--tabbar-h\)/);
+    expect(style).toMatch(/bottom:\s*calc\(var\(--tabbar-h\)/);
+  });
+
+  it("видео больше не скрыто мёртвым классом", () => {
+    // `.player-bar.expanded` показывал видео, но класс никто не выставлял:
+    // канал открывался без картинки (тот же дефект, что чинил PR #65).
+    expect(style).not.toContain(".player-bar.expanded");
+    expect(style).toMatch(/\.player-bar video \{[^}]*display:\s*block/);
+  });
+});

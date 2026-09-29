@@ -61,6 +61,9 @@
   --radius-xl: 24px;
   --radius-full: 999px;
 
+  /* Высота таб-бара: от неё считаются отступ страницы и посадка мини-плеера */
+  --tabbar-h: 64px;
+
   --font-sans: Onest, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Псевдонимы под текущую вёрстку: она ещё на именах v1. Уходят по мере
@@ -156,10 +159,62 @@ html, body {
 
 @media (max-width: 719px) {
   .side-nav { display: none; }
-  .tabbar { display: flex; }
-  /* место под таб-бар, чтобы он не накрывал конец списка */
-  #app { padding-bottom: 148px; }
+  .tabbar { display: flex; min-height: var(--tabbar-h); }
+  /* Место под таб-бар и мини-плеер: иначе конец списка уходит под них */
+  #app { padding-bottom: calc(var(--tabbar-h) + 84px); }
   .view-title { display: none; } /* вкладка и так подписана */
+
+  /* Мини-плеер: пристыкован над таб-баром, разворачивается по тапу.
+     Воспроизведение не должно мешать листать список — в этом весь смысл. */
+  .player-bar:not(.open) {
+    left: var(--space-2);
+    right: var(--space-2);
+    bottom: calc(var(--tabbar-h) + var(--space-2));
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-pop);
+    padding: var(--space-2);
+    cursor: pointer;
+  }
+  .player-bar:not(.open) video {
+    width: 72px;
+    height: 40px;
+    max-height: none;
+    border-radius: 8px;
+    flex: none;
+  }
+  .player-bar:not(.open) .player-bar-row {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+    padding-top: 0;
+  }
+  /* В свёрнутом виде оставляем только название, пауза и закрытие */
+  .player-bar:not(.open) .pb-center > :not(.btn-pause-main),
+  .player-bar:not(.open) .pb-left,
+  /* :not(.now-playing) обязателен: иначе это правило перебивает по
+     специфичности показ названия, и в мини остаётся одна кнопка закрытия */
+  .player-bar:not(.open) .pb-right > :not(#btn-close-player):not(.now-playing) {
+    display: none;
+  }
+  .player-bar:not(.open) .pb-zone { flex: none; }
+  .player-bar:not(.open) .pb-right { flex: 1; min-width: 0; }
+  .player-bar:not(.open) .now-playing { flex: 1; min-width: 0; }
+
+  /* Развёрнутый плеер — отдельная страница поверх всего */
+  .player-bar.open {
+    inset: 0;
+    border: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    z-index: 60;
+  }
+  .player-bar.open video { max-height: 60vh; max-height: 60dvh; }
 }
 
 /* ---------- topbar ---------- */
@@ -360,13 +415,13 @@ html, body {
     max(16px, env(safe-area-inset-left, 0px));
 }
 .player-bar video {
-  display: none;
+  /* Канал открывают, чтобы смотреть: видео видно сразу, без лишнего действия */
+  display: block;
   width: 100%;
   max-height: 62vh;
-  border-radius: var(--radius);
-  background: #000;
+  border-radius: var(--radius-lg);
+  background: var(--video);
 }
-.player-bar.expanded video { display: block; }
 .player-bar-row {
   display: flex;
   align-items: center;
@@ -386,12 +441,14 @@ html, body {
    лево и право в одну полупустую строку — кнопки выдавливались друг
    на друга (issue #62). wrap внутри зоны допустим: перенос — не наезд. */
 @media (max-width: 900px) {
-  .player-bar:not(.theater) {
+  /* :not(.open) — развёрнутая страница плеера занимает экран целиком,
+     общий потолок в 80vh её бы обрезал */
+  .player-bar:not(.theater):not(.open) {
     max-height: 80vh;
     max-height: 80dvh;
     overflow-y: auto;
   }
-  .player-bar:not(.theater) video {
+  .player-bar:not(.theater):not(.open) video {
     /* видео не должно вытеснять контролы за пределы экрана */
     max-height: 38vh;
     max-height: 38dvh;
