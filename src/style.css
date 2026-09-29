@@ -316,11 +316,24 @@ html, body {
    список остаётся слева и продолжает работать. Нижний бар для этого не
    годится — он либо крошечный, либо накрывает список. */
 @media (min-width: 1024px) {
+  /* Ширина колонки плеера — одно значение на всё: и сама колонка, и отступ,
+     который освобождает под неё страницу. */
+  /* #app.watch, а не .watch: базовые padding и max-width заданы через #app,
+     то есть селектором по id — он перебил бы класс, и отступ под плеер
+     просто не применился бы. */
+  #app.watch {
+    --player-w: clamp(460px, 42vw, 720px);
+    /* Страница раздвигается на всё окно: при max-width 1200 плеер вставал
+       у края экрана, а список упирался в край макета — между ними зияла
+       пустая полоса тем шире, чем больше монитор. */
+    max-width: none;
+    padding-right: calc(var(--player-w) + var(--space-5));
+  }
   .watch .player-bar:not(.theater) {
     left: auto;
     top: 0;
     bottom: 0;
-    width: clamp(460px, 46vw, 780px);
+    width: var(--player-w);
     max-height: none;
     border-top: 0;
     border-left: 1px solid var(--border);
@@ -332,7 +345,20 @@ html, body {
     overflow-y: auto;
   }
   .watch .player-bar:not(.theater) video { max-height: 52vh; }
-  .watch #main { margin-right: clamp(460px, 46vw, 780px); }
+
+  /* В узкой высокой колонке три зоны в строку не помещаются — ставим в столбец */
+  .watch .player-bar:not(.theater) .player-bar-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+    padding-top: 0;
+  }
+  .watch .player-bar:not(.theater) .pb-zone {
+    flex: none;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .watch .player-bar:not(.theater) .now-playing { text-align: center; }
 
   /* Сайдбар сворачивается в рельс: место нужнее списку и плееру */
   .watch .layout { grid-template-columns: 72px 1fr; }
