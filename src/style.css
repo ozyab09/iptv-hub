@@ -173,80 +173,6 @@ html, body {
   #app { padding-bottom: calc(var(--tabbar-h) + 84px); }
   .view-title { display: none; } /* вкладка и так подписана */
 
-  /* Мини-плеер: пристыкован над таб-баром, разворачивается по тапу.
-     Воспроизведение не должно мешать листать список — в этом весь смысл. */
-  .player-bar:not(.open) {
-    left: var(--space-2);
-    right: var(--space-2);
-    bottom: calc(var(--tabbar-h) + var(--space-2));
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-2);
-    box-shadow: var(--shadow-pop);
-    padding: var(--space-2);
-    cursor: pointer;
-  }
-  .player-bar:not(.open) video {
-    width: 72px;
-    height: 40px;
-    max-height: none;
-    border-radius: 8px;
-    flex: none;
-  }
-  .player-bar:not(.open) .player-bar-row {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--space-3);
-    padding-top: 0;
-  }
-  /* Свёрнутый вид: превью, пауза, название, закрытие — как в MiniPlayer
-     дизайн-системы. Сцена контролов распрямляется в строку: оверлей на
-     кадре 72×40 был бы нечитаем, а кнопку паузы переиспользуем ту же,
-     чтобы иконка play/pause не рассинхронизировалась. */
-  .player-bar:not(.open) #video-stage {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    background: transparent;
-    overflow: visible;
-    border-radius: 0;
-  }
-  .player-bar:not(.open) #video-stage .top,
-  .player-bar:not(.open) #video-stage .bottom { display: none; }
-  .player-bar:not(.open) #video-stage .center {
-    position: static;
-    inset: auto;
-    flex: none;
-    gap: 0;
-  }
-  .player-bar:not(.open) #btn-seek-back,
-  .player-bar:not(.open) #btn-seek-fwd,
-  .player-bar:not(.open) .pb-center,
-  .player-bar:not(.open) #btn-guide,
-  .player-bar:not(.open) #btn-rec { display: none; }
-  .player-bar:not(.open) #btn-pause.vbtn.big {
-    width: 44px;
-    height: 44px;
-    background: rgba(255, 255, 255, 0.12);
-  }
-  .player-bar:not(.open) .mini-prog { display: block; margin-top: var(--space-2); }
-  .player-bar:not(.open) .pb-zone { flex: none; }
-  .player-bar:not(.open) .pb-left { flex: 1; min-width: 0; }
-  .player-bar:not(.open) .now-playing { flex: 1; min-width: 0; }
-
-  /* Развёрнутый плеер — отдельная страница поверх всего */
-  .player-bar.open {
-    inset: 0;
-    border: 0;
-    border-radius: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    z-index: 60;
-  }
-  .player-bar.open video { max-height: 60vh; max-height: 60dvh; }
 }
 
 /* ---------- topbar ---------- */
@@ -368,43 +294,6 @@ html, body {
     max-width: none;
     padding-right: calc(var(--player-w) + var(--space-5));
   }
-  .watch .player-bar:not(.theater) {
-    left: auto;
-    top: 0;
-    bottom: 0;
-    width: var(--player-w);
-    max-height: none;
-    border-top: 0;
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--space-4);
-    padding: var(--space-6);
-    overflow-y: auto;
-  }
-  /* Кадр 16:9 по высоте окна: width:100% в широкой колонке давал бы
-     чёрные поля по бокам вместо картинки. */
-  .watch .player-bar:not(.theater) {
-    --frame-w: calc(62vh * 16 / 9);
-  }
-  .watch .player-bar:not(.theater) video {
-    aspect-ratio: 16 / 9;
-    height: auto;
-    max-height: 62vh;
-    max-width: min(100%, var(--frame-w));
-    margin-inline: auto;
-  }
-
-  /* Контролы — одной строкой под кадром: колонка плеера широкая, и столбец
-     из трёх рядов только отъедал бы высоту у видео. wrap оставлен на случай
-     узкого окна у нижней границы режима. */
-  .watch .player-bar:not(.theater) .player-bar-row {
-    flex-wrap: wrap;
-    gap: var(--space-3);
-    padding-top: 0;
-  }
-
   /* Сайдбар сворачивается в рельс: место нужнее списку и плееру */
   .watch .layout { grid-template-columns: var(--rail-w) var(--list-w); }
   .watch .side-item { justify-content: center; padding: 0; }
@@ -412,9 +301,6 @@ html, body {
   .watch .categories { display: none; }
   /* Взамен скрытых чипов — компактный выбор категории над списком */
   #app.watch #cat-picker:not([hidden]) { display: block; }
-  /* Театральный режим в режиме просмотра бессмыслен: плеер и так занимает
-     большую часть экрана, а кнопка дублировала бы полный экран. */
-  #app.watch .player-bar:not(.theater) #btn-expand { display: none; }
 }
 @media (max-width: 720px) {
   .layout { grid-template-columns: 1fr; }
@@ -516,25 +402,6 @@ html, body {
 .fav-toggle { margin-bottom: var(--space-2); }
 
 
-/* ---------- player bar ---------- */
-.player-bar {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  z-index: 50;
-  background: var(--bar);
-  border-top: 1px solid var(--border);
-  backdrop-filter: blur(8px);
-  /* safe-area: не залезать под home-indicator и вырезы (viewport-fit=cover) */
-  padding: 8px max(16px, env(safe-area-inset-right, 0px))
-    calc(8px + env(safe-area-inset-bottom, 0px))
-    max(16px, env(safe-area-inset-left, 0px));
-}
-/* Кадр со сцены контролов: размеры теперь на обёртке, а не на <video> */
-.video-stage, #video-stage { width: 100%; }
-/* Полоска прогресса мини-плеера: видна только в свёрнутом виде */
-.mini-prog { display: none; height: 2px; background: var(--surface-3); border-radius: var(--radius-full); }
-.mini-prog > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: var(--radius-full); }
-
 /* «Продолжить»: 4 карточки на десктопе, горизонтальная лента на телефоне */
 .continue-block { margin-bottom: var(--space-5); }
 .continue-block > h3 { margin: 0 0 var(--space-3); }
@@ -567,83 +434,10 @@ html, body {
 .continue-frame > .prog { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0; }
 .continue-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 
-.scrub-row { display: flex; align-items: center; gap: var(--space-3); }
-/* «К эфиру» — единственная акцентная кнопка на кадре: она зовёт к действию */
-.btn-live { background: var(--accent); color: var(--on-accent); border: 0; flex: none; }
-.scrub-row .scrub { flex: 1; }
-.video-actions { display: flex; align-items: center; gap: var(--space-3); }
-.video-actions-right { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
-.video .volume { display: flex; align-items: center; gap: var(--space-2); }
-.video .quality-btn { background: rgba(255, 255, 255, 0.12); border: 0; color: #fff; }
 
-.player-bar video {
-  /* Канал открывают, чтобы смотреть: видео видно сразу, без лишнего действия */
-  display: block;
-  width: 100%;
-  max-height: 62vh;
-  border-radius: var(--radius-lg);
-  background: var(--video);
-}
-.player-bar-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-top: 6px;
-  flex-wrap: wrap;
-}
-/* Три зоны бара: центральная группа контролов — строго по центру */
-.pb-zone { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.pb-left { flex: 1; justify-content: flex-start; flex-wrap: wrap; }
-.pb-center { flex: 0 0 auto; justify-content: center; gap: 6px; }
-.pb-right { flex: 1; justify-content: flex-end; flex-wrap: wrap; }
-.btn-pause-main { width: 44px; height: 44px; font-size: 19px; }
 
-/* Мобильный портрет: зоны СТРОГО в столбец, каждая во всю ширину.
-   Прежняя схема (flex:1 у всех трёх зон + wrap) на 360–430px сажала
-   лево и право в одну полупустую строку — кнопки выдавливались друг
-   на друга (issue #62). wrap внутри зоны допустим: перенос — не наезд. */
-@media (max-width: 900px) {
-  /* :not(.open) — развёрнутая страница плеера занимает экран целиком,
-     общий потолок в 80vh её бы обрезал */
-  .player-bar:not(.theater):not(.open) {
-    max-height: 80vh;
-    max-height: 80dvh;
-    overflow-y: auto;
-  }
-  .player-bar:not(.theater):not(.open) video {
-    /* видео не должно вытеснять контролы за пределы экрана */
-    max-height: 38vh;
-    max-height: 38dvh;
-  }
-  .player-bar-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-  .pb-left,
-  .pb-center,
-  .pb-right {
-    flex: 0 0 auto;
-    flex-direction: row;
-    justify-content: center;
-    flex-wrap: wrap;
-    order: 0;
-    min-width: 0;
-  }
-  .pb-center { flex-wrap: nowrap; gap: 4px; }
-  .pb-left { order: 1; }
-  .pb-right { order: 2; }
-}
 
 @media (max-width: 720px) {
-  /* Слайдер громкости вытесняет название канала из правой зоны на 360px.
-     Оставляем 🔊/🔇 (тап = мьют, уровень 100/0), точная регулировка —
-     на десктопе и платформах с курсором. */
-  #volume-slider { display: none; }
-
-  /* Touch-цели не тоньше 40px (Apple HIG / Material). */
-  .player-bar .icon-btn { width: 40px; height: 40px; }
-  .fav-star { width: 36px; height: 36px; }
   
   /* Инпуты < 16px → iOS Safari авто-зумит страницу при фокусе. */
   #search,
@@ -661,27 +455,6 @@ html, body {
   .card { margin: 5vh auto 0; padding: 20px; width: min(520px, 100%); }
   #app { padding: 0 12px 96px; }
 }
-.volume {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-#volume-slider {
-  width: 90px;
-  accent-color: var(--accent);
-}
-
-.now-playing { flex: 1; min-width: 0; }
-.now-line {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-#now-fav { width: 26px; height: 26px; font-size: 14px; flex: none; }
-.now-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.now-category { font-size: 12px; }
-video { cursor: pointer; }
 
 /* Кнопка качества + выпадающее меню в палитре сайта */
 .quality-wrap { position: relative; }
@@ -723,36 +496,6 @@ video { cursor: pointer; }
   50% { opacity: 0.55; }
 }
 
-.player-bar.theater {
-  inset: 0;
-  border: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 16px;
-}
-.player-bar.theater {
-  /* Ширина кадра при вписывании по высоте — по ней равняются и контролы */
-  --frame-w: calc((100vh - 140px) * 16 / 9);
-}
-.player-bar.theater video {
-  display: block;
-  max-height: none;
-  height: 100%;
-  max-width: min(100%, var(--frame-w));
-  margin-inline: auto;
-}
-
-/* Контролы равняются по кадру, а не по краям окна. Иначе на широком
-   мониторе крайние кнопки уезжают к самым границам экрана и теряют
-   связь с видео, под которым стоят. */
-.player-bar.theater .player-bar-row,
-.watch .player-bar:not(.theater) .player-bar-row {
-  width: min(100%, var(--frame-w));
-  margin-inline: auto;
-}
-
-/* ---------- guide (программа передач) ---------- */
 .guide-overlay {
   position: fixed;
   inset: 0;
@@ -935,43 +678,275 @@ video { cursor: pointer; }
   .pl-switch-btn { max-width: 110px; }
 }
 
-/* ---------- нативный fullscreen плеера ---------- */
-/* :fullscreen применён к #player-bar — контролы остаются поверх видео */
-#player-bar:fullscreen {
-  background: #000;
+/* ================= плеер (v2) =================
+   Одна раскладка на все режимы. Кадр — #video-stage 16:9, контролы на нём
+   одной панелью снизу: строка передачи, под ней слева воспроизведение,
+   справа настройки. Под кадром (.now-bar) — только что идёт и соседние
+   каналы. Режимы меняют размер и место плеера, но не состав панели. */
+.player-bar {
+  position: fixed;
+  z-index: 50;
   display: flex;
   flex-direction: column;
-  padding: 0;
+  gap: var(--space-4);
 }
-#player-bar:fullscreen video {
-  flex: 1;
+#video-stage { width: 100%; aspect-ratio: 16 / 9; flex: none; }
+.player-bar video {
+  /* Канал открывают, чтобы смотреть: видео видно сразу, без лишнего действия */
+  display: block;
   width: 100%;
-  min-height: 0;
+  height: 100%;
   object-fit: contain;
+  background: var(--video);
+  cursor: pointer;
+}
+.live.on-video {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+}
+.live.on-video::before { background: #ff4fa3; }
+
+.video .bottom { gap: 6px; padding: 48px var(--space-3) var(--space-2); }
+.scrub-row { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-1); }
+.scrub-row .scrub { flex: 1; }
+.scrub-row .num:empty { display: none; }
+.video-actions { display: flex; align-items: center; gap: 2px; min-height: 44px; }
+.video-actions-right { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.video .volume { display: flex; align-items: center; gap: var(--space-1); }
+#volume-slider { width: 72px; accent-color: #fff; }
+/* «К эфиру» — зовёт к действию, поэтому это единственная подписанная кнопка */
+.video .btn-live {
+  width: auto;
+  height: 30px;
+  padding: 0 10px;
+  margin-left: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.18);
+  font: 600 12px/1 var(--font-sans);
+}
+.video .quality-btn {
+  height: 36px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #fff;
+  font: 600 13px/1 var(--font-sans);
+  cursor: pointer;
+}
+.video .quality-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.video .quality-btn:disabled { opacity: 0.6; cursor: default; }
+.video .rec-btn { color: #ff6363; }
+.video .rec-btn.recording {
+  color: #fff;
+  background: #ff3b3b;
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rec-pulse { 50% { opacity: 0.55; } }
+/* Меню качества и дорожек раскрываются вверх и влево: у правого края кадра
+   left:0 увело бы их за границу, а кадр обрезает всё, что за ним. */
+.video .quality-menu { left: auto; right: 0; color: var(--text); }
+/* Театр больше не нужен: на широком экране место плееру даёт сворачивание
+   списка, на узком кнопка сворачивает страницу плеера обратно в мини. */
+#btn-expand { display: none; }
+
+/* Под кадром: что идёт сейчас и соседние каналы */
+.now-bar { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+.now-playing { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.now-line { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; font-size: 13px; line-height: 18px; }
+.now-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-category { white-space: nowrap; }
+.now-category:not(:empty)::before { content: "·"; margin-right: var(--space-2); }
+.now-show {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.now-show:empty { display: none; }
+.now-time { display: flex; align-items: center; gap: var(--space-3); max-width: 420px; font-size: 13px; line-height: 18px; }
+.now-time #now-time-range { color: var(--accent); font-weight: 500; flex: none; }
+.now-time #now-time-left { flex: none; }
+.now-time .prog { flex: 1; }
+#now-time-fill { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; }
+.now-actions { display: flex; gap: var(--space-1); flex: none; }
+.now-bar .icon-btn,
+.now-bar .fav-star {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.now-bar .icon-btn:hover,
+.now-bar .fav-star:hover { background: var(--surface-3); }
+.now-bar .fav-star { color: var(--muted); }
+.now-bar .fav-star.active { color: var(--accent); }
+
+.mini-prog { display: none; height: 2px; background: var(--surface-3); border-radius: var(--radius-full); }
+.mini-prog > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: var(--radius-full); }
+
+/* ---- широкий экран: плеер колонкой справа, список слева ---- */
+@media (min-width: 1024px) {
+  .watch .player-bar {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--player-w);
+    padding: var(--space-6);
+    border-left: 1px solid var(--border);
+    background: var(--bg);
+    align-items: center;
+    overflow-y: auto;
+    /* Кадр вписывается и по ширине колонки, и по высоте окна — под ним
+       должна остаться строка «что идёт». Контролы и строка равняются по
+       кадру, а не по краям колонки. */
+    --frame-w: min(100%, calc((100vh - 170px) * 16 / 9));
+  }
+  .watch .player-bar > * { width: var(--frame-w); }
+
+  /* Транспорт (пауза, −15, +15) — в левом углу нижней панели, а не по
+     центру кадра: все кнопки в одном месте, картинка не перекрыта. */
+  .video .center {
+    inset: auto;
+    left: var(--space-3);
+    bottom: var(--space-2);
+    height: 44px;
+    gap: 2px;
+    justify-content: flex-start;
+    z-index: 2;
+  }
+  .video .center .vbtn,
+  .video .center .vbtn.big { width: 44px; height: 44px; background: transparent; }
+  .video .center .vbtn:hover { background: rgba(255, 255, 255, 0.12); }
+  #btn-pause { order: -1; }
+  .video-actions { padding-left: 136px; }
+
+  /* Список сворачивается в колонку логотипов (кнопка в его шапке или C) */
+  #app.watch.list-collapsed { --list-w: 64px; }
+  #app.watch .list-toggle { display: inline-flex; }
+  #app.watch.list-collapsed .topbar,
+  #app.watch.list-collapsed .view-title,
+  #app.watch.list-collapsed .cat-picker,
+  #app.watch.list-collapsed .epg-now,
+  #app.watch.list-collapsed .continue-block,
+  #app.watch.list-collapsed .row .meta,
+  #app.watch.list-collapsed .row .star { display: none !important; }
+  #app.watch.list-collapsed .view-head { justify-content: center; padding-top: var(--space-4); }
+  #app.watch.list-collapsed .row { justify-content: center; padding-left: 0; padding-right: 0; }
+  #app.watch.list-collapsed .row.on .logo { box-shadow: 0 0 0 2px var(--accent); }
+}
+
+/* ---- узкий экран: мини-плеер и страница плеера ---- */
+@media (max-width: 1023px) {
+  /* Мини: превью, что идёт, пауза, закрыть. Сцена «растворяется»
+     (display: contents), чтобы её видео и кнопка паузы встали в одну
+     строку с текстом; пауза та же, что на кадре, — иконка не рассинхронится. */
+  .player-bar:not(.open) {
+    left: var(--space-2);
+    right: var(--space-2);
+    bottom: var(--space-4);
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-pop);
+    cursor: pointer;
+  }
+  .player-bar:not(.open) #video-stage { display: contents; }
+  .player-bar:not(.open) video { width: 72px; height: 40px; border-radius: 8px; flex: none; }
+  .player-bar:not(.open) .top,
+  .player-bar:not(.open) .bottom,
+  .player-bar:not(.open) #btn-seek-back,
+  .player-bar:not(.open) #btn-seek-fwd,
+  .player-bar:not(.open) #now-fav,
+  .player-bar:not(.open) .now-show,
+  .player-bar:not(.open) .now-time,
+  .player-bar:not(.open) #btn-prev,
+  .player-bar:not(.open) #btn-next { display: none; }
+  /* Строка «превью · что идёт · пауза · закрыть»: обёртки тоже
+     растворяются, чтобы порядок задавался здесь, а не разметкой */
+  .player-bar:not(.open) .now-bar { display: contents; }
+  .player-bar:not(.open) .now-playing { order: 1; flex: 1; }
+  .player-bar:not(.open) .center { order: 2; position: static; inset: auto; gap: 0; }
+  .player-bar:not(.open) .now-actions { order: 3; }
+  .player-bar:not(.open) #btn-pause { width: 44px; height: 44px; background: transparent; color: var(--text); }
+  .player-bar:not(.open) .now-line { flex-direction: column; align-items: stretch; gap: 0; }
+  .player-bar:not(.open) .now-title { font-size: 14px; }
+  .player-bar:not(.open) .now-category { font-size: 12px; color: var(--muted); }
+  .player-bar:not(.open) .now-category::before { content: none; }
+  .player-bar:not(.open) .now-bar .icon-btn { background: transparent; }
+  .player-bar:not(.open) .mini-prog { display: block; position: absolute; left: var(--space-3); right: var(--space-3); bottom: 0; }
+
+  /* Развёрнутый плеер — отдельная страница поверх всего, кадр во всю ширину */
+  .player-bar.open {
+    inset: 0;
+    z-index: 60;
+    padding: max(var(--space-4), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-5);
+    background: var(--bg);
+    overflow-y: auto;
+  }
+  .player-bar.open #video-stage {
+    width: calc(100% + 2 * var(--space-5));
+    margin: 0 calc(-1 * var(--space-5));
+    border-radius: 0;
+  }
+  .player-bar.open .now-bar { flex-wrap: wrap; }
+  .player-bar.open .now-actions { width: 100%; }
+  .player-bar.open #btn-close-player { margin-left: auto; }
+  #btn-expand { display: inline-flex; }
+}
+@media (max-width: 719px) {
+  .player-bar:not(.open) { bottom: calc(var(--tabbar-h) + var(--space-2)); }
+  /* Точная громкость — на десктопе; на телефоне громкость у самого телефона */
+  #volume-slider { display: none; }
+  #btn-pip { display: none; }
+}
+
+/* ---- нативный полный экран: только кадр ---- */
+#player-bar:fullscreen {
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
   background: #000;
-  border-radius: 0;
+  justify-content: center;
 }
-#player-bar:fullscreen .player-bar-row {
-  flex-wrap: nowrap;
-  padding: 10px 16px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
-}
-/* в fullscreen второстепенные зоны прячем — чистый экран с главными кнопками;
-   ⏺ запись остаётся доступной (display: contents на pb-left + скрытие детей
-   по одному, кроме btn-rec) */
-#player-bar:fullscreen .pb-left {
-  display: contents;
-}
-#player-bar:fullscreen .pb-left > :not(#btn-rec) {
+#player-bar:fullscreen > * { width: 100%; }
+#player-bar:fullscreen #video-stage { height: 100%; aspect-ratio: auto; border-radius: 0; margin: 0; }
+#player-bar:fullscreen .now-bar,
+#player-bar:fullscreen .mini-prog { display: none; }
+
+/* Шапка списка: заголовок раздела и кнопка сворачивания */
+.view-head { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.view-head .view-title { margin: 0; flex: 1; min-width: 0; }
+.list-toggle {
   display: none;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
 }
-#player-bar:fullscreen .now-playing,
-#player-bar:fullscreen #btn-pip,
-#player-bar:fullscreen #btn-expand {
-  display: none;
-}
-#player-bar:fullscreen .pb-center { flex: 1; justify-content: center; }
-#player-bar:fullscreen .pb-right { flex: 0 0 auto; }
+.list-toggle:hover { background: var(--surface-2); color: var(--text); }
 
 /* ---------- toast ---------- */
 .toast-action {

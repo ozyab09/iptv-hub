@@ -142,6 +142,12 @@ const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
+const nowShow = $("now-show");
+const nowTime = $("now-time");
+const nowTimeRange = $("now-time-range");
+const nowTimeFill = $("now-time-fill");
+const nowTimeLeft = $("now-time-left");
+const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
 const toastEl = $("toast");
 const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
@@ -502,6 +508,7 @@ function renderChannelCard(c: Channel): HTMLElement {
   // монограммой канал опознаётся и когда картинка не загрузилась.
   const logo = document.createElement("span");
   logo.className = "logo sm";
+  logo.title = c.name; // подсказка, когда список свёрнут до логотипов
   logo.textContent = c.name.trim().slice(0, 2).toUpperCase();
   if (c.logo) {
     const img = document.createElement("img");
@@ -747,10 +754,15 @@ window.addEventListener("keydown", (e) => {
       break;
     case "c":
     case "с": // ru-раскладка
-      // Возврат к списку: на телефоне сворачиваем плеер, иначе прокрутка
-      // к списку под развёрнутым плеером ничего бы не показала.
+      // На широком экране C сворачивает и разворачивает список рядом с
+      // плеером. На узком — возврат к списку: сворачиваем страницу плеера,
+      // иначе прокрутка к списку под ней ничего бы не показала.
       e.preventDefault();
-      if (isPhone()) togglePlayerPage(false);
+      if (!isCompact()) {
+        setListCollapsed(!appEl.classList.contains("list-collapsed"));
+        break;
+      }
+      togglePlayerPage(false);
       channelList.scrollIntoView({ block: "nearest" });
       (channelList.querySelector("button") as HTMLElement | null)?.focus();
       break;
@@ -1224,6 +1236,40 @@ function setWatching(on: boolean): void {
   appEl.classList.toggle("watch", on);
 }
 
+/**
+ * Свернуть список каналов рядом с плеером в колонку логотипов: плеер
+ * забирает освободившееся место. Выбор запоминается — кто смотрит без
+ * списка, тот и в следующий раз хочет без него.
+ */
+const LIST_COLLAPSED_KEY = "iptv-hub.list-collapsed.v1";
+
+function setListCollapsed(on: boolean): void {
+  appEl.classList.toggle("list-collapsed", on);
+  btnCollapseList.setAttribute("aria-expanded", String(!on));
+  btnCollapseList.title = on ? "Развернуть список (C)" : "Свернуть список (C)";
+  btnCollapseList.setAttribute(
+    "aria-label",
+    on ? "Развернуть список каналов" : "Свернуть список каналов",
+  );
+  btnCollapseList
+    .querySelector("use")
+    ?.setAttribute("href", on ? "#i-panel-open" : "#i-panel-close");
+  try {
+    localStorage.setItem(LIST_COLLAPSED_KEY, on ? "1" : "0");
+  } catch {
+    // приватный режим — живём без памяти
+  }
+}
+
+btnCollapseList.addEventListener("click", () =>
+  setListCollapsed(!appEl.classList.contains("list-collapsed")),
+);
+try {
+  if (localStorage.getItem(LIST_COLLAPSED_KEY) === "1") setListCollapsed(true);
+} catch {
+  // storage недоступен — список развёрнут
+}
+
 /** Вид кнопки ⏺ — общий для обоих способов записи. */
 function renderRecButton(active: boolean): void {
   btnRec.classList.toggle("recording", active);
@@ -1515,6 +1561,8 @@ function refreshScrub(): void {
     scrubFill.style.width = "0%";
     progStart.textContent = "";
     progEnd.textContent = "";
+    nowShow.textContent = "";
+    nowTime.hidden = true;
     return;
   }
   const startMs = Date.parse(prog.start);
@@ -1524,6 +1572,22 @@ function refreshScrub(): void {
   miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
   progStart.textContent = clock(startMs);
   progEnd.textContent = clock(stopMs);
+
+  // Под кадром — то же самое словами: что идёт и сколько осталось
+  nowShow.textContent = prog.title;
+  nowTime.hidden = false;
+  nowTimeRange.textContent = `${clock(startMs)}–${clock(stopMs)}`;
+  nowTimeFill.style.width = pct;
+  nowTimeLeft.textContent = timeLeft(stopMs - Date.now());
+}
+
+/** «ещё 58 мин», «ещё 1 ч 5 мин» — до конца передачи. */
+function timeLeft(ms: number): string {
+  const min = Math.max(0, Math.round(ms / 60_000));
+  if (min < 60) return `ещё ${min} мин`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `ещё ${h} ч` : `ещё ${h} ч ${m} мин`;
 }
 
 /**
@@ -1627,7 +1691,7 @@ videoStage.addEventListener("pointerup", (e) => {
     else if (swipe === "down") {
       // На развёрнутой странице свайп вниз возвращает в мини, иначе —
       // предыдущий канал: закрывать нечего.
-      if (isPhone() && playerBar.classList.contains("open")) togglePlayerPage(false);
+      if (isCompact() && playerBar.classList.contains("open")) togglePlayerPage(false);
       else playNeighbor(-1);
     }
     return;
@@ -1694,36 +1758,35 @@ videoStage.addEventListener("pointerleave", () => {
 });
 
 /**
- * Телефонная ширина. Должна совпадать с медиазапросом в style.css —
- * иначе мини-плеер и его поведение разойдутся. Тест сверяет оба числа.
+ * Узкая ширина (телефон и планшет в портрете): плеер живёт мини-плеером и
+ * разворачивается в страницу. Шире — колонкой рядом со списком. Должна
+ * совпадать с медиазапросом в style.css — тест сверяет оба числа.
  */
-const PHONE_BREAKPOINT = 719;
+const COMPACT_BREAKPOINT = 1023;
 
-function isPhone(): boolean {
-  return window.matchMedia(`(max-width: ${PHONE_BREAKPOINT}px)`).matches;
+function isCompact(): boolean {
+  return window.matchMedia(`(max-width: ${COMPACT_BREAKPOINT}px)`).matches;
 }
 
 /** Развернуть мини-плеер в страницу или свернуть обратно. */
 function togglePlayerPage(open?: boolean): void {
   const next = open ?? !playerBar.classList.contains("open");
   playerBar.classList.toggle("open", next);
-  btnExpand.title = next ? "Свернуть плеер" : "Театральный режим";
 }
 
 // Тап по свёрнутому плееру разворачивает его в страницу. Кнопки внутри
 // продолжают работать сами по себе — иначе пауза открывала бы плеер.
 playerBar.addEventListener("click", (e) => {
-  if (!isPhone() || playerBar.classList.contains("open")) return;
+  if (!isCompact() || playerBar.classList.contains("open")) return;
   if ((e.target as HTMLElement).closest("button, input, a")) return;
   togglePlayerPage(true);
 });
 
 btnExpand.addEventListener("click", (e) => {
   e.stopPropagation();
-  // На телефоне та же кнопка сворачивает страницу плеера обратно в мини:
-  // театральный режим там не нужен — развёрнутый плеер и так во весь экран.
-  if (isPhone()) togglePlayerPage();
-  else playerBar.classList.toggle("theater");
+  // Кнопка есть только на узком экране: сворачивает страницу плеера в мини.
+  // Театра больше нет — на широком место плееру даёт сворачивание списка.
+  togglePlayerPage(false);
 });
 
 // Нативный fullscreen: применяем к #player-bar, чтобы контролы остались поверх
