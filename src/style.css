@@ -190,16 +190,38 @@ html, body {
     gap: var(--space-3);
     padding-top: 0;
   }
-  /* В свёрнутом виде оставляем только название, пауза и закрытие */
-  .player-bar:not(.open) .pb-center > :not(.btn-pause-main),
-  .player-bar:not(.open) .pb-left,
-  /* :not(.now-playing) обязателен: иначе это правило перебивает по
-     специфичности показ названия, и в мини остаётся одна кнопка закрытия */
-  .player-bar:not(.open) .pb-right > :not(#btn-close-player):not(.now-playing) {
-    display: none;
+  /* Свёрнутый вид: превью, пауза, название, закрытие — как в MiniPlayer
+     дизайн-системы. Сцена контролов распрямляется в строку: оверлей на
+     кадре 72×40 был бы нечитаем, а кнопку паузы переиспользуем ту же,
+     чтобы иконка play/pause не рассинхронизировалась. */
+  .player-bar:not(.open) #video-stage {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    background: transparent;
+    overflow: visible;
+    border-radius: 0;
+  }
+  .player-bar:not(.open) #video-stage .top,
+  .player-bar:not(.open) #video-stage .bottom { display: none; }
+  .player-bar:not(.open) #video-stage .center {
+    position: static;
+    inset: auto;
+    flex: none;
+    gap: 0;
+  }
+  .player-bar:not(.open) #btn-seek-back,
+  .player-bar:not(.open) #btn-seek-fwd,
+  .player-bar:not(.open) .pb-center,
+  .player-bar:not(.open) #btn-guide,
+  .player-bar:not(.open) #btn-rec { display: none; }
+  .player-bar:not(.open) #btn-pause.vbtn.big {
+    width: 44px;
+    height: 44px;
+    background: rgba(255, 255, 255, 0.12);
   }
   .player-bar:not(.open) .pb-zone { flex: none; }
-  .player-bar:not(.open) .pb-right { flex: 1; min-width: 0; }
+  .player-bar:not(.open) .pb-left { flex: 1; min-width: 0; }
   .player-bar:not(.open) .now-playing { flex: 1; min-width: 0; }
 
   /* Развёрнутый плеер — отдельная страница поверх всего */
@@ -497,6 +519,15 @@ html, body {
     calc(8px + env(safe-area-inset-bottom, 0px))
     max(16px, env(safe-area-inset-left, 0px));
 }
+/* Кадр со сцены контролов: размеры теперь на обёртке, а не на <video> */
+.video-stage, #video-stage { width: 100%; }
+.scrub-row { display: flex; align-items: center; gap: var(--space-3); }
+.scrub-row .scrub { flex: 1; }
+.video-actions { display: flex; align-items: center; gap: var(--space-3); }
+.video-actions-right { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.video .volume { display: flex; align-items: center; gap: var(--space-2); }
+.video .quality-btn { background: rgba(255, 255, 255, 0.12); border: 0; color: #fff; }
+
 .player-bar video {
   /* Канал открывают, чтобы смотреть: видео видно сразу, без лишнего действия */
   display: block;

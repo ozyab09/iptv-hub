@@ -129,6 +129,8 @@ const emptyState = $("empty-state");
 const epgNow = $("epg-now");
 const playerBar = $("player-bar");
 const videoEl = $<HTMLVideoElement>("video");
+const videoStage = $("video-stage");
+const liveBadge = $("live-badge");
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
 const toastEl = $("toast");
@@ -868,6 +870,10 @@ function refreshQualityUi(): void {
 
 /** Обновить статус-бар: разрешение + текущий битрейт (при смене уровня). */
 function refreshPlayerStatus(): void {
+  // Плашка «Эфир» — для живого потока: у него нет конечной длительности.
+  const live = !Number.isFinite(videoEl.duration) || videoEl.duration === 0;
+  liveBadge.hidden = !live || videoEl.readyState === 0;
+
   const hls = player.getHls();
   if (!hls) return;
   const lv = hls.levels[hls.currentLevel];
@@ -1466,6 +1472,40 @@ guideOverlay.addEventListener("click", (e) => {
 });
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !guideOverlay.hidden) guideOverlay.hidden = true;
+});
+
+/** Через сколько контролы на видео прячутся, мс (правило дизайн-системы). */
+const CONTROLS_HIDE_MS = 3000;
+let controlsTimer = 0;
+
+/**
+ * Показать контролы и завести таймер их скрытия.
+ * На паузе не прячем: пользователь смотрит не на кадр, а на управление.
+ */
+function wakeControls(): void {
+  videoStage.classList.remove("idle");
+  window.clearTimeout(controlsTimer);
+  if (videoEl.paused) return;
+  controlsTimer = window.setTimeout(() => {
+    // Открытое меню качества или дорожек нельзя гасить вместе с контролами
+    const menuOpen = !qualityMenu.hidden || !audioMenu.hidden || !subtitleMenu.hidden;
+    if (menuOpen) {
+      wakeControls();
+      return;
+    }
+    videoStage.classList.add("idle");
+  }, CONTROLS_HIDE_MS);
+}
+
+for (const ev of ["pointermove", "pointerdown", "focusin"] as const) {
+  videoStage.addEventListener(ev, wakeControls);
+}
+videoEl.addEventListener("pause", wakeControls);
+videoEl.addEventListener("loadedmetadata", () => refreshPlayerStatus());
+videoEl.addEventListener("durationchange", () => refreshPlayerStatus());
+videoEl.addEventListener("play", wakeControls);
+videoStage.addEventListener("pointerleave", () => {
+  if (!videoEl.paused) videoStage.classList.add("idle");
 });
 
 /**
