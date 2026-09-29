@@ -45,6 +45,7 @@ import {
   computeWindow,
   spacerHeight,
 } from "./virtual-list";
+import { clock, isBehindLive, programmeProgress } from "./scrub";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -131,6 +132,10 @@ const playerBar = $("player-bar");
 const videoEl = $<HTMLVideoElement>("video");
 const videoStage = $("video-stage");
 const liveBadge = $("live-badge");
+const scrubFill = $("scrub-fill");
+const progStart = $("prog-start");
+const progEnd = $("prog-end");
+const btnLive = $<HTMLButtonElement>("btn-live");
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
 const toastEl = $("toast");
@@ -873,6 +878,7 @@ function refreshPlayerStatus(): void {
   // Плашка «Эфир» — для живого потока: у него нет конечной длительности.
   const live = !Number.isFinite(videoEl.duration) || videoEl.duration === 0;
   liveBadge.hidden = !live || videoEl.readyState === 0;
+  refreshScrub();
 
   const hls = player.getHls();
   if (!hls) return;
@@ -1473,6 +1479,51 @@ guideOverlay.addEventListener("click", (e) => {
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !guideOverlay.hidden) guideOverlay.hidden = true;
 });
+
+/** Край живого буфера или NaN, если поток ещё не начал грузиться. */
+function liveEdge(): number {
+  const r = videoEl.seekable;
+  return r.length > 0 ? r.end(r.length - 1) : NaN;
+}
+
+/**
+ * Полоса перемотки: ход текущей передачи по телепрограмме.
+ *
+ * У прямого эфира нет длительности, поэтому положение в потоке показывать
+ * нечем — зато есть программа, и зрителю важно именно «сколько осталось
+ * до конца передачи».
+ */
+function refreshScrub(): void {
+  // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
+  // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
+  // а отстать от эфира на них можно ровно так же.
+  btnLive.hidden = !isBehindLive(videoEl.currentTime, liveEdge());
+
+  const prog =
+    epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null;
+  if (!prog) {
+    scrubFill.style.width = "0%";
+    progStart.textContent = "";
+    progEnd.textContent = "";
+    return;
+  }
+  const startMs = Date.parse(prog.start);
+  const stopMs = Date.parse(prog.stop);
+  scrubFill.style.width = `${(programmeProgress(Date.now(), startMs, stopMs) * 100).toFixed(1)}%`;
+  progStart.textContent = clock(startMs);
+  progEnd.textContent = clock(stopMs);
+}
+
+btnLive.addEventListener("click", () => {
+  const edge = liveEdge();
+  if (Number.isFinite(edge)) videoEl.currentTime = edge;
+  btnLive.hidden = true;
+});
+
+videoEl.addEventListener("timeupdate", refreshScrub);
+// Передача идёт и без событий видео: без таймера полоса замирала бы на паузе
+// и между timeupdate, которые HLS шлёт нерегулярно.
+window.setInterval(refreshScrub, 10_000);
 
 /** Через сколько контролы на видео прячутся, мс (правило дизайн-системы). */
 const CONTROLS_HIDE_MS = 3000;

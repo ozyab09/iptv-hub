@@ -522,6 +522,8 @@ html, body {
 /* Кадр со сцены контролов: размеры теперь на обёртке, а не на <video> */
 .video-stage, #video-stage { width: 100%; }
 .scrub-row { display: flex; align-items: center; gap: var(--space-3); }
+/* «К эфиру» — единственная акцентная кнопка на кадре: она зовёт к действию */
+.btn-live { background: var(--accent); color: var(--on-accent); border: 0; flex: none; }
 .scrub-row .scrub { flex: 1; }
 .video-actions { display: flex; align-items: center; gap: var(--space-3); }
 .video-actions-right { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
