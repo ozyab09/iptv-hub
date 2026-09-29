@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0e14" />
+    <meta name="theme-color" content="#0c0d10" />
     <meta name="description" content="IPTV Hub — self-hosted веб-плеер для IPTV-плейлистов с телепрограммой" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png" type="image/png" />
@@ -30,135 +30,178 @@
   <body>
     <div id="app">
       <header class="topbar">
-        <a class="brand" href="./" title="На главную"><span class="brand-icon">📺</span> IPTV Hub</a>
-        <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
+        <a class="brand" href="./" title="На главную"><span class="brand-icon"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></span> IPTV Hub</a>
+        <div class="search-wrap">
+          <input id="search" type="search" placeholder="Поиск каналов…" autocomplete="off" />
+          <span class="kbd" aria-hidden="true">/</span>
+        </div>
         <div class="topbar-right">
-          <button id="btn-manage" class="icon-btn" title="Список плейлистов (управление)" aria-label="Список плейлистов">📃</button>
+          <button id="btn-manage" class="icon-btn" title="Список плейлистов (управление)" aria-label="Список плейлистов"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-playlist"></use></svg></button>
           <div class="pl-switch" id="pl-switch" hidden>
-            <button id="pl-switch-btn" class="select pl-switch-btn" title="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false">📺</button>
-            <div id="pl-switch-menu" class="quality-menu pl-switch-menu" role="listbox" hidden></div>
+            <button id="pl-switch-btn" class="btn btn-sm pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></button>
+            <div id="pl-switch-menu" class="quality-menu menu pl-switch-menu" role="listbox" hidden></div>
           </div>
-          <button id="btn-theme" class="icon-btn" title="Переключить тему" aria-label="Переключить тему">☀️</button>
+          <button id="btn-theme" class="icon-btn" title="Переключить тему" aria-label="Переключить тему"></button>
         </div>
       </header>
 
       <main id="main">
-        <!-- Экран 1: стартовый — менеджер плейлистов -->
-        <section id="setup-screen" class="screen">
-          <div class="card">
-            <h1>📺 IPTV Hub</h1>
-            <p class="muted">
-              Self-hosted плеер для ваших плейлистов. Ссылки хранятся <b>только в этом браузере</b>.
-            </p>
-            <div id="pl-list" class="pl-list"></div>
-            <button id="btn-back-to-player" class="primary" hidden>← Вернуться к просмотру</button>
-            <div class="pl-io">
-              <button id="btn-export" class="icon-btn io-btn" title="Экспорт настроек в JSON" aria-label="Экспорт настроек">⬇ Экспорт</button>
-              <button id="btn-import" class="icon-btn io-btn" title="Импорт настроек из JSON" aria-label="Импорт настроек">⬆ Импорт</button>
-              <input id="import-file" type="file" accept="application/json,.json" hidden />
-            </div>
-            <div class="pl-form">
-              <label for="setup-name">Название</label>
-              <input id="setup-name" type="text" placeholder="Мой IPTV" />
-              <label for="setup-playlist">URL плейлиста (M3U)</label>
-              <input id="setup-playlist" type="url" placeholder="https://…/playlist.m3u" required />
-              <label for="setup-epg">URL телепрограммы (XMLTV, опционально)</label>
-              <input id="setup-epg" type="url" placeholder="https://…/epg.xml.gz (необязательно)" />
-              <button id="setup-load" class="primary">Добавить и открыть</button>
-            </div>
-            <p id="setup-error" class="error" hidden></p>
-            <details class="hint">
-              <summary>Как это работает</summary>
-              <ul>
-                <li>Приложение — статика (GitHub Pages), бэкенда нет.</li>
-                <li>Плейлистов может быть несколько — переключение в шапке.</li>
-                <li>Избранное у каждого плейлиста своё.</li>
-                <li>На бакете должен быть включён CORS (см. README).</li>
-              </ul>
-            </details>
-          </div>
-        </section>
-
-        <!-- Экран 2: основной — каналы + плеер -->
-        <section id="player-screen" class="screen" hidden>
-          <div class="layout">
-            <aside class="sidebar">
-              <button id="btn-favorites" class="category-btn fav-toggle" aria-pressed="false" title="Показать только избранные">☆ Показать избранное</button>
-              <nav id="categories" class="categories" aria-label="Категории"></nav>
-            </aside>
-            <div class="content">
-              <div id="epg-now" class="epg-now" hidden></div>
-              <div id="recents-block" class="recents-block" hidden>
-                <div class="recents-title muted">Недавно просмотренные</div>
-                <div id="recents-list" class="recents-list"></div>
+        <!-- Раскладка живёт ВЫШЕ экранов: иначе на «Настройках» вместе
+             с экраном пропадала бы и навигация по разделам. -->
+        <div class="layout">
+          <aside class="sidebar">
+            <nav id="side-nav" class="side-nav" aria-label="Разделы"></nav>
+            <nav id="categories" class="categories" aria-label="Категории"></nav>
+          </aside>
+          <div class="screens">
+            <!-- Экран 1: стартовый — менеджер плейлистов -->
+            <section id="setup-screen" class="screen">
+              <div class="card">
+                <h1><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg> IPTV Hub</h1>
+                <p class="muted">
+                  Self-hosted плеер для ваших плейлистов. Ссылки хранятся <b>только в этом браузере</b>.
+                </p>
+                <div id="pl-list" class="pl-list"></div>
+                <button id="btn-back-to-player" class="primary" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg> Вернуться к просмотру</button>
+                <div class="pl-io">
+                  <button id="btn-export" class="icon-btn io-btn" title="Экспорт настроек в JSON" aria-label="Экспорт настроек"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg> Экспорт</button>
+                  <button id="btn-import" class="icon-btn io-btn" title="Импорт настроек из JSON" aria-label="Импорт настроек"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg> Импорт</button>
+                  <input id="import-file" type="file" accept="application/json,.json" hidden />
+                </div>
+                <div class="pl-form">
+                  <label for="setup-name">Название</label>
+                  <input id="setup-name" type="text" placeholder="Мой IPTV" />
+                  <label for="setup-playlist">URL плейлиста (M3U)</label>
+                  <input id="setup-playlist" type="url" placeholder="https://…/playlist.m3u" required />
+                  <label for="setup-epg">URL телепрограммы (XMLTV, опционально)</label>
+                  <input id="setup-epg" type="url" placeholder="https://…/epg.xml.gz (необязательно)" />
+                  <button id="setup-load" class="primary">Добавить и открыть</button>
+                </div>
+                <p id="setup-error" class="error" hidden></p>
+                <details class="hint">
+                  <summary>Как это работает</summary>
+                  <ul>
+                    <li>Приложение — статика (GitHub Pages), бэкенда нет.</li>
+                    <li>Плейлистов может быть несколько — переключение в шапке.</li>
+                    <li>Избранное у каждого плейлиста своё.</li>
+                    <li>На бакете должен быть включён CORS (см. README).</li>
+                  </ul>
+                </details>
               </div>
+            </section>
+
+            <!-- Экран 2: основной — список каналов раздела -->
+            <section id="player-screen" class="screen" hidden>
+              <h2 id="view-title" class="t-heading view-title">Каналы</h2>
+              <!-- Выбор категории в режиме просмотра: сайдбар там сжат
+                   в рельс, и списку чипов места не остаётся. -->
+              <div id="cat-picker" class="cat-picker" hidden>
+                <button id="btn-categories" class="btn btn-sm" aria-haspopup="listbox" aria-expanded="false">Все</button>
+                <div id="cat-menu" class="quality-menu menu cat-menu" role="listbox" hidden></div>
+              </div>
+              <div id="epg-now" class="epg-now" hidden></div>
+              <section id="continue-block" class="continue-block" hidden>
+                <h3 class="t-heading">Продолжить</h3>
+                <div id="continue-row" class="continue-row"></div>
+              </section>
               <div id="channel-list" class="channel-list" role="list"></div>
               <div id="empty-state" class="muted" hidden>Ничего не найдено</div>
-            </div>
+            </section>
           </div>
-        </section>
+        </div>
       </main>
+
+      <!-- Навигация по разделам: таб-бар на телефоне, сайдбар на десктопе.
+           Содержимое обоих строится из VIEWS в src/views.ts. -->
+      <nav id="tabbar" class="tabbar" aria-label="Разделы"></nav>
 
       <!-- Плеер: закреплён снизу (мобайл-first), разворачивается в полноэкранный театр -->
       <div id="player-bar" class="player-bar" hidden>
-        <video id="video" playsinline></video>
+        <!-- Контролы воспроизведения лежат ПОВЕРХ кадра, как требует
+             дизайн-система: белые на чёрных градиентах в любой теме,
+             автоскрытие через 3 секунды. Ниже кадра остаётся только то,
+             что относится к приложению, а не к воспроизведению. -->
+        <div id="video-stage" class="video">
+          <video id="video" playsinline></video>
+
+          <div class="top">
+            <span id="live-badge" class="live" hidden>Эфир</span>
+            <span id="player-status" class="t-caption vt" title="Разрешение и скорость потока">—</span>
+            <button id="btn-retry" class="vbtn ghost" title="Перезапустить поток" aria-label="Перезапустить поток" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></button>
+          </div>
+
+          <div class="center">
+            <button id="btn-seek-back" class="vbtn" title="Назад 15 сек (J)" aria-label="Назад 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-back"></use></svg></button>
+            <button id="btn-pause" class="vbtn big" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить"><svg class="i i-lg i-fill" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg></button>
+            <button id="btn-seek-fwd" class="vbtn" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-fwd"></use></svg></button>
+          </div>
+
+          <div class="bottom">
+            <div class="scrub-row">
+              <span id="prog-start" class="t-caption vt num"></span>
+              <div id="scrub" class="scrub"><span id="scrub-fill"></span></div>
+              <span id="prog-end" class="t-caption vt num"></span>
+              <button id="btn-live" class="btn btn-sm btn-live" hidden>К эфиру</button>
+            </div>
+            <div class="video-actions">
+              <div class="volume">
+                <button id="btn-mute" class="vbtn ghost" title="Звук вкл/выкл (M)" aria-label="Звук вкл или выкл"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-volume"></use></svg></button>
+                <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Громкость" />
+              </div>
+              <div class="video-actions-right">
+                <div id="quality-wrap" class="quality-wrap">
+                  <button id="quality-btn" class="btn btn-sm quality-btn" title="Качество" aria-label="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
+                  <div id="quality-menu" class="quality-menu menu" role="listbox" hidden></div>
+                </div>
+                <div id="audio-wrap" class="quality-wrap" hidden>
+                  <button id="audio-btn" class="vbtn ghost" title="Аудиодорожка" aria-label="Аудиодорожка" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-music"></use></svg></button>
+                  <div id="audio-menu" class="quality-menu menu" role="listbox" hidden></div>
+                </div>
+                <div id="subtitle-wrap" class="quality-wrap" hidden>
+                  <button id="subtitle-btn" class="vbtn ghost" title="Субтитры" aria-label="Субтитры" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-subtitles"></use></svg></button>
+                  <div id="subtitle-menu" class="quality-menu menu" role="listbox" hidden></div>
+                </div>
+                <button id="btn-pip" class="vbtn ghost" title="Плавающее окно (PiP)" aria-label="Плавающее окно"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-pip"></use></svg></button>
+                <button id="btn-expand" class="vbtn ghost" title="Театральный режим" aria-label="Театральный режим"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-theater"></use></svg></button>
+                <button id="btn-fullscreen" class="vbtn ghost" title="На весь экран (F)" aria-label="На весь экран"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-fullscreen"></use></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Прогресс передачи по нижнему краю: в свёрнутом виде полосы
+             перемотки не видно, а понимать «сколько осталось» надо -->
+        <div id="mini-prog" class="mini-prog"><span id="mini-prog-fill"></span></div>
+
+        <!-- Под кадром — действия приложения, а не плеера -->
         <div class="player-bar-row">
-          <!-- Левая зона: качество, дорожки, статус, гайд, запись -->
           <div class="pb-zone pb-left">
-            <div id="quality-wrap" class="quality-wrap">
-              <button id="quality-btn" class="select quality-btn" title="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
-              <div id="quality-menu" class="quality-menu" role="listbox" hidden></div>
-            </div>
-            <div id="audio-wrap" class="quality-wrap" hidden>
-              <button id="audio-btn" class="select quality-btn" title="Аудиодорожка" aria-haspopup="listbox" aria-expanded="false">🎵</button>
-              <div id="audio-menu" class="quality-menu" role="listbox" hidden></div>
-            </div>
-            <div id="subtitle-wrap" class="quality-wrap" hidden>
-              <button id="subtitle-btn" class="select quality-btn" title="Субтитры" aria-haspopup="listbox" aria-expanded="false">💬</button>
-              <div id="subtitle-menu" class="quality-menu" role="listbox" hidden></div>
-            </div>
-            <span id="player-status" class="player-status muted" title="Разрешение и скорость потока">—</span>
-            <button id="btn-retry" class="icon-btn" title="Перезапустить поток" aria-label="Перезапустить поток" hidden>↻</button>
-            <button id="btn-guide" class="icon-btn" title="Программа передач" aria-label="Программа передач">📅</button>
-            <button id="btn-rec" class="icon-btn rec-btn" title="Записать эфир в файл" aria-label="Запись эфира">⏺</button>
-          </div>
-
-          <!-- Центральная зона: перемотка и каналы -->
-          <div class="pb-zone pb-center">
-            <button id="btn-seek-back" class="icon-btn" title="Назад 15 сек (J)" aria-label="Назад 15 секунд">«</button>
-            <button id="btn-prev" class="icon-btn" title="Предыдущий канал (←)" aria-label="Предыдущий канал">‹</button>
-            <button id="btn-pause" class="icon-btn btn-pause-main" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить">❚❚</button>
-            <button id="btn-next" class="icon-btn" title="Следующий канал (→)" aria-label="Следующий канал">›</button>
-            <button id="btn-seek-fwd" class="icon-btn" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд">»</button>
-          </div>
-
-          <!-- Правая зона: громкость, канал, окно -->
-          <div class="pb-zone pb-right">
-            <div class="volume">
-              <button id="btn-mute" class="icon-btn" title="Звук вкл/выкл (M)" aria-label="Звук вкл или выкл">🔊</button>
-              <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Громкость" />
-            </div>
             <div class="now-playing">
               <div class="now-line">
-                <button id="now-fav" class="fav-star" title="В избранное" aria-label="В избранное или убрать">☆</button>
+                <button id="now-fav" class="fav-star" title="В избранное" aria-label="В избранное или убрать"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
                 <div id="now-title" class="now-title">—</div>
               </div>
               <div id="now-category" class="now-category muted"></div>
             </div>
-            <button id="btn-pip" class="icon-btn" title="Плавающее окно (PiP)" aria-label="Плавающее окно">⧉</button>
-            <button id="btn-expand" class="icon-btn" title="Театральный режим" aria-label="Театральный режим">⤢</button>
-            <button id="btn-fullscreen" class="icon-btn" title="На весь экран (F)" aria-label="На весь экран">⛶</button>
-            <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер">✕</button>
+          </div>
+          <div class="pb-zone pb-center">
+            <button id="btn-prev" class="icon-btn" title="Предыдущий канал (←)" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
+            <button id="btn-next" class="icon-btn" title="Следующий канал (→)" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
+          </div>
+          <div class="pb-zone pb-right">
+            <button id="btn-guide" class="icon-btn" title="Программа передач (G)" aria-label="Программа передач"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></button>
+            <button id="btn-rec" class="icon-btn rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
+            <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
           </div>
         </div>
       </div>
-
       <!-- Модалка программы передач -->
       <div id="guide-overlay" class="guide-overlay" hidden>
         <div class="guide" role="dialog" aria-modal="true" aria-label="Программа передач">
+          <div class="grabber" aria-hidden="true"></div>
           <div class="guide-head">
             <div id="guide-title" class="guide-title">Программа</div>
-            <button id="guide-close" class="icon-btn" title="Закрыть" aria-label="Закрыть программу">✕</button>
+            <button id="guide-close" class="icon-btn" title="Закрыть" aria-label="Закрыть программу"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
           </div>
           <div id="guide-days" class="guide-days"></div>
           <div id="guide-list" class="guide-list"></div>

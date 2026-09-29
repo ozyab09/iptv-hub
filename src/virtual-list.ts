@@ -6,7 +6,7 @@
  * высотой rows*pitch; карточки позиционируются через translateY спейсера.
  * Контейнер — CSS-grid с N колонками (см. .virtual-inner), поэтому высоту
  * считаем в строках: rows = ceil(items / columns). Высота строки
- * детерминирована CSS (min-height 56px, см. .channel-card).
+ * детерминирована CSS; вызывающий передаёт её явно (см. CHANNEL_ROW_HEIGHT).
  */
 
 export interface VirtualWindow {

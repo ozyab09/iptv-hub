@@ -1,32 +1,136 @@
+@import "./components.css";
+
+/* Дизайн-система IPTV Hub v2. Значения — из tokens.json системы,
+   менять их здесь руками нельзя: правь систему и переноси сюда целиком.
+   Тема dark идёт первой — она по умолчанию. */
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("./fonts/onest-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("./fonts/onest-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
 :root {
-  --bg: #0b0e14;
-  --bg2: #121722;
-  --card: #161c2a;
-  --border: #232b3d;
-  --text: #e6eaf2;
-  --muted: #8b94a7;
+  /* поверхности: глубина из четырёх ступеней, не из теней */
+  --bg: #0c0d10;
+  --surface-1: #15161a;
+  --surface-2: #1d1e23;
+  --surface-3: #27282e;
+  --border: #2c2d33;
+  /* текст */
+  --text: #f2f2f4;
+  --muted: #9c9da6;
+  /* единственный акцент: играет / выбрано / эфир / избранное */
   --accent: #ff4fa3;
-  --accent2: #4f8cff;
-  --overlay: rgba(5, 7, 12, 0.72);
-  --bar: rgba(11, 14, 20, 0.97);
-  --radius: 12px;
+  --accent-soft: rgba(255, 79, 163, 0.14);
+  --on-accent: #0c0d10;
+  /* служебные цвета */
+  --focus: #5b93ff;
+  --danger: #ff6363;
+  --warning: #f5b041;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --video: #060709;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  /* сетка 4px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+
+  /* Высота таб-бара: от неё считаются отступ страницы и посадка мини-плеера */
+  --tabbar-h: 64px;
+
+  --font-sans: Onest, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Псевдонимы под текущую вёрстку: она ещё на именах v1. Уходят по мере
+     перевода разметки на классы дизайн-системы. */
+  --bg2: var(--surface-2);
+  --card: var(--surface-1);
+  --accent2: var(--focus);
+  --overlay: var(--scrim);
+  --bar: var(--surface-1);
+  --radius: var(--radius-md);
+
   color-scheme: dark;
 }
 
-/* Светлая тема — та же семантика переменных, дневная палитра.
-   Акценты чуть глубже, чтобы держать контраст на белом. */
 :root[data-theme="light"] {
-  --bg: #f4f6fa;
-  --bg2: #e8ecf4;
-  --card: #ffffff;
-  --border: #d5dbe7;
-  --text: #1c2333;
-  --muted: #5c6579;
-  --accent: #d81b7c;
-  --accent2: #2f6ce0;
-  --overlay: rgba(28, 35, 51, 0.4);
-  --bar: rgba(255, 255, 255, 0.97);
+  --bg: #f6f6f8;
+  --surface-1: #ffffff;
+  --surface-2: #eeeef1;
+  --surface-3: #e3e3e8;
+  --border: #dcdce2;
+  --text: #111216;
+  --muted: #5b5c65;
+  --accent: #d0176f;
+  --accent-soft: rgba(208, 23, 111, 0.10);
+  --on-accent: #ffffff;
+  --focus: #2f6ce0;
+  --danger: #c62828;
+  --warning: #8a5200;
+  --scrim: rgba(17, 18, 22, 0.4);
+  --shadow-pop: 0 12px 32px rgba(17, 18, 22, 0.14);
   color-scheme: light;
+}
+
+/* Иконки: параметры штриха заданы здесь, фигуры — в src/icons.ts */
+.i {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.2em;
+}
+.i-sm { width: 16px; height: 16px; }
+.i-lg { width: 24px; height: 24px; }
+.i-fill { fill: currentColor; stroke: none; }
+
+/* Плашка «Эфир»: точка + капслок, единственный акцентный элемент в строке */
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
 }
 
 * { box-sizing: border-box; }
@@ -36,11 +140,114 @@ html, body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 400 15px/22px var(--font-sans);
   min-height: 100%;
 }
 
-#app { max-width: 1200px; margin: 0 auto; padding: 0 16px 96px; }
+#app { max-width: 1200px; margin: 0 auto; padding: 0 var(--space-5) 96px; }
+
+/* Навигация по разделам. Таб-бар — телефонная, сайдбар — десктопная:
+   показан ровно один, иначе одни и те же кнопки дублировались бы. */
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-4);
+}
+.tabbar { display: none; }
+.view-title { margin: 0 0 var(--space-3); }
+
+@media (max-width: 719px) {
+  /* Лента карточек: на телефоне они прокручиваются вбок, а не жмутся в сетку */
+  .continue-row {
+    display: flex;
+    gap: var(--space-3);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+  .continue-card { flex: none; width: 156px; scroll-snap-align: start; }
+
+  .side-nav { display: none; }
+  .tabbar { display: flex; min-height: var(--tabbar-h); }
+  /* Место под таб-бар и мини-плеер: иначе конец списка уходит под них */
+  #app { padding-bottom: calc(var(--tabbar-h) + 84px); }
+  .view-title { display: none; } /* вкладка и так подписана */
+
+  /* Мини-плеер: пристыкован над таб-баром, разворачивается по тапу.
+     Воспроизведение не должно мешать листать список — в этом весь смысл. */
+  .player-bar:not(.open) {
+    left: var(--space-2);
+    right: var(--space-2);
+    bottom: calc(var(--tabbar-h) + var(--space-2));
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-pop);
+    padding: var(--space-2);
+    cursor: pointer;
+  }
+  .player-bar:not(.open) video {
+    width: 72px;
+    height: 40px;
+    max-height: none;
+    border-radius: 8px;
+    flex: none;
+  }
+  .player-bar:not(.open) .player-bar-row {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+    padding-top: 0;
+  }
+  /* Свёрнутый вид: превью, пауза, название, закрытие — как в MiniPlayer
+     дизайн-системы. Сцена контролов распрямляется в строку: оверлей на
+     кадре 72×40 был бы нечитаем, а кнопку паузы переиспользуем ту же,
+     чтобы иконка play/pause не рассинхронизировалась. */
+  .player-bar:not(.open) #video-stage {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    background: transparent;
+    overflow: visible;
+    border-radius: 0;
+  }
+  .player-bar:not(.open) #video-stage .top,
+  .player-bar:not(.open) #video-stage .bottom { display: none; }
+  .player-bar:not(.open) #video-stage .center {
+    position: static;
+    inset: auto;
+    flex: none;
+    gap: 0;
+  }
+  .player-bar:not(.open) #btn-seek-back,
+  .player-bar:not(.open) #btn-seek-fwd,
+  .player-bar:not(.open) .pb-center,
+  .player-bar:not(.open) #btn-guide,
+  .player-bar:not(.open) #btn-rec { display: none; }
+  .player-bar:not(.open) #btn-pause.vbtn.big {
+    width: 44px;
+    height: 44px;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .player-bar:not(.open) .mini-prog { display: block; margin-top: var(--space-2); }
+  .player-bar:not(.open) .pb-zone { flex: none; }
+  .player-bar:not(.open) .pb-left { flex: 1; min-width: 0; }
+  .player-bar:not(.open) .now-playing { flex: 1; min-width: 0; }
+
+  /* Развёрнутый плеер — отдельная страница поверх всего */
+  .player-bar.open {
+    inset: 0;
+    border: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    z-index: 60;
+  }
+  .player-bar.open video { max-height: 60vh; max-height: 60dvh; }
+}
 
 /* ---------- topbar ---------- */
 .topbar {
@@ -70,7 +277,17 @@ html, body {
   padding: 9px 14px;
   outline: none;
 }
-#search:focus { border-color: var(--accent2); }
+#search:focus { border-color: var(--focus); }
+/* Подсказка клавиши поверх поля: напоминает про «/», не занимая места */
+.search-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.search-wrap .kbd {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.search-wrap:focus-within .kbd { display: none; }
 
 /* ---------- screens ---------- */
 /* Атрибут hidden обязан побеждать любой display из классов (иначе
@@ -78,14 +295,12 @@ html, body {
 [hidden] { display: none !important; }
 
 .screen[hidden] { display: none; }
+.screens { min-width: 0; }
 
 .card {
-  max-width: 520px;
-  margin: 12vh auto 0;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 28px;
+  padding: 20px;
+  max-width: 560px;
+  margin: 32px auto;
 }
 .card h1 { margin: 0 0 8px; font-size: 22px; }
 .card label {
@@ -124,9 +339,82 @@ html, body {
 /* ---------- layout ---------- */
 .layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 16px;
-  padding-top: 16px;
+  grid-template-columns: 264px 1fr; /* ширина сайдбара из дизайн-системы */
+  gap: var(--space-6);
+  padding-top: var(--space-4);
+}
+
+/* Режим просмотра на широком экране: плеер занимает правую половину,
+   список остаётся слева и продолжает работать. Нижний бар для этого не
+   годится — он либо крошечный, либо накрывает список. */
+@media (min-width: 1024px) {
+  /* Ширина колонки плеера — одно значение на всё: и сама колонка, и отступ,
+     который освобождает под неё страницу. */
+  /* #app.watch, а не .watch: базовые padding и max-width заданы через #app,
+     то есть селектором по id — он перебил бы класс, и отступ под плеер
+     просто не применился бы. */
+  #app.watch {
+    /* Ширины из дизайн-системы: рельс 72, колонка каналов 368, а плеер
+       забирает ВСЁ остальное. Наоборот не годится — список из коротких
+       строк растягивался бы на полэкрана, оставляя плееру огрызок. */
+    --rail-w: 72px;
+    --list-w: 368px;
+    --player-w: calc(
+      100vw - var(--rail-w) - var(--list-w) - var(--space-6) - var(--space-5) * 2
+    );
+    /* Страница раздвигается на всё окно: при max-width 1200 плеер вставал
+       у края экрана, а список упирался в край макета — между ними зияла
+       пустая полоса тем шире, чем больше монитор. */
+    max-width: none;
+    padding-right: calc(var(--player-w) + var(--space-5));
+  }
+  .watch .player-bar:not(.theater) {
+    left: auto;
+    top: 0;
+    bottom: 0;
+    width: var(--player-w);
+    max-height: none;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-4);
+    padding: var(--space-6);
+    overflow-y: auto;
+  }
+  /* Кадр 16:9 по высоте окна: width:100% в широкой колонке давал бы
+     чёрные поля по бокам вместо картинки. */
+  .watch .player-bar:not(.theater) {
+    --frame-w: calc(62vh * 16 / 9);
+  }
+  .watch .player-bar:not(.theater) video {
+    aspect-ratio: 16 / 9;
+    height: auto;
+    max-height: 62vh;
+    max-width: min(100%, var(--frame-w));
+    margin-inline: auto;
+  }
+
+  /* Контролы — одной строкой под кадром: колонка плеера широкая, и столбец
+     из трёх рядов только отъедал бы высоту у видео. wrap оставлен на случай
+     узкого окна у нижней границы режима. */
+  .watch .player-bar:not(.theater) .player-bar-row {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    padding-top: 0;
+  }
+
+  /* Сайдбар сворачивается в рельс: место нужнее списку и плееру */
+  .watch .layout { grid-template-columns: var(--rail-w) var(--list-w); }
+  .watch .side-item { justify-content: center; padding: 0; }
+  .watch .side-item > span { display: none; }
+  .watch .categories { display: none; }
+  /* Взамен скрытых чипов — компактный выбор категории над списком */
+  #app.watch #cat-picker:not([hidden]) { display: block; }
+  /* Театральный режим в режиме просмотра бессмыслен: плеер и так занимает
+     большую часть экрана, а кнопка дублировала бы полный экран. */
+  #app.watch .player-bar:not(.theater) #btn-expand { display: none; }
 }
 @media (max-width: 720px) {
   .layout { grid-template-columns: 1fr; }
@@ -163,32 +451,6 @@ html, body {
     overflow-y: visible;
   }
 }
-.category-btn {
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  color: var(--muted);
-  padding: 8px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  /* Внутри flex-колонки со скроллом кнопки обязаны сохранять свою высоту:
-   flex-shrink по умолчанию сжимает их, и текст обрезается по вертикали. */
-  flex: 0 0 auto;
-  min-height: 2.4em;
-  line-height: 1.4;
-  overflow-wrap: normal;
-}
-.category-btn:hover { background: var(--bg2); color: var(--text); }
-.category-btn.active {
-  background: var(--bg2);
-  border-color: var(--accent2);
-  color: var(--text);
-}
 
 /* ---------- channels ---------- */
 .epg-now {
@@ -205,51 +467,37 @@ html, body {
   display: block;
 }
 .virtual-spacer { position: relative; width: 100%; }
+/* Высота фиксирована: её знает виртуализация (CHANNEL_ROW_HEIGHT в main.ts) */
+.row.channel-card {
+  height: 64px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.row.channel-card:hover { background: var(--surface-2); }
+.row.channel-card.on { background: var(--accent-soft); }
+.row .star {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: var(--space-2);
+  display: inline-flex;
+}
 .virtual-inner {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
 }
 /* Высота карточки детерминирована (питч виртуального списка = 56px):
    36px контент + 20px паддинг + 2px борд. Не менять без virtual-list.ts.
    row-gap сетки (10px) добавляется к питчу строк — см. .virtual-inner. */
-.channel-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  padding: 10px 12px;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  min-width: 0;
-  height: 56px;
-}
-.channel-card:hover { border-color: var(--accent2); }
-.channel-card.active { border-color: var(--accent); }
-.channel-logo { width: 36px; height: 36px; object-fit: contain; flex: none; }
-.channel-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.channel-epg {
-  flex-basis: 100%;
-  font-size: 12px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .fav-star {
   flex: none;
   width: 28px;
@@ -265,28 +513,8 @@ html, body {
 .fav-star:hover { background: var(--bg2); color: var(--text); }
 .fav-star.active { color: var(--accent); }
 
-.fav-toggle {
-  margin-bottom: 8px;
-  border: 1px dashed var(--border);
-}
-.fav-toggle.active {
-  border-style: solid;
-  border-color: var(--accent);
-  color: var(--accent);
-}
+.fav-toggle { margin-bottom: var(--space-2); }
 
-.badge {
-  flex: none;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 2px 6px;
-  background: var(--bg2);
-  color: var(--muted);
-}
-.badge.q-4k { color: #ffb84f; }
-.badge.q-fhd { color: var(--accent); }
-.badge.q-hd { color: var(--accent2); }
 
 /* ---------- player bar ---------- */
 .player-bar {
@@ -301,12 +529,60 @@ html, body {
     calc(8px + env(safe-area-inset-bottom, 0px))
     max(16px, env(safe-area-inset-left, 0px));
 }
+/* Кадр со сцены контролов: размеры теперь на обёртке, а не на <video> */
+.video-stage, #video-stage { width: 100%; }
+/* Полоска прогресса мини-плеера: видна только в свёрнутом виде */
+.mini-prog { display: none; height: 2px; background: var(--surface-3); border-radius: var(--radius-full); }
+.mini-prog > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: var(--radius-full); }
+
+/* «Продолжить»: 4 карточки на десктопе, горизонтальная лента на телефоне */
+.continue-block { margin-bottom: var(--space-5); }
+.continue-block > h3 { margin: 0 0 var(--space-3); }
+.continue-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+.continue-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.continue-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+  background: var(--surface-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.continue-frame > img { max-width: 60%; max-height: 60%; object-fit: contain; }
+.continue-frame > .live { position: absolute; left: var(--space-2); top: var(--space-2); }
+.continue-frame > .prog { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0; }
+.continue-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+
+.scrub-row { display: flex; align-items: center; gap: var(--space-3); }
+/* «К эфиру» — единственная акцентная кнопка на кадре: она зовёт к действию */
+.btn-live { background: var(--accent); color: var(--on-accent); border: 0; flex: none; }
+.scrub-row .scrub { flex: 1; }
+.video-actions { display: flex; align-items: center; gap: var(--space-3); }
+.video-actions-right { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.video .volume { display: flex; align-items: center; gap: var(--space-2); }
+.video .quality-btn { background: rgba(255, 255, 255, 0.12); border: 0; color: #fff; }
+
 .player-bar video {
+  /* Канал открывают, чтобы смотреть: видео видно сразу, без лишнего действия */
   display: block;
   width: 100%;
   max-height: 62vh;
-  border-radius: var(--radius);
-  background: #000;
+  border-radius: var(--radius-lg);
+  background: var(--video);
 }
 .player-bar-row {
   display: flex;
@@ -327,12 +603,14 @@ html, body {
    лево и право в одну полупустую строку — кнопки выдавливались друг
    на друга (issue #62). wrap внутри зоны допустим: перенос — не наезд. */
 @media (max-width: 900px) {
-  .player-bar:not(.theater) {
+  /* :not(.open) — развёрнутая страница плеера занимает экран целиком,
+     общий потолок в 80vh её бы обрезал */
+  .player-bar:not(.theater):not(.open) {
     max-height: 80vh;
     max-height: 80dvh;
     overflow-y: auto;
   }
-  .player-bar:not(.theater) video {
+  .player-bar:not(.theater):not(.open) video {
     /* видео не должно вытеснять контролы за пределы экрана */
     max-height: 38vh;
     max-height: 38dvh;
@@ -366,8 +644,7 @@ html, body {
   /* Touch-цели не тоньше 40px (Apple HIG / Material). */
   .player-bar .icon-btn { width: 40px; height: 40px; }
   .fav-star { width: 36px; height: 36px; }
-  .category-btn { min-height: 44px; }
-
+  
   /* Инпуты < 16px → iOS Safari авто-зумит страницу при фокусе. */
   #search,
   .card input,
@@ -408,8 +685,10 @@ video { cursor: pointer; }
 
 /* Кнопка качества + выпадающее меню в палитре сайта */
 .quality-wrap { position: relative; }
-.quality-btn { min-width: 88px; text-align: center; cursor: pointer; }
-.quality-btn[aria-expanded="true"] { border-color: var(--accent2); }
+.cat-picker { position: relative; display: none; margin-bottom: var(--space-3); }
+/* Раскрывается вниз: над ним заголовок раздела, а не край окна */
+.cat-menu { top: calc(100% + 6px); bottom: auto; }
+/* Только позиционирование: вид меню задаёт .menu дизайн-системы */
 .quality-menu {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -418,26 +697,9 @@ video { cursor: pointer; }
   min-width: 190px;
   max-height: 260px;
   overflow-y: auto;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--overlay);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
 }
-.quality-item {
-  background: transparent;
-  border: 0;
-  color: var(--text);
-  text-align: left;
-  font: inherit;
-  font-size: 13px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.quality-item:hover { background: var(--bg2); }
+.quality-btn { min-width: 88px; text-align: center; cursor: pointer; }
+.quality-btn[aria-expanded="true"] { border-color: var(--focus); }
 .quality-item.active { color: var(--accent); font-weight: 600; }
 .icon-btn {
   background: var(--bg2);
@@ -469,29 +731,72 @@ video { cursor: pointer; }
   justify-content: center;
   padding: 16px;
 }
-.player-bar.theater video { display: block; max-height: none; height: 100%; }
+.player-bar.theater {
+  /* Ширина кадра при вписывании по высоте — по ней равняются и контролы */
+  --frame-w: calc((100vh - 140px) * 16 / 9);
+}
+.player-bar.theater video {
+  display: block;
+  max-height: none;
+  height: 100%;
+  max-width: min(100%, var(--frame-w));
+  margin-inline: auto;
+}
+
+/* Контролы равняются по кадру, а не по краям окна. Иначе на широком
+   мониторе крайние кнопки уезжают к самым границам экрана и теряют
+   связь с видео, под которым стоят. */
+.player-bar.theater .player-bar-row,
+.watch .player-bar:not(.theater) .player-bar-row {
+  width: min(100%, var(--frame-w));
+  margin-inline: auto;
+}
 
 /* ---------- guide (программа передач) ---------- */
 .guide-overlay {
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: var(--overlay);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: var(--space-4);
 }
 .guide {
   width: min(640px, 100%);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  background: var(--card);
+  background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
-  gap: 12px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  gap: var(--space-3);
+}
+/* Ручка нужна только шторке — на десктопе это обычный диалог */
+.grabber { display: none; }
+
+/* На телефоне программа — шторка снизу, как требует дизайн-система:
+   до неё дотягивается большой палец, а модалка по центру — нет. */
+@media (max-width: 719px) {
+  .guide-overlay { align-items: flex-end; padding: 0; }
+  .guide {
+    width: 100%;
+    max-height: 80vh;
+    max-height: 80dvh;
+    border: 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  }
+  .grabber {
+    display: block;
+    width: 40px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background: var(--surface-3);
+    margin: 0 auto var(--space-1);
+  }
 }
 .guide-head {
   display: flex;
@@ -531,30 +836,8 @@ video { cursor: pointer; }
   gap: 4px;
   min-height: 120px;
 }
-.guide-row {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  color: var(--text);
-  padding: 8px 10px;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-.guide-row:hover { background: var(--bg2); }
-.guide-row.live { border-color: var(--accent); }
-.guide-row.dim { opacity: 0.45; cursor: default; }
-.guide-row.dim:hover { background: transparent; }
-.guide-time {
-  flex: none;
-  color: var(--muted);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.guide-name { flex: 1; min-width: 0; }
+.prog-row.dim { opacity: 0.45; cursor: default; }
+.prog-row.dim:hover { background: transparent; }
 
 /* ---------- менеджер плейлистов (setup) ---------- */
 .pl-list {
@@ -614,28 +897,6 @@ video { cursor: pointer; }
 }
 
 /* Недавно просмотренные */
-.recents-block { margin-bottom: 12px; }
-.recents-title { font-size: 12px; margin-bottom: 6px; }
-.recents-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.recent-chip {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text);
-  padding: 5px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.recent-chip:hover { border-color: var(--accent2); }
 
 .pl-form { display: flex; flex-direction: column; }
 .pl-form label {
@@ -767,5 +1028,4 @@ video { cursor: pointer; }
     border-bottom: 0;
     padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
-  .guide-name { white-space: normal; }
-}
+  }

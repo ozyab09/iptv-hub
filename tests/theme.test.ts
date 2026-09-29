@@ -59,8 +59,8 @@ describe("isTheme", () => {
 
 describe("themeButtonLabel", () => {
   it("shows the target theme", () => {
-    expect(themeButtonLabel("dark")).toBe("☀️");
-    expect(themeButtonLabel("light")).toBe("🌙");
+    expect(themeButtonLabel("dark")).toBe("sun");
+    expect(themeButtonLabel("light")).toBe("moon");
   });
 });
 
