@@ -106,7 +106,12 @@ class FakeRecorder implements RecorderLike {
   }
   /** Эмулировать событие stop (в Firefox оно приходит ~через 16 мс после stop()). */
   emitStop(): void {
+    this.state = "inactive";
     this.onstop?.();
+  }
+  /** Эмулировать ошибку энкодера (мобильный Firefox: UnknownError). */
+  emitError(): void {
+    this.onerror?.(new Error("UnknownError"));
   }
 }
 
@@ -119,6 +124,7 @@ interface Harness {
   saves: Array<{ size: number; chunks: number }>;
   notices: string[];
   mimes: string[];
+  lost: () => number;
 }
 
 function harness(hasAudio = false): Harness {
@@ -128,6 +134,7 @@ function harness(hasAudio = false): Harness {
   const saves: Array<{ size: number; chunks: number }> = [];
   const notices: string[] = [];
   const mimes: string[] = [];
+  let lost = 0;
 
   const track = (kind: string): { kind: string; stop: () => void } => ({
     kind,
@@ -149,6 +156,7 @@ function harness(hasAudio = false): Harness {
     saves,
     notices,
     mimes,
+    lost: () => lost,
     deps: {
       createSource: () => ({
         stream,
@@ -163,6 +171,9 @@ function harness(hasAudio = false): Harness {
       onSave: (blob, chunkCount) => saves.push({ size: blob.size, chunks: chunkCount }),
       onNotify: (m) => notices.push(m),
       onState: () => undefined,
+      onSourceLost: () => {
+        lost++;
+      },
       pickMime: (audio) => (audio ? "video/webm;codecs=vp8,opus" : "video/webm;codecs=vp8"),
       stopTimeoutMs: 3000,
     },
@@ -287,6 +298,85 @@ describe("createRecordingSession", () => {
     expect(h.stoppedTracks()).toBe(1);
     expect(h.disposed()).toBe(1);
     expect(h.notices).toContain("Не удалось начать запись: MediaRecorder недоступен");
+  });
+
+  it("не выдаёт огрызок за файл, когда источник оборвался сам", () => {
+    const h = harness();
+    const s = createRecordingSession(h.deps);
+    s.start();
+    // Мобильный Firefox: дорожка умирает, MediaRecorder останавливается сам —
+    // stop() никто не вызывал, а в буфере лежит заголовок контейнера.
+    h.recorder.emitChunk("wbm");
+    h.recorder.emitStop();
+
+    expect(h.saves).toHaveLength(0);
+    expect(h.lost()).toBe(1);
+    expect(s.state()).toBe("idle");
+    expect(h.stoppedTracks()).toBe(1);
+    expect(h.disposed()).toBe(1);
+  });
+
+  it("после ошибки энкодера не сохраняет огрызок, даже если stop придёт следом", () => {
+    // Мобильный Firefox: MediaRecorder падает с UnknownError через секунду,
+    // затем досылает один чанк и stop. Раньше он проходил как штатная
+    // остановка и пользователю подсовывали файл в 4 КБ.
+    const h = harness();
+    const s = createRecordingSession(h.deps);
+    s.start();
+    h.recorder.emitError();
+    h.recorder.emitChunk("junk");
+    h.recorder.emitStop();
+
+    expect(h.saves).toHaveLength(0);
+    expect(h.lost()).toBe(1);
+    expect(s.state()).toBe("idle");
+    expect(h.stoppedTracks()).toBe(1);
+  });
+
+  it("ошибка без последующего stop завершается watchdog-ом и файл не отдаёт", () => {
+    vi.useFakeTimers();
+    const h = harness();
+    const s = createRecordingSession(h.deps);
+    s.start();
+    h.recorder.emitChunk("junk");
+    h.recorder.emitError();
+    vi.advanceTimersByTime(3000);
+
+    expect(h.saves).toHaveLength(0);
+    expect(h.lost()).toBe(1);
+    expect(s.state()).toBe("idle");
+  });
+
+  it("обычный стоп не считается потерей источника", () => {
+    const h = harness();
+    const s = createRecordingSession(h.deps);
+    s.start();
+    h.recorder.emitChunk("data");
+    s.stop(true);
+    h.recorder.emitStop();
+
+    expect(h.lost()).toBe(0);
+    expect(h.saves).toHaveLength(1);
+  });
+
+  it("позволяет перезапуск прямо из onSourceLost", () => {
+    const h = harness();
+    let restarted = 0;
+    const s: { current: ReturnType<typeof createRecordingSession> | null } = {
+      current: null,
+    };
+    s.current = createRecordingSession({
+      ...h.deps,
+      onSourceLost: () => {
+        restarted++;
+        if (restarted === 1) s.current?.start(); // состояние уже idle
+      },
+    });
+    s.current.start();
+    h.recorder.emitStop();
+
+    expect(restarted).toBe(1);
+    expect(s.current.state()).toBe("recording");
   });
 
   it("сообщает о пустой записи, а не молчит", () => {
