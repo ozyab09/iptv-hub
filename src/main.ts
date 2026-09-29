@@ -1,5 +1,7 @@
 import "./style.css";
 import { installDebugLog } from "./debug-log";
+import { createRecordingSink } from "./recording-sink";
+import { createSegmentSession } from "./segment-recorder";
 import {
   isMixedContent,
 } from "./config";
@@ -393,8 +395,8 @@ function renderChannelCard(c: Channel): HTMLElement {
 // ---------- Плеер ----------
 function playChannel(c: Channel): void {
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
-  if (recSession.isRecording() && lastPlayed && lastPlayed.url !== c.url) {
-    recSession.stop(true);
+  if (isRecordingNow() && lastPlayed && lastPlayed.url !== c.url) {
+    stopRecordingNow();
     showToast("Запись остановлена: канал переключён");
   }
   lastPlayed = c;
@@ -438,8 +440,8 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
-  if (recSession.isRecording()) {
-    recSession.stop(true); // закрытие плеера — тоже сохраняем записанное
+  if (isRecordingNow()) {
+    stopRecordingNow(); // закрытие плеера — тоже сохраняем записанное
     showToast("Запись остановлена: плеер закрыт");
   }
   if (document.fullscreenElement) void document.exitFullscreen();
@@ -715,8 +717,8 @@ subtitleBtn.addEventListener("click", (e) => {
 
 /** Остановить запись, если идёт (с сохранением). Вызывается при смене плейлиста. */
 function stopIfRecording(): void {
-  if (recSession.isRecording()) {
-    recSession.stop(true);
+  if (isRecordingNow()) {
+    stopRecordingNow();
     showToast("Запись остановлена: плейлист переключён");
   }
 }
@@ -962,7 +964,13 @@ function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {
     );
     return;
   }
-  const name = recordingFileName(lastPlayed?.name ?? "recording");
+  offerDownload(blob, recordingFileName(lastPlayed?.name ?? "recording"));
+}
+
+/** Отдать готовый файл пользователю — общее для обоих способов записи. */
+function offerDownload(blob: Blob, name: string): void {
+  // Для записи из OPFS это File с диска: createObjectURL отдаёт его потоком,
+  // содержимое в память не вытягивается.
   const url = URL.createObjectURL(blob);
 
   // Самопроверка: браузер читает то, что сам только что записал. Отличает
@@ -977,7 +985,7 @@ function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {
   probe.onerror = () => console.debug("[iptv-hub] файл: браузер не смог его прочитать");
   probe.src = url;
 
-  // Firefox: a.click() из асинхронного onstop (вне user gesture) молча
+  // Firefox: a.click() из асинхронного обработчика (вне user gesture) молча
   // глотается — повторные клики не помогают. Надёжный путь — клик по кнопке
   // из тоста: это новый user gesture, скачивание гарантировано.
   const download = (): void => {
@@ -997,6 +1005,14 @@ function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {
   showToastAction("Автоскачивание не началось?", `Скачать ${name}`, download, 15_000);
 }
 
+/** Вид кнопки ⏺ — общий для обоих способов записи. */
+function renderRecButton(active: boolean): void {
+  btnRec.classList.toggle("recording", active);
+  btnRec.title = active
+    ? "Остановить запись и сохранить файл"
+    : "Записать эфир в файл";
+}
+
 const recSession = createRecordingSession({
   createSource: createRecordSource,
   createRecorder: createRecorderAdapter,
@@ -1004,11 +1020,7 @@ const recSession = createRecordingSession({
   onNotify: showToast,
   onState: (state) => {
     console.debug(`[iptv-hub] rec: state=${state}`);
-    btnRec.classList.toggle("recording", state === "recording");
-    btnRec.title =
-      state === "recording"
-        ? "Остановить запись и сохранить файл"
-        : "Записать эфир в файл";
+    renderRecButton(state === "recording");
   },
   onSourceLost: () => {
     // Запись сорвалась — переходим на следующий способ захвата и пробуем
@@ -1024,7 +1036,55 @@ const recSession = createRecordingSession({
   },
 });
 
+/**
+ * Запись готовыми сегментами — основной путь для HLS. Складывает то, что
+ * hls.js уже скачал: без перекодирования, без канваса и MediaRecorder,
+ * а значит работает и там, где те бессильны (Firefox для Android).
+ */
+const segSession = createSegmentSession({
+  createSink: createRecordingSink,
+  onNotify: showToast,
+  onState: (state) => {
+    console.debug(`[iptv-hub] seg: state=${state}`);
+    renderRecButton(state === "recording");
+  },
+  onSave: (blob, result) => {
+    console.debug(
+      `[iptv-hub] seg: ${result.bytes} байт, сегментов=${result.segments}, ` +
+        `хранилище=${result.sink}, .${result.ext}`,
+    );
+    offerDownload(
+      blob,
+      recordingFileName(lastPlayed?.name ?? "recording", new Date(), result.ext),
+    );
+  },
+});
+
+// Подписка переживает смену канала: Player вешает обработчик на каждый новый
+// hls-инстанс. init-сегменты копятся всегда — для fMP4 без них файл нечитаем.
+player.setFragmentListener((payload, isInit) => segSession.feed(payload, isInit));
+
+/** Идёт ли запись любым из способов. */
+function isRecordingNow(): boolean {
+  return segSession.isRecording() || recSession.isRecording();
+}
+
+/** Остановить запись любым из способов, сохранив записанное. */
+function stopRecordingNow(): void {
+  if (segSession.isRecording()) {
+    void segSession.stop(true);
+    return;
+  }
+  if (recSession.isRecording()) recSession.stop(true);
+}
+
 function startRecording(): void {
+  // HLS пишем сегментами; перекодирование остаётся для остального
+  // (нативное воспроизведение, прямые mp4).
+  if (player.getHls()) {
+    void segSession.start();
+    return;
+  }
   if (!canRecord()) {
     showToast("Запись не поддерживается этим браузером");
     return;
@@ -1042,9 +1102,11 @@ function startRecording(): void {
 // (Раньше здесь жили два обработчика — addEventListener + onclick — и оба
 // срабатывали на один клик, показывая ложный тост «Запись уже идёт».)
 btnRec.addEventListener("click", () => {
-  console.debug(`[iptv-hub] rec: клик по ⏺, state=${recSession.state()}`);
-  if (recSession.isRecording()) {
-    recSession.stop(true);
+  console.debug(
+    `[iptv-hub] клик по ⏺, seg=${segSession.state()} rec=${recSession.state()}`,
+  );
+  if (isRecordingNow()) {
+    stopRecordingNow();
     return;
   }
   if (!lastPlayed) return;
