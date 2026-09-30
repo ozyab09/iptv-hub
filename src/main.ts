@@ -38,6 +38,7 @@ import {
 } from "./playlists";
 import {
   applyFavorites,
+  buildFavoritesM3U,
   isFavorite,
   toggleFavorite,
 } from "./favorites";
@@ -187,6 +188,7 @@ const btnExpand = $<HTMLButtonElement>("btn-expand");
 const btnFullscreen = $<HTMLButtonElement>("btn-fullscreen");
 const btnRetry = $<HTMLButtonElement>("btn-retry");
 const btnExport = $<HTMLButtonElement>("btn-export");
+const btnExportFav = $<HTMLButtonElement>("btn-export-fav");
 const btnImport = $<HTMLButtonElement>("btn-import");
 const importFile = $<HTMLInputElement>("import-file");
 const sideNav = $("side-nav");
@@ -2367,6 +2369,29 @@ btnExport.addEventListener("click", () => {
   a.remove();
   window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   showToast("Настройки экспортированы");
+});
+
+// Экспорт избранного в .m3u (FR-11): совместимый файл для любых плееров
+btnExportFav.addEventListener("click", () => {
+  if (!snapshot || !plState.activeId) {
+    showToast("Сначала откройте плейлист");
+    return;
+  }
+  const favs = loadFavoritesFor(plState.activeId);
+  const m3u = buildFavoritesM3U(snapshot.channels, favs);
+  if (!m3u.includes("#EXTINF")) {
+    showToast("В избранном нет каналов из текущего плейлиста");
+    return;
+  }
+  const blob = new Blob([m3u], { type: "audio/x-mpegurl" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "favorites.m3u";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  showToast("Избранное экспортировано");
 });
 
 btnImport.addEventListener("click", () => importFile.click());
