@@ -6,8 +6,11 @@ import {
   shouldCheck,
   diffSnapshots,
   refreshNotice,
+  checkSummary,
+  countProgrammes,
   REFRESH_CHOICES,
 } from "../src/refresh";
+import type { EpgProgramme } from "../src/types";
 import type { Channel, PlaylistSnapshot } from "../src/types";
 
 const store = (): Storage => {
@@ -99,6 +102,39 @@ describe("refresh: разница снапшотов", () => {
     expect(diffSnapshots(s, s)).toEqual({ added: 0, removed: 0, changed: 0 });
   });
 });
+
+describe("refresh: итог проверки для колокольчика", () => {
+  it("с дельтой и программой", () => {
+    expect(checkSummary({ added: 3, removed: 1, changed: 0 }, 1371, 22400, true)).toBe(
+      "Плейлист обновлён: +3, −1. Каналов: 1371, передач: 22400",
+    );
+  });
+
+  it("без изменений — подтверждение и числа", () => {
+    expect(checkSummary({ added: 0, removed: 0, changed: 0 }, 500, 0, false)).toBe(
+      "Плейлист проверён: без изменений. Каналов: 500, передач нет",
+    );
+  });
+
+  it("countProgrammes суммирует длины списков", () => {
+    const epg = new Map<string, EpgProgramme[]>([
+      ["id:a", [prog(), prog()]],
+      ["id:b", [prog()]],
+      ["id:c", []],
+    ]);
+    expect(countProgrammes(epg)).toBe(3);
+    expect(countProgrammes(new Map())).toBe(0);
+  });
+});
+
+function prog(): EpgProgramme {
+  return {
+    start: "2026-09-30T10:00:00Z",
+    stop: "2026-09-30T11:00:00Z",
+    title: "Передача",
+    desc: null,
+  };
+}
 
 describe("refresh: текст уведомления", () => {
   it("без изменений — короткое подтверждение", () => {

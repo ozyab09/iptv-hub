@@ -9,7 +9,7 @@
  * (принцип проекта); сеть и таймеры — в main.ts.
  */
 
-import type { Channel, PlaylistSnapshot } from "./types";
+import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
 
 /** Периодичность проверки, минут (0 — выключено). */
 export type RefreshInterval = 0 | 60 | 360 | 1440;
@@ -129,7 +129,7 @@ export function diffSnapshots(
   return { added, removed, changed };
 }
 
-/** Текст уведомления по результату проверки. */
+/** Текст уведомления по результату проверки (без итоговых чисел — см. checkSummary). */
 export function refreshNotice(
   diff: SnapshotDiff,
   httpDropped: number,
@@ -146,4 +146,34 @@ export function refreshNotice(
     return `${head}. Скрыто http-каналов: ${httpDropped}`;
   }
   return head;
+}
+
+/** Сколько передач в телепрограмме (сумма длин всех списков). */
+export function countProgrammes(epg: Map<string, EpgProgramme[]>): number {
+  let total = 0;
+  for (const list of epg.values()) total += list.length;
+  return total;
+}
+
+/**
+ * Итог проверки для колокольчика: дельта плейлиста (если была) + сколько
+ * теперь каналов и передач. Отвечает на главный вопрос «что у меня сейчас»,
+ * а не только «что изменилось».
+ */
+export function checkSummary(
+  diff: SnapshotDiff,
+  channels: number,
+  programmes: number,
+  epgLoaded: boolean,
+): string {
+  const parts: string[] = [];
+  if (diff.added > 0) parts.push(`+${diff.added}`);
+  if (diff.removed > 0) parts.push(`−${diff.removed}`);
+  if (diff.changed > 0) parts.push(`изменено: ${diff.changed}`);
+  const epgPart = epgLoaded ? `передач: ${programmes}` : "передач нет";
+  const head =
+    parts.length > 0
+      ? `Плейлист обновлён: ${parts.join(", ")}`
+      : "Плейлист проверён: без изменений";
+  return `${head}. Каналов: ${channels}, ${epgPart}`;
 }
