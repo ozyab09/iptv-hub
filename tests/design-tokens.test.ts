@@ -146,11 +146,21 @@ describe("вертикальное центрирование плеера (issu
     expect(wide).toMatch(/\.watch \.player-bar \{[^}]*margin:\s*auto 0;[^}]*\}/);
   });
 
-  it("страница плеера на телефоне центрирована и не ломает прокрутку", () => {
-    expect(narrow).toMatch(/\.player-bar\.open \{[^}]*justify-content:\s*center;[^}]*\}/);
-    // осознанный выбор: у страницы центрирование flex-ом, авто-отступы —
-    // только у wide-колонки; иначе правило уедет в прокручиваемый контейнер
-    expect(narrow).not.toMatch(/\.player-bar\.open \{[^}]*margin:\s*auto 0;[^}]*\}/);
+  it("страница плеера на телефоне: те же авто-отступы на детях", () => {
+    // Тот же механизм, что у wide-колонки: центрруют дети (margin-block),
+    // не сам прокручиваемый контейнер.
+    expect(narrow).toMatch(/\.player-bar\.open > \* \{[^}]*margin-block:\s*auto;[^}]*\}/);
+    expect(narrow).not.toMatch(/\.player-bar\.open \{[^}]*justify-content:\s*center;[^}]*\}/);
+  });
+
+  it("кадр на странице плеера задаёт поля без шортката margin", () => {
+    // Шорткат margin: 0 … перетёр бы центрирующий margin-block: auto.
+    expect(narrow).toMatch(
+      /\.player-bar\.open #video-stage \{[^}]*margin-inline:[^;]+;[^}]*\}/,
+    );
+    expect(narrow).not.toMatch(
+      /\.player-bar\.open #video-stage \{[^}]\s*margin:\s*0[^;]*;/,
+    );
   });
 });
 

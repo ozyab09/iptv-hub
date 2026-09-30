@@ -1067,14 +1067,19 @@ html, body {
     padding: max(var(--space-4), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-5);
     background: var(--bg);
     overflow-y: auto;
-    /* Кадр посередине страницы, а не у верхней кромки; при переполнении
-       авто-отступы схлопываются и прокрутка начинается от верхнего края
-       (см. комментарий в wide-блоке выше). */
-    justify-content: center;
   }
+  /* Кадр посередине страницы, а не у верхней кромки. Центрируют дети,
+     а не сам прокручиваемый контейнер: justify-content: center при
+     переполнении делает верх недостижимым прокруткой, а авто-отступы
+     при переполнении просто схлопываются (подробнее — в wide-блоке).
+     Важно: #video-stage ниже задаёт отрицательные поля через margin-inline,
+     не шорткатом, иначе он перетёр бы себе margin-block: auto. */
+  .player-bar.open > * { margin-block: auto; }
   .player-bar.open #video-stage {
     width: calc(100% + 2 * var(--space-5));
-    margin: 0 calc(-1 * var(--space-5));
+    /* margin-inline, не шорткат: центрирующие блок-поля кадру задаёт
+       правило выше — .player-bar.open > * с margin-block: auto (#82) */
+    margin-inline: calc(-1 * var(--space-5));
     border-radius: 0;
   }
   /* На узком кадре название передачи в одну строку помельче */
