@@ -267,6 +267,11 @@ export class Player {
     if (this.hls) this.hls.subtitleTrack = index;
   }
 
+  /** Текущий URL потока (после https-апгрейда) — для диагностики фатальных ошибок. */
+  get currentStreamUrl(): string | null {
+    return this.currentUrl;
+  }
+
   /** Перезапустить текущий поток с нуля (retry-кнопка). */
   retry(): void {
     const url = this.currentUrl;
