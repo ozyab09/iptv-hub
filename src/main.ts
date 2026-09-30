@@ -1191,6 +1191,10 @@ window.addEventListener("keydown", (e) => {
       refreshMuteIcon();
       break;
     case "Escape":
+      if (!qualityMenu.hidden) {
+        closeOverlay("quality");
+        break;
+      }
       if (playerBar.classList.contains("open")) {
         e.preventDefault();
         togglePlayerPage(false);
@@ -1729,6 +1733,7 @@ function applyOverlay(name: OverlayName, on: boolean): void {
     setView(on ? "settings" : "channels");
   } else if (name === "quality") {
     qualityMenu.hidden = !on;
+    qualityBtn.setAttribute("aria-expanded", String(on));
   }
 }
 
@@ -1753,6 +1758,18 @@ function closeOverlay(name: OverlayName): void {
   historyGuard = true;
   history.back();
 }
+
+qualityBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (qualityMenu.hidden) openOverlay("quality");
+  else closeOverlay("quality");
+});
+qualityMenu.addEventListener("click", (event) => {
+  if ((event.target as HTMLElement).closest(".menu-item")) closeOverlay("quality");
+});
+document.addEventListener("click", (event) => {
+  if (!qualityMenu.hidden && !qualityWrap.contains(event.target as Node)) closeOverlay("quality");
+});
 
 /** Системный «назад»: закрываем верхний оверлей без повторного history.back(). */
 window.addEventListener("popstate", () => {
