@@ -1,4 +1,5 @@
 import "./style.css";
+import { LANGUAGE_KEY, resolveLanguage, t, translateMessage, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
 import {
@@ -161,6 +162,11 @@ import {
   corsChecklist,
   httpChecklist,
 } from "./stream-diagnostics";
+
+let savedLanguage: string | null = null;
+try { savedLanguage = localStorage.getItem(LANGUAGE_KEY); } catch { /* приватный режим */ }
+let currentLanguage = resolveLanguage(savedLanguage, navigator.language);
+const tr = (key: TranslationKey, params: TranslationParams = {}): string => t(key, currentLanguage, params);
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -361,9 +367,9 @@ function persistPlayerSettings(): void {
   renderPlayerSettings();
   try {
     localStorage.setItem(PLAYER_SETTINGS_KEY, JSON.stringify(playerSettings));
-    playerSettingsStatus.textContent = "Сохранено. Применится к следующему запуску канала.";
+    setSystemText(playerSettingsStatus, t("settings.saved"));
   } catch {
-    playerSettingsStatus.textContent = "Применится к следующему запуску канала. Браузер не разрешил сохранить настройки между сеансами.";
+    setSystemText(playerSettingsStatus, t("settings.unsaved"));
   }
 }
 renderPlayerSettings();
@@ -392,7 +398,7 @@ async function diagnoseStreamFailure(): Promise<void> {
     const verdict = probeVerdict(r);
     const detail =
       r.kind === "blocked" ? corsChecklist() : r.kind === "http" ? httpChecklist(r.status) : "";
-    pushNotification(`${verdict}${detail ? `. ${detail}` : ""}`);
+    pushNotification(`${verdict}${detail ? `\n${detail}` : ""}`);
     showToast(verdict);
   } catch {
     // диагностика не должна усугублять сбой — молча
@@ -433,6 +439,57 @@ const qualityMenuUi = createQualityMenu({
   createButton: () => document.createElement("button"),
 });
 
+function setSystemText(el: HTMLElement, message: string): void {
+  el.dataset.systemMessage = message;
+  el.textContent = translateMessage(message, currentLanguage);
+}
+
+function applyLanguage(): void {
+  document.documentElement.lang = currentLanguage;
+  for (const el of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
+    el.textContent = tr(el.dataset.i18n as TranslationKey);
+  }
+  for (const attr of ["title", "aria-label", "placeholder"]) {
+    for (const el of document.querySelectorAll<HTMLElement>(`[data-i18n-${attr}]`)) {
+      el.setAttribute(attr, tr(el.getAttribute(`data-i18n-${attr}`) as TranslationKey));
+    }
+  }
+  for (const el of document.querySelectorAll<HTMLElement>("[data-system-message]")) {
+    el.textContent = translateMessage(el.dataset.systemMessage!, currentLanguage);
+  }
+  for (const b of document.querySelectorAll<HTMLButtonElement>("[data-language]")) {
+    const on = b.dataset.language === currentLanguage;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", String(on));
+  }
+  // Перерисовка списка не должна уничтожать незавершённое редактирование.
+  for (const [index, p] of plState.items.entries()) {
+    const row = plList.children[index];
+    if (!row || row.classList.contains("editing")) continue;
+    const pick = row.querySelector<HTMLElement>(".pl-pick")!;
+    pick.title = tr(p.id === plState.activeId ? "playlist.active" : "playlist.pick");
+    row.querySelector<HTMLElement>(".pl-url")!.textContent = urlLabel(p.playlistUrl, p.epgUrl);
+    const edit = row.querySelector<HTMLElement>(".pl-act")!;
+    edit.title = tr("playlist.editHint");
+    edit.setAttribute("aria-label", tr("playlist.edit", { name: p.name }));
+    const del = row.querySelector<HTMLElement>(".pl-del")!;
+    del.title = tr("playlist.deleteHint");
+    del.setAttribute("aria-label", tr("playlist.delete", { name: p.name }));
+  }
+  renderPlaylistSwitcher();
+  renderSettingsMode();
+  renderNav();
+  notifBellUi.render();
+}
+
+$("language-seg").addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLElement>("[data-language]");
+  if (!button) return;
+  currentLanguage = button.dataset.language as Language;
+  try { localStorage.setItem(LANGUAGE_KEY, currentLanguage); } catch { /* приватный режим */ }
+  applyLanguage();
+});
+
 // ---------- UI helpers ----------
 // Токен показа: таймер скрытия гасит тост, только если поверх не показали
 // новый. Иначе короткий тост («Запись остановлена») уносил с собой кнопку
@@ -441,7 +498,7 @@ let toastToken = 0;
 
 function showToast(msg: string): void {
   const token = ++toastToken;
-  toastEl.textContent = msg;
+  setSystemText(toastEl, msg);
   toastEl.hidden = false;
   window.setTimeout(() => {
     if (toastToken === token) toastEl.hidden = true;
@@ -456,9 +513,10 @@ function showToastAction(
   durationMs = 15_000,
 ): void {
   const token = ++toastToken;
+  delete toastEl.dataset.systemMessage;
   toastEl.textContent = "";
   const span = document.createElement("span");
-  span.textContent = msg;
+  setSystemText(span, msg);
   const btn = document.createElement("button");
   btn.className = "toast-action";
   btn.textContent = actionLabel;
@@ -485,6 +543,7 @@ const notifBellUi = createNotificationBell({
     history.pushState({ overlay: "notifications" }, "");
   },
   onClose: () => closeOverlay("notifications"),
+  language: () => currentLanguage,
 });
 /** Положить уведомление в колокольчик (данные + бейдж). */
 function pushNotification(message: string): void {
@@ -511,11 +570,12 @@ document.addEventListener("click", (e) => {
 });
 
 notifBellUi.render();
+applyLanguage();
 
 function showSetup(message?: string): void {
   setView("settings", false);
   if (message) {
-    setupError.textContent = message;
+    setSystemText(setupError, message);
     setupError.hidden = false;
   }
 }
@@ -535,7 +595,7 @@ function renderSettingsMode(): void {
   setupScreen.classList.toggle("first-run", firstRun);
   // Без плейлиста разделы, поиск и таб-бар вести некуда — прячем их
   appEl.classList.toggle("no-playlist", firstRun);
-  setupLoad.textContent = firstRun ? "Открыть каналы" : "Добавить и открыть";
+  setupLoad.textContent = firstRun ? tr("playlist.open") : tr("playlist.addOpen");
   if (firstRun) addForm.hidden = false;
 }
 
@@ -555,7 +615,7 @@ function navButton(view: (typeof VIEWS)[number], cls: string): HTMLButtonElement
   b.setAttribute("aria-current", activeView === view.id ? "page" : "false");
   b.innerHTML = iconMarkup(view.icon);
   const label = document.createElement("span");
-  label.textContent = view.label;
+  label.textContent = translateMessage(view.label, currentLanguage);
   b.append(label);
   b.addEventListener("click", () => setView(view.id));
   return b;
@@ -568,7 +628,7 @@ function renderNav(): void {
     tabbar.append(navButton(v, "tab"));
     sideNav.append(navButton(v, "side-item"));
   }
-  viewTitle.textContent = VIEWS.find((v) => v.id === activeView)?.label ?? "";
+  viewTitle.textContent = translateMessage(VIEWS.find((v) => v.id === activeView)?.label ?? "", currentLanguage);
 }
 
 /**
@@ -1591,7 +1651,7 @@ function renderRecordings(): void {
       if (!recordingsFs) return;
       void recordingsFs.read(storedRecordingName(r.id, r.ext)).then((file) => {
         if (!file) {
-          showToast("Файл записи не найден в хранилище");
+          showToast(tr("error.recordMissing"));
           return;
         }
         playRecording(file, r);
@@ -1642,7 +1702,7 @@ function playRecording(file: File, r: RecordingMeta): void {
   videoEl.onerror = () => {
     videoEl.onerror = null;
     cleanup();
-    showToast("Браузер не умеет играть этот формат (.ts) — используйте скачивание");
+    showToast(tr("error.ts"));
   };
   videoEl.src = url;
   videoEl.play().catch(() => undefined);
@@ -1865,7 +1925,7 @@ const recSession = createRecordingSession({
       startRecording();
       return;
     }
-    showToast("Записать не удалось ни одним способом — см. ?debug=1");
+    showToast(tr("error.recordBoth"));
   },
 });
 
@@ -1953,7 +2013,7 @@ function startRecording(): void {
     return;
   }
   if (!canRecord()) {
-    showToast("Запись не поддерживается этим браузером");
+    showToast(tr("error.recordUnsupported"));
     return;
   }
   console.debug(
@@ -2136,7 +2196,7 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLBut
       }
       const url = buildCatchupUrl(cu, p, now);
       if (!url) {
-        showToast("Провайдер не дал шаблон архива для этого канала");
+        showToast(tr("error.noArchive"));
         return;
       }
       nowTitle.textContent = `${c.name} · архив`;
@@ -2259,7 +2319,7 @@ sleepMenu.addEventListener("click", (e) => {
       (p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop),
     );
     if (!cur) {
-      showToast("Нет телепрограммы для этого канала — выберите интервал");
+      showToast(tr("error.noEpg"));
       return;
     }
     sleepState = sleepStartEpisode(sleepState, Date.parse(cur.stop), nowMs);
@@ -2549,7 +2609,7 @@ btnFullscreen.addEventListener("click", () => {
     void document.exitFullscreen();
   } else {
     void playerBar.requestFullscreen?.().catch(() => {
-      showToast("Полноэкранный режим недоступен");
+      showToast(tr("error.fullscreen"));
     });
   }
 });
@@ -2688,7 +2748,7 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
     }
   } catch {
     if (!silentOnNoChange) {
-      showToast("Проверить плейлист не удалось — нет сети или источник недоступен");
+      showToast(tr("error.refresh"));
     }
   } finally {
     refreshBusy = false;
@@ -2835,7 +2895,7 @@ function renderPlaylistManager(): void {
     pick.className = "pl-pick";
     pick.setAttribute("role", "radio");
     pick.setAttribute("aria-checked", String(active));
-    pick.title = active ? "Этот плейлист открыт" : "Открыть этот плейлист";
+    pick.title = active ? tr("playlist.active") : tr("playlist.pick");
     const radio = document.createElement("span");
     radio.className = "radio";
     const text = document.createElement("span");
@@ -2855,8 +2915,8 @@ function renderPlaylistManager(): void {
 
     const edit = document.createElement("button");
     edit.className = "icon-btn pl-act";
-    edit.title = "Переименовать или изменить ссылки";
-    edit.setAttribute("aria-label", `Изменить «${p.name}»`);
+    edit.title = tr("playlist.editHint");
+    edit.setAttribute("aria-label", tr("playlist.edit", { name: p.name }));
     setIcon(edit, "edit");
     edit.addEventListener("click", () => {
       // Инлайн-редактирование: строка превращается в форму
@@ -2865,12 +2925,13 @@ function renderPlaylistManager(): void {
       const form = document.createElement("form");
       form.className = "pl-edit";
       form.noValidate = true;
-      const mk = (label: string, value: string, type = "text"): HTMLInputElement => {
+      const mk = (key: TranslationKey, value: string, type = "text"): HTMLInputElement => {
         const field = document.createElement("label");
         field.className = "field";
         const l = document.createElement("span");
         l.className = "field-label";
-        l.textContent = label;
+        l.dataset.i18n = key;
+        l.textContent = tr(key);
         const box = document.createElement("span");
         box.className = "input";
         const input = document.createElement("input");
@@ -2881,19 +2942,21 @@ function renderPlaylistManager(): void {
         form.append(field);
         return input;
       };
-      const nameIn = mk("Название", p.name);
-      const urlIn = mk("Ссылка на плейлист", p.playlistUrl, "url");
-      const epgIn = mk("Ссылка на телепрограмму (необязательно)", p.epgUrl ?? "", "url");
+      const nameIn = mk("playlist.name", p.name);
+      const urlIn = mk("playlist.url", p.playlistUrl, "url");
+      const epgIn = mk("playlist.epgOptional", p.epgUrl ?? "", "url");
       const btns = document.createElement("div");
       btns.className = "pl-edit-actions";
       const save = document.createElement("button");
       save.className = "btn btn-primary btn-sm";
       save.type = "submit";
-      save.textContent = "Сохранить";
+      save.dataset.i18n = "common.save";
+      save.textContent = tr("common.save");
       const cancel = document.createElement("button");
       cancel.className = "btn btn-ghost btn-sm";
       cancel.type = "button";
-      cancel.textContent = "Отмена";
+      cancel.dataset.i18n = "common.cancel";
+      cancel.textContent = tr("common.cancel");
       btns.append(save, cancel);
       form.append(btns);
       row.append(form);
@@ -2906,7 +2969,7 @@ function renderPlaylistManager(): void {
         const newUrl = urlIn.value.trim();
         const newEpg = epgIn.value.trim();
         if (!/^https?:\/\//.test(newUrl)) {
-          setupError.textContent = "Нужна ссылка, начинающаяся с http:// или https://";
+          setSystemText(setupError, t("error.url"));
           setupError.hidden = false;
           return;
         }
@@ -2924,11 +2987,11 @@ function renderPlaylistManager(): void {
 
     const del = document.createElement("button");
     del.className = "icon-btn pl-act pl-del";
-    del.title = "Удалить плейлист (его избранное тоже удалится)";
-    del.setAttribute("aria-label", `Удалить «${p.name}»`);
+    del.title = tr("playlist.deleteHint");
+    del.setAttribute("aria-label", tr("playlist.delete", { name: p.name }));
     setIcon(del, "trash");
     del.addEventListener("click", () => {
-      if (!window.confirm(`Удалить «${p.name}»?`)) return;
+      if (!window.confirm(tr("playlist.confirmDelete", { name: p.name }))) return;
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem(favoritesKey(p.id));
       }
@@ -2957,7 +3020,7 @@ function urlLabel(playlistUrl: string, epgUrl: string | null): string {
   } catch {
     // оставим как есть
   }
-  return epgUrl ? `${host} · с телепрограммой` : host;
+  return epgUrl ? tr("playlist.withEpg", { host }) : host;
 }
 
 // ---------- Экспорт / импорт настроек ----------
@@ -2995,19 +3058,19 @@ btnExport.addEventListener("click", () => {
   a.click();
   a.remove();
   window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  showToast("Настройки экспортированы");
+  showToast(tr("backup.exported"));
 });
 
 // Экспорт избранного в .m3u (FR-11): совместимый файл для любых плееров
 btnExportFav.addEventListener("click", () => {
   if (!snapshot || !plState.activeId) {
-    showToast("Сначала откройте плейлист");
+    showToast(tr("backup.openFirst"));
     return;
   }
   const favs = loadFavoritesFor(plState.activeId);
   const m3u = buildFavoritesM3U(snapshot.channels, favs);
   if (!m3u.includes("#EXTINF")) {
-    showToast("В избранном нет каналов из текущего плейлиста");
+    showToast(tr("backup.noFavorites"));
     return;
   }
   const blob = new Blob([m3u], { type: "audio/x-mpegurl" });
@@ -3018,7 +3081,7 @@ btnExportFav.addEventListener("click", () => {
   a.click();
   a.remove();
   window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  showToast("Избранное экспортировано");
+  showToast(tr("backup.favoritesExported"));
 });
 
 btnImport.addEventListener("click", () => importFile.click());
@@ -3030,7 +3093,7 @@ importFile.addEventListener("change", () => {
     .then((text) => {
       const result = parseBackup(text);
       if (!result.ok) {
-        showToast(`Импорт не удался: ${result.error}`);
+        showToast(tr("backup.importFailed", { reason: translateMessage(result.error, currentLanguage) }));
         return;
       }
       const data = result.data;
@@ -3059,11 +3122,11 @@ importFile.addEventListener("change", () => {
       if (data.activeId) loadRecentsFor(data.activeId);
       renderPlaylistManager();
       renderPlaylistSwitcher();
-      showToast(`Импортировано плейлистов: ${data.playlists.length}`);
+      showToast(tr("backup.imported", { count: data.playlists.length }));
       const active = activePlaylist(plState);
       if (active) void openPlaylist(active.playlistUrl, active.epgUrl);
     })
-    .catch(() => showToast("Не удалось прочитать файл"))
+    .catch(() => showToast(tr("error.readFile")))
     .finally(() => {
       importFile.value = ""; // повторный выбор того же файла тоже сработает
     });
@@ -3076,7 +3139,7 @@ function renderPlaylistSwitcher(): void {
   if (!active) return;
   plSwitchName.textContent = active.name;
   // Видимый текст — название, а имя кнопки для скринридера — её действие
-  plSwitchBtn.setAttribute("aria-label", `Плейлист «${active.name}», переключить`);
+  plSwitchBtn.setAttribute("aria-label", tr("playlist.switchNamed", { name: active.name }));
   plSwitchCount.textContent = snapshot ? channelsWord(snapshot.channels.length) : "";
   plSwitchMenu.textContent = "";
   for (const p of plState.items) {
@@ -3113,7 +3176,7 @@ addForm.addEventListener("submit", (e) => {
   const eUrl = setupEpg.value.trim();
   const name = setupName.value.trim();
   if (!/^https?:\/\//.test(pUrl)) {
-    showSetup("Нужен http(s)-URL плейлиста");
+    showSetup(tr("error.playlistUrl"));
     return;
   }
   // http-плейлисты разрешены: если страница https, браузер может заблокировать
@@ -3123,7 +3186,7 @@ addForm.addEventListener("submit", (e) => {
       "Плейлист по http://: страница открыта по https://, браузер может заблокировать запрос. Если загрузка упадёт — используйте https-ссылку.",
     );
   }
-  plState = addPlaylist(plState, name || "Плейлист", pUrl, eUrl || null);
+  plState = addPlaylist(plState, name || tr("playlist.default"), pUrl, eUrl || null);
   savePlaylists(localStorage, plState);
   setupPlaylist.value = "";
   setupEpg.value = "";
@@ -3184,7 +3247,7 @@ const localFile = $<HTMLInputElement>("local-file");
 
 btnLocalFile.addEventListener("click", () => {
   if (!getLocalFs()) {
-    showSetup("Браузер не поддерживает OPFS — локальный плейлист недоступен");
+    showSetup(tr("error.opfs"));
     return;
   }
   localFile.click();
@@ -3197,7 +3260,7 @@ localFile.addEventListener("change", async () => {
   if (!file || !fs) return;
   const content = await file.text();
   if (!looksLikeM3U(content)) {
-    showSetup("Это не похоже на M3U: нужен файл с #EXTM3U и #EXTINF");
+    showSetup(tr("error.m3u"));
     return;
   }
   const pl = addPlaylist(plState, defaultLocalName(file.name), `local:${Date.now()}`, null);
@@ -3214,13 +3277,13 @@ async function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
   // Локальный источник: маркер local:<id> — читаем содержимое из OPFS.
   if (url.startsWith("local:")) {
     const fs = getLocalFs();
-    if (!fs) throw new Error("локальный плейлист недоступен (нет OPFS)");
+    if (!fs) throw new Error(tr("error.localOpfs"));
     const m3u = await loadLocalPlaylist(await fs, url.slice("local:".length));
-    if (m3u === null) throw new Error("локальный файл не найден — добавьте плейлист заново");
+    if (m3u === null) throw new Error(tr("error.localMissing"));
     return parseM3U(m3u);
   }
   const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`плейлист: HTTP ${resp.status}`);
+  if (!resp.ok) throw new Error(tr("error.httpPlaylist", { status: resp.status }));
   if (!/^application\/(x-mpegurl|vnd\.apple\.mpegurl|octet-stream)/.test(
         resp.headers.get("content-type") ?? "")) {
     // не фейлимся: некоторые бакеты отдают text/plain
@@ -3237,17 +3300,7 @@ function describeFetchFailure(url: string, reason?: string): string {
   // Точная причина от плеера главнее: она знает, что уже предпринято
   // (например, попытку https-порта), и не должна подменяться общим текстом.
   if (reason) return reason;
-  if (isMixedContent(window.location.href, url)) {
-    return (
-      "Ссылка http://, а страница открыта по https:// — браузер блокирует " +
-      "смешанный контент. Плеер уже пробует https-порт 443; если не помогло — " +
-      "найдите https-ссылку или откройте сайт по http (локально)."
-    );
-  }
-  return "Возможные причины: (1) на бакете не включён CORS — добавьте правило для " +
-    "origin https://ozyab09.github.io (см. README), (2) ссылка недоступна " +
-    "из браузера (приватный бакет, firewall). Проверьте консоль (F12) — " +
-    "там будет точная причина (blocked by CORS policy / net::ERR_…).";
+  return tr(isMixedContent(window.location.href, url) ? "error.mixedHint" : "error.corsHint");
 }
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
@@ -3261,14 +3314,13 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   epg = null;
   showPlayer();
   epgNow.hidden = false;
-  epgNow.textContent = "Загрузка плейлиста…";
+  setSystemText(epgNow, t("loading.playlist"));
 
   try {
     snapshot = await loadPlaylist(url);
   } catch (e) {
     showSetup(
-      `Не удалось загрузить плейлист: ${e instanceof Error ? e.message : "ошибка"}. ` +
-        describeFetchFailure(url),
+      tr("error.loadPlaylist", { reason: translateMessage(e instanceof Error ? e.message : t("error.unknown"), currentLanguage), hint: describeFetchFailure(url) }),
     );
     return;
   }
@@ -3283,7 +3335,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   if (snapshot.droppedHttp > 0 && plState.activeId &&
       shouldShowHttpNotice(plState.activeId, localStorage)) {
     pushNotification(
-      `Скрыто ${channelsWord(snapshot.droppedHttp)} по http:// — на https-странице браузер их блокирует. Если у провайдера есть https-ссылки — замените их в плейлисте.`,
+      t("notifications.http", "ru", { count: snapshot.droppedHttp }),
     );
     markHttpNoticeShown(plState.activeId, localStorage);
   }
@@ -3294,7 +3346,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   const finalEpgUrl = epgUrl ?? snapshot.headerTvgUrl;
   if (finalEpgUrl) {
     epgNow.hidden = false;
-    epgNow.textContent = "Загружаем телепрограмму…";
+    setSystemText(epgNow, t("loading.epg"));
     // Гард от гонки (#112): пока грузится EPG, можно успеть сменить плейлист —
     // поздний ответ старой загрузки не должен затирать данные нового.
     const epgLoad = epgGuard.begin();
@@ -3308,7 +3360,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
       })
       .catch(() => {
         if (!epgLoad.isCurrent()) return;
-        epgNow.textContent = "Телепрограмма не загрузилась — каналы работают без неё";
+        setSystemText(epgNow, t("error.epg"));
       });
   }
 }
@@ -3350,7 +3402,7 @@ async function bootstrap(): Promise<void> {
       const target = snapshot.channels.find((c) => c.url === hit.url);
       if (target) playChannel(target);
     } else {
-      showToast("Канал из ссылки не найден в активном плейлисте");
+      showToast(tr("error.deepLink"));
     }
   }
 }
@@ -3407,9 +3459,9 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 }
 
 window.addEventListener("offline", () => {
-  showToast("Нет сети — плейлист и EPG будут загружены из кэша, если есть");
+  showToast(tr("network.offline"));
 });
-window.addEventListener("online", () => showToast("Сеть вернулась"));
+window.addEventListener("online", () => showToast(tr("network.online")));
 
 // Навигация рисуется до загрузки плейлиста: пустой таб-бар в первые секунды
 // выглядел бы поломкой.
