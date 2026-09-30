@@ -116,6 +116,12 @@ import {
   type RefreshInterval,
 } from "./refresh";
 import { LatestGuard } from "./latest";
+import {
+  probeStream,
+  probeVerdict,
+  corsChecklist,
+  httpChecklist,
+} from "./stream-diagnostics";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -259,6 +265,24 @@ const CHANNEL_COLUMNS = 1;
 
 /** Недавно просмотренные (url → имя берём из snapshot при рендере). */
 let recents: string[] = [];
+// Диагностика потока (#116): один раз на канал при фатальной ошибке.
+let diagnosticsFor: string | null = null;
+async function diagnoseStreamFailure(): Promise<void> {
+  const url = player.currentStreamUrl;
+  if (!url || diagnosticsFor === url) return;
+  diagnosticsFor = url;
+  try {
+    const r = await probeStream(url, (u, init) => fetch(u, init));
+    const verdict = probeVerdict(r);
+    const detail =
+      r.kind === "blocked" ? corsChecklist() : r.kind === "http" ? httpChecklist(r.status) : "";
+    pushNotification(`${verdict}${detail ? `. ${detail}` : ""}`);
+    showToast(verdict);
+  } catch {
+    // диагностика не должна усугублять сбой — молча
+  }
+}
+
 const player = new Player(
   videoEl,
   showToast,
@@ -269,6 +293,7 @@ const player = new Player(
   },
   () => {
     btnRetry.hidden = false; // фатальная ошибка — показываем retry
+    void diagnoseStreamFailure();
   },
 );
 
