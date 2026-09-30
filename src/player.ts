@@ -1,6 +1,7 @@
 import Hls from "hls.js";
 import { isMixedContent, isPrivateHost } from "./config";
 import type { Channel } from "./types";
+import { DEFAULT_PLAYER_SETTINGS, playerHlsConfig, sanitizePlayerSettings, type PlayerSettings } from "./player-settings";
 
 /**
  * Сколько подряд сетевых сбоев переживаем, прежде чем сдаться. Без предела
@@ -36,17 +37,21 @@ export class Player {
   private httpsFallbackTried = false;
   /** Текущий URL — результат https-апгрейда (для сообщений об ошибке). */
   private httpsUpgraded = false;
+  private activeSettings: PlayerSettings = { ...DEFAULT_PLAYER_SETTINGS };
+  private readSettings: () => PlayerSettings;
 
   constructor(
     video: HTMLVideoElement,
     toast: (msg: string) => void,
     onHlsState?: () => void,
     onFatalError?: () => void,
+    readSettings: () => PlayerSettings = () => ({ ...DEFAULT_PLAYER_SETTINGS }),
   ) {
     this.video = video;
     this.toast = toast;
     this.onHlsState = onHlsState ?? null;
     this.onFatalError = onFatalError ?? null;
+    this.readSettings = readSettings;
     // Нативный playback (mp4/Safari): ошибки <video> — единственный канал
     // фатальных ошибок; через них же спасаем mixed content апгрейдом.
     this.video.addEventListener("error", this.handleVideoError);
@@ -129,6 +134,7 @@ export class Player {
     // у большинства IPTV-CDN тот же контент доступен по TLS (issue #67).
     const url = this.resolvePlayableUrl(channel.url);
     if (this.currentUrl === url && !this.video.paused) return null;
+    this.activeSettings = sanitizePlayerSettings(this.readSettings());
     this.stop();
     this.networkRetries = 0;
     this.httpsFallbackTried = false;
@@ -137,7 +143,7 @@ export class Player {
     const isDash = /\.mpd(\?|$)/i.test(url);
 
     if (isHls && Hls.isSupported()) {
-      this.hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+      this.hls = new Hls(playerHlsConfig(this.activeSettings));
       this.hls.loadSource(url);
       this.hls.attachMedia(this.video);
       this.hls.on(Hls.Events.ERROR, (_e, data) => {
@@ -272,6 +278,11 @@ export class Player {
     return this.currentUrl;
   }
 
+  /** Таймаут снимка настроек текущего канала, независимо от редактирования UI. */
+  get diagnosticsTimeoutMs(): number {
+    return this.activeSettings.diagnosticsTimeoutMs;
+  }
+
   /** Перезапустить текущий поток с нуля (retry-кнопка). */
   retry(): void {
     const url = this.currentUrl;
@@ -282,7 +293,7 @@ export class Player {
     this.networkRetries = 0; // ручной повтор даёт потоку новый лимит попыток
     this.httpsFallbackTried = false;
     if (isHls && Hls.isSupported()) {
-      this.hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+      this.hls = new Hls(playerHlsConfig(this.activeSettings));
       this.hls.loadSource(url);
       this.hls.attachMedia(this.video);
       this.hls.on(Hls.Events.ERROR, (_e, data) => {
