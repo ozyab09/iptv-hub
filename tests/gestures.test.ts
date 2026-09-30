@@ -3,9 +3,29 @@ import {
   classifySwipe,
   DOUBLE_TAP_MS,
   isDoubleTap,
+  isLongPress,
+  LONG_PRESS_MS,
+  LONG_PRESS_MOVE_PX,
   SWIPE_MIN_PX,
   tapSide,
 } from "../src/gestures";
+
+describe("isLongPress", () => {
+  it("долгое нажатие без движения — превью", () => {
+    expect(isLongPress(LONG_PRESS_MS, 0)).toBe(true);
+    expect(isLongPress(1200, 4)).toBe(true);
+  });
+
+  it("короткое удержание — не превью", () => {
+    expect(isLongPress(LONG_PRESS_MS - 1, 0)).toBe(false);
+    expect(isLongPress(0, 0)).toBe(false);
+  });
+
+  it("сдвиг сверх порога — это свайп/скролл, не превью", () => {
+    expect(isLongPress(LONG_PRESS_MS, LONG_PRESS_MOVE_PX)).toBe(true);
+    expect(isLongPress(LONG_PRESS_MS, LONG_PRESS_MOVE_PX + 1)).toBe(false);
+  });
+});
 
 describe("classifySwipe", () => {
   it("узнаёт четыре направления", () => {

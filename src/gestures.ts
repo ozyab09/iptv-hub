@@ -57,3 +57,22 @@ export function tapSide(x: number, width: number): "left" | "right" | null {
   if (x > width - edge) return "right";
   return null;
 }
+
+/** Сколько держать палец/мышь для превью канала, мс. */
+export const LONG_PRESS_MS = 550;
+
+/** Насколько допускается сдвинуться, чтобы жест остался long-press, px. */
+export const LONG_PRESS_MOVE_PX = 10;
+
+/**
+ * Достаточно ли долго держали и при этом почти не сдвинулись.
+ * Долгое нажатие без движения — превью; любое крупное движение — свайп/скролл.
+ */
+export function isLongPress(
+  heldMs: number,
+  movedPx: number,
+  minMs: number = LONG_PRESS_MS,
+  maxMovePx: number = LONG_PRESS_MOVE_PX,
+): boolean {
+  return heldMs >= minMs && movedPx <= maxMovePx;
+}

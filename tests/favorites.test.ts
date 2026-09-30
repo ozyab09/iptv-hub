@@ -6,7 +6,9 @@ import {
   isFavorite,
   applyFavorites,
   exportFavorites,
+  buildFavoritesM3U,
 } from "../src/favorites";
+import { parseM3U } from "../src/m3u";
 import type { Channel } from "../src/types";
 
 const store = (): Storage => {
@@ -86,5 +88,21 @@ describe("favorites", () => {
     expect(exportFavorites(favs)).toBe(
       JSON.stringify([A.url], null, 2),
     );
+  });
+
+  it("buildFavoritesM3U: round-trip через parseM3U без потерь", () => {
+    const favs = new Set([A.url, C.url]);
+    const m3u = buildFavoritesM3U([A, B, C], favs);
+    expect(m3u.startsWith("#EXTM3U")).toBe(true);
+    const parsed = parseM3U(m3u);
+    expect(parsed.channels.map((c) => c.url)).toEqual([A.url, C.url]);
+    expect(parsed.channels[0]!.name).toBe(A.name);
+    // парсер нормализует пустые атрибуты в "": проверяем группу, она задана
+    expect(parsed.channels[0]!.group).toBe(A.group);
+  });
+
+  it("buildFavoritesM3U: без избранного — заголовок и ничего больше", () => {
+    const m3u = buildFavoritesM3U([A, B], new Set());
+    expect(m3u.trim()).toBe("#EXTM3U");
   });
 });
