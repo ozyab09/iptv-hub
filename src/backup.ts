@@ -10,6 +10,8 @@ export interface Backup {
   playlists: { id: string; name: string; playlistUrl: string; epgUrl: string | null }[];
   activeId: string | null;
   favorites: Record<string, string[]>;
+  /** «Недавние» per-плейлист (URL-ы, до RECENTS_MAX). Опционально: старые файлы его не содержат. */
+  recents?: Record<string, string[]>;
 }
 
 export interface BackupInput {
@@ -17,10 +19,38 @@ export interface BackupInput {
   playlists: { id: string; name: string; playlistUrl: string; epgUrl: string | null }[];
   activeId: string | null;
   favorites: Record<string, string[]>;
+  recents?: Record<string, string[]>;
+}
+
+/** Ключ «недавних» конкретного плейлиста — единый для localStorage и бэкапа. */
+export function recentsKey(id: string): string {
+  return `iptv-hub.recents.v1:${id}`;
+}
+
+/** Почистить список recents: только строки, дедап по url, лимит RECENTS_MAX. */
+export function sanitizeRecentList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const x of raw) {
+    if (typeof x === "string" && !out.includes(x)) out.push(x);
+    if (out.length >= RECENTS_MAX) break;
+  }
+  return out;
+}
+
+/** Почистить карту recents { id → url-ы }: пустые списки выбрасываются. */
+export function sanitizeRecents(raw: unknown): Record<string, string[]> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const list = sanitizeRecentList(v);
+    if (list.length > 0) out[k] = list;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 export function buildBackup(input: BackupInput): Backup {
-  return {
+  const backup: Backup = {
     version: 1,
     exportedAt: new Date().toISOString(),
     theme: input.theme === "light" ? "light" : "dark",
@@ -28,6 +58,9 @@ export function buildBackup(input: BackupInput): Backup {
     activeId: input.activeId,
     favorites: input.favorites,
   };
+  const recents = sanitizeRecents(input.recents);
+  if (recents) backup.recents = recents;
+  return backup;
 }
 
 export type ParseResult =
@@ -69,17 +102,17 @@ export function parseBackup(raw: string): ParseResult {
       }
     }
   }
-  return {
-    ok: true,
-    data: {
-      version: 1,
-      exportedAt: typeof b.exportedAt === "string" ? b.exportedAt : new Date().toISOString(),
-      theme: b.theme === "light" ? "light" : "dark",
-      playlists,
-      activeId: typeof b.activeId === "string" ? b.activeId : (playlists[0]!.id),
-      favorites,
-    },
+  const data: Backup = {
+    version: 1,
+    exportedAt: typeof b.exportedAt === "string" ? b.exportedAt : new Date().toISOString(),
+    theme: b.theme === "light" ? "light" : "dark",
+    playlists,
+    activeId: typeof b.activeId === "string" ? b.activeId : (playlists[0]!.id),
+    favorites,
   };
+  const recents = sanitizeRecents(b.recents);
+  if (recents) data.recents = recents;
+  return { ok: true, data };
 }
 
 // ---------- Recents ----------

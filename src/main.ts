@@ -57,6 +57,7 @@ import {
   wakeLockVisible,
   type WakeLockState,
 } from "./wake-lock";
+import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -73,6 +74,7 @@ import {
   buildBackup,
   parseBackup,
   pushRecent,
+  recentsKey,
 } from "./backup";
 import {
   canRecord,
@@ -122,6 +124,13 @@ import {
   shouldCheck,
   type RefreshInterval,
 } from "./refresh";
+import { LatestGuard } from "./latest";
+import {
+  probeStream,
+  probeVerdict,
+  corsChecklist,
+  httpChecklist,
+} from "./stream-diagnostics";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -295,6 +304,24 @@ const CHANNEL_COLUMNS = 1;
 
 /** Недавно просмотренные (url → имя берём из snapshot при рендере). */
 let recents: string[] = [];
+// Диагностика потока (#116): один раз на канал при фатальной ошибке.
+let diagnosticsFor: string | null = null;
+async function diagnoseStreamFailure(): Promise<void> {
+  const url = player.currentStreamUrl;
+  if (!url || diagnosticsFor === url) return;
+  diagnosticsFor = url;
+  try {
+    const r = await probeStream(url, (u, init) => fetch(u, init));
+    const verdict = probeVerdict(r);
+    const detail =
+      r.kind === "blocked" ? corsChecklist() : r.kind === "http" ? httpChecklist(r.status) : "";
+    pushNotification(`${verdict}${detail ? `. ${detail}` : ""}`);
+    showToast(verdict);
+  } catch {
+    // диагностика не должна усугублять сбой — молча
+  }
+}
+
 const player = new Player(
   videoEl,
   showToast,
@@ -305,6 +332,7 @@ const player = new Player(
   },
   () => {
     btnRetry.hidden = false; // фатальная ошибка — показываем retry
+    void diagnoseStreamFailure();
   },
 );
 
@@ -403,6 +431,8 @@ notifBell.addEventListener("click", (e) => {
   notifPanel.hidden = !willOpen;
   notifBell.setAttribute("aria-expanded", String(willOpen));
   if (willOpen) {
+    overlayStack = pushOverlay(overlayStack, "notifications");
+    history.pushState({ overlay: "notifications" }, "");
     // Открыл панель — прочитал всё, что в ней видно
     notifications = markAllRead(notifications);
     saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
@@ -419,8 +449,7 @@ notifClear.addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   if (notifPanel.hidden) return;
   if (!notifBell.contains(e.target as Node) && !notifPanel.contains(e.target as Node)) {
-    notifPanel.hidden = true;
-    notifBell.setAttribute("aria-expanded", "false");
+    closeOverlay("notifications");
   }
 });
 
@@ -774,7 +803,7 @@ function playChannel(c: Channel): void {
   if (plState.activeId) {
     try {
       localStorage.setItem(
-        `iptv-hub.recents.v1:${plState.activeId}`,
+        recentsKey(plState.activeId),
         JSON.stringify(recents),
       );
     } catch { /* приватный режим */ }
@@ -1438,6 +1467,60 @@ function setWatching(on: boolean): void {
   appEl.classList.toggle("watch", on);
 }
 
+// ---------- Кнопка «назад» и стек оверлеев (FR-6) ----------
+// Открытие оверлея кладёт запись в history: системный «назад» (свайп на
+// Android, кнопка мыши) закрывает верхний оверлей, а не приложение.
+// Логика стека — чистый модуль overlays.ts, здесь только DOM-синхронизация.
+let overlayStack: string[] = [];
+let historyGuard = false; // не зеркалить собственные history.back()
+
+/** Показать/скрыть DOM-узел оверлея по имени. */
+function applyOverlay(name: OverlayName, on: boolean): void {
+  if (name === "guide") guideOverlay.hidden = !on;
+  else if (name === "notifications") {
+    notifPanel.hidden = !on;
+    notifBell.setAttribute("aria-expanded", String(on));
+  } else if (name === "manager") {
+    setView(on ? "settings" : "channels");
+  } else if (name === "quality") {
+    qualityMenu.hidden = !on;
+  }
+}
+
+/** Открыть оверлей: DOM + запись в history. */
+function openOverlay(name: OverlayName): void {
+  if (topOverlay(overlayStack) === name) return;
+  applyOverlay(name, true);
+  overlayStack = pushOverlay(overlayStack, name);
+  history.pushState({ overlay: name }, "");
+}
+
+/** Закрыть оверлей из UI (крестик, Escape, клик мимо): DOM + history.back(). */
+function closeOverlay(name: OverlayName): void {
+  if (topOverlay(overlayStack) !== name) {
+    // Закрыли не верхний (или стек рассинхронизировался) — чистим тихо.
+    applyOverlay(name, false);
+    overlayStack = popOverlay(overlayStack, name);
+    return;
+  }
+  applyOverlay(name, false);
+  overlayStack = popOverlay(overlayStack, name);
+  historyGuard = true;
+  history.back();
+}
+
+/** Системный «назад»: закрываем верхний оверлей без повторного history.back(). */
+window.addEventListener("popstate", () => {
+  if (historyGuard) {
+    historyGuard = false;
+    return;
+  }
+  const top = topOverlay(overlayStack);
+  if (top === null) return; // оверлеев нет — стандартное поведение (закрытие PWA)
+  applyOverlay(top, false);
+  overlayStack = popOverlay(overlayStack, top);
+});
+
 /**
  * Свернуть список каналов рядом с плеером в колонку логотипов: плеер
  * забирает освободившееся место. Выбор запоминается — кто смотрит без
@@ -1621,7 +1704,7 @@ function openGuide(): void {
   if (!lastPlayed) return;
   guideTitle.textContent = `Программа · ${lastPlayed.name}`;
   guideDayIdx = 0;
-  guideOverlay.hidden = false;
+  openOverlay("guide");
   renderGuide();
 }
 
@@ -1767,12 +1850,12 @@ function renderSchedule(): void {
 
 btnGuide.addEventListener("click", openGuide);
 btnFullGuide.addEventListener("click", openGuide);
-guideClose.addEventListener("click", () => (guideOverlay.hidden = true));
+guideClose.addEventListener("click", () => closeOverlay("guide"));
 guideOverlay.addEventListener("click", (e) => {
-  if (e.target === guideOverlay) guideOverlay.hidden = true;
+  if (e.target === guideOverlay) closeOverlay("guide");
 });
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !guideOverlay.hidden) guideOverlay.hidden = true;
+  if (e.key === "Escape" && !guideOverlay.hidden) closeOverlay("guide");
 });
 
 /** Край живого буфера или NaN, если поток ещё не начал грузиться. */
@@ -2058,7 +2141,7 @@ searchInput.addEventListener("input", () => renderChannels());
 // ---------- Недавно просмотренные ----------
 function loadRecentsFor(id: string): void {
   try {
-    const raw = localStorage.getItem(`iptv-hub.recents.v1:${id}`);
+    const raw = localStorage.getItem(recentsKey(id));
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     recents = Array.isArray(parsed)
       ? parsed.filter((x): x is string => typeof x === "string")
@@ -2101,6 +2184,8 @@ let refreshInterval: RefreshInterval = loadInterval(
   typeof localStorage !== "undefined" ? localStorage : null,
 );
 let refreshBusy = false;
+// Гард от гонки загрузок EPG (#112): сменили плейлист — старый ответ игнорируется.
+const epgGuard = new LatestGuard();
 
 function renderRefreshSeg(): void {
   for (const b of refreshSeg.querySelectorAll<HTMLButtonElement>("[data-refresh-choice]")) {
@@ -2140,13 +2225,18 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
       diff.added > 0 || diff.removed > 0 || diff.changed > 0 || httpNew > 0;
 
     // Программа меняется постоянно — обновляем её при каждой проверке,
-    // а не только когда изменился сам плейлист (#104).
+    // а не только когда изменился сам плейлист (#104). Гард (#112): если
+    // во время проверки переключили плейлист, её EPG не применяется.
     const epgUrl = item.epgUrl ?? fresh.headerTvgUrl;
     let programmes: number | null = null;
     if (epgUrl) {
+      const epgLoad = epgGuard.begin();
       try {
-        epg = await loadEpg(epgUrl);
-        programmes = countProgrammes(epg);
+        const parsed = await loadEpg(epgUrl);
+        if (epgLoad.isCurrent()) {
+          epg = parsed;
+          programmes = countProgrammes(epg);
+        }
       } catch {
         // программа не критична: списки всё равно обновим, уведомим «передач нет»
       }
@@ -2192,6 +2282,18 @@ setInterval(() => {
     void refreshPlaylist(true);
   }
 }, 60_000);
+
+// Возврат из долгого фона: если с последней проверки прошло больше выбранного
+// интервала — проверяем сразу, не дожидаясь минутного тика. Пока вкладка
+// в фоне таймеры троттлятся, поэтому без этого данные могли бы устареть.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (refreshInterval === 0 || refreshBusy) return;
+  const storage = typeof localStorage !== "undefined" ? localStorage : null;
+  if (shouldCheck(Date.now(), loadLastCheck(storage), refreshInterval)) {
+    void refreshPlaylist(true);
+  }
+});
 
 function systemPrefersDark(): boolean | null {
   return typeof window.matchMedia === "function"
@@ -2400,11 +2502,23 @@ btnExport.addEventListener("click", () => {
     const list = loadFavoritesFor(p.id);
     if (list.size > 0) favs[p.id] = [...list];
   }
+  const recentsBackup: Record<string, string[]> = {};
+  for (const p of plState.items) {
+    try {
+      const raw = localStorage.getItem(recentsKey(p.id));
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        const urls = parsed.filter((x): x is string => typeof x === "string");
+        if (urls.length > 0) recentsBackup[p.id] = urls;
+      }
+    } catch { /* битые данные — пропускаем */ }
+  }
   const backup = buildBackup({
     theme: document.documentElement.dataset.theme ?? "dark",
     playlists: plState.items,
     activeId: plState.activeId,
     favorites: favs,
+    recents: recentsBackup,
   });
   const blob = new Blob([JSON.stringify(backup, null, 2)], {
     type: "application/json",
@@ -2444,6 +2558,17 @@ importFile.addEventListener("change", () => {
           localStorage.setItem(favoritesKey(plId), JSON.stringify(urls));
         } catch { /* приватный режим */ }
       }
+      // «Недавние» — только для плейлистов из бэкапа (существующие ключи
+      // других плейлистов не трогаем).
+      if (data.recents) {
+        for (const [plId, urls] of Object.entries(data.recents)) {
+          try {
+            localStorage.setItem(recentsKey(plId), JSON.stringify(urls));
+          } catch { /* приватный режим */ }
+        }
+      }
+      // Сразу отражаем recents активного плейлиста в UI.
+      if (data.activeId) loadRecentsFor(data.activeId);
       renderPlaylistManager();
       renderPlaylistSwitcher();
       showToast(`Импортировано плейлистов: ${data.playlists.length}`);
@@ -2597,14 +2722,19 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   if (finalEpgUrl) {
     epgNow.hidden = false;
     epgNow.textContent = "Загружаем телепрограмму…";
+    // Гард от гонки (#112): пока грузится EPG, можно успеть сменить плейлист —
+    // поздний ответ старой загрузки не должен затирать данные нового.
+    const epgLoad = epgGuard.begin();
     loadEpg(finalEpgUrl)
       .then((parsed) => {
+        if (!epgLoad.isCurrent()) return;
         epg = parsed;
         renderChannels();
         refreshNowFav();
         epgNow.hidden = true;
       })
       .catch(() => {
+        if (!epgLoad.isCurrent()) return;
         epgNow.textContent = "Телепрограмма не загрузилась — каналы работают без неё";
       });
   }
