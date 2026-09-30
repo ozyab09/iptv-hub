@@ -134,16 +134,7 @@ import {
   programmesInDay,
   type DayWindow,
 } from "./catchup";
-import {
-  formatBitrate,
-  formatResolution,
-  formatStatus,
-  levelLabel,
-  qualityButtonLabel,
-  sortLevelsDesc,
-  tierName,
-  trackLabel,
-} from "./quality";
+import { createQualityMenu } from "./quality-menu";
 import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
 import {
   shouldShowHttpNotice,
@@ -372,7 +363,7 @@ const player = new Player(
   videoEl,
   showToast,
   () => {
-    refreshQualityUi();
+    qualityMenuUi.refreshQualityUi();
     refreshPlayerStatus();
     btnRetry.hidden = true; // поток ожил — retry не нужен
   },
@@ -381,6 +372,25 @@ const player = new Player(
     void diagnoseStreamFailure();
   },
 );
+
+// Меню качества/дорожек — DOM-слой вынесен в quality-menu.ts (issue #123)
+const qualityMenuUi = createQualityMenu({
+  player,
+  nodes: {
+    qualityWrap,
+    qualityBtn,
+    qualityMenu,
+    audioWrap,
+    audioBtn,
+    audioMenu,
+    subtitleWrap,
+    subtitleBtn,
+    subtitleMenu,
+    playerStatus,
+  },
+  videoSize: () => ({ width: videoEl.videoWidth, height: videoEl.videoHeight }),
+  createButton: () => document.createElement("button"),
+});
 
 // ---------- UI helpers ----------
 // Токен показа: таймер скрытия гасит тост, только если поверх не показали
@@ -870,7 +880,7 @@ function playChannel(c: Channel): void {
     return;
   }
   // уровни/дорожки приходят асинхронно после парсинга манифеста
-  refreshQualityUi();
+  qualityMenuUi.refreshQualityUi();
   renderChannels(); // подсветка активного
 }
 
@@ -916,13 +926,9 @@ btnPause.addEventListener("click", () => {
         : wakeLockHidden(wakeLockState);
   });
 videoEl.addEventListener("loadedmetadata", () => {
-  // нативный playback: разрешение становится известно здесь
-  if (videoEl.videoWidth) {
-    playerStatus.textContent = formatStatus({
-      resolution: formatResolution(videoEl.videoWidth, videoEl.videoHeight),
-      bitrate: "—",
-    });
-  }
+  // нативный playback: разрешение становится известно здесь —
+  // статус в этом случае строит qualityMenuUi (см. refreshQualityUi, no-hls ветка)
+  if (videoEl.videoWidth) qualityMenuUi.refreshQualityUi();
   refreshPlayerStatus();
   // Продолжение с последней позиции (FR-9): только неэфирный контент —
   // у живого потока длительность конечного файла нет.
@@ -1150,158 +1156,14 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// ---- Качество / дорожки / статус-бар (живут, пока играет hls-поток) ----
-
-/** Перестроить селект качества + дорожки после смены канала. */
-function refreshQualityUi(): void {
-  const hls = player.getHls();
-  qualityMenu.textContent = "";
-  audioMenu.textContent = "";
-  subtitleMenu.textContent = "";
-
-  if (!hls) {
-    // нативный playback (Safari/iOS, mp4): выбор качества/дорожек недоступен
-    qualityBtn.disabled = true;
-    qualityBtn.textContent = "Auto";
-    qualityMenu.hidden = true;
-    audioWrap.hidden = true;
-    subtitleWrap.hidden = true;
-    playerStatus.textContent =
-      videoEl.videoWidth
-        ? formatStatus({
-            resolution: formatResolution(videoEl.videoWidth, videoEl.videoHeight),
-            bitrate: "—",
-          })
-        : "—";
-    return;
-  }
-
-  qualityBtn.disabled = false;
-  const levels = sortLevelsDesc(
-    hls.levels.map((lv, i) => ({ ...lv, index: i })),
-  );
-  const currentLv = hls.levels[hls.currentLevel] ?? null;
-  qualityBtn.textContent = qualityButtonLabel(hls.autoLevelEnabled, currentLv);
-  const mkItem = (label: string, levelIndex: number, active: boolean) => {
-    const b = document.createElement("button");
-    b.className = menuItemClass(active);
-    b.setAttribute("role", "option");
-    b.textContent = label;
-    b.addEventListener("click", () => {
-      player.setLevel(levelIndex);
-      closeQualityMenu();
-    });
-    return b;
-  };
-  qualityMenu.append(
-    mkItem(
-      hls.autoLevelEnabled
-        ? `Auto · ${currentLv?.height ? tierName(currentLv.height) : "…"}`
-        : "Auto",
-      -1,
-      hls.autoLevelEnabled,
-    ),
-    ...levels.map((l) =>
-      mkItem(
-        levelLabel(l),
-        l.index ?? -1,
-        !hls.autoLevelEnabled && hls.currentLevel === l.index,
-      ),
-    ),
-  );
-
-  const audioTracks = hls.audioTracks ?? [];
-  audioWrap.hidden = audioTracks.length < 2;
-  if (audioTracks.length >= 2) {
-    audioMenu.textContent = "";
-    audioTracks.forEach((t, i) => {
-      const b = document.createElement("button");
-      b.className =
-        menuItemClass(i === hls.audioTrack);
-      b.textContent = trackLabel(t, i);
-      b.addEventListener("click", () => {
-        player.setAudioTrack(i);
-        audioMenu.hidden = true;
-      });
-      audioMenu.append(b);
-    });
-    audioBtn.title = `Аудиодорожка: ${trackLabel(audioTracks[hls.audioTrack] ?? {}, hls.audioTrack)}`;
-  }
-
-  const subTracks = hls.subtitleTracks ?? [];
-  subtitleWrap.hidden = subTracks.length === 0;
-  if (subTracks.length > 0) {
-    subtitleMenu.textContent = "";
-    const off = document.createElement("button");
-    off.className =
-      menuItemClass(hls.subtitleTrack === -1);
-    off.textContent = "Выключены";
-    off.addEventListener("click", () => {
-      player.setSubtitleTrack(-1);
-      subtitleMenu.hidden = true;
-    });
-    subtitleMenu.append(off);
-    subTracks.forEach((t, i) => {
-      const b = document.createElement("button");
-      b.className =
-        menuItemClass(i === hls.subtitleTrack);
-      b.textContent = trackLabel(t, i);
-      b.addEventListener("click", () => {
-        player.setSubtitleTrack(i);
-        subtitleMenu.hidden = true;
-      });
-      subtitleMenu.append(b);
-    });
-  }
-}
-
-/** Обновить статус-бар: разрешение + текущий битрейт (при смене уровня). */
+/** Плашка «Эфир» + статус-бар. DOM-логика статуса — в quality-menu.ts. */
 function refreshPlayerStatus(): void {
   // Плашка «Эфир» — для живого потока: у него нет конечной длительности.
   const live = !Number.isFinite(videoEl.duration) || videoEl.duration === 0;
   liveBadge.hidden = !live || videoEl.readyState === 0;
   refreshScrub();
-
-  const hls = player.getHls();
-  if (!hls) return;
-  const lv = hls.levels[hls.currentLevel];
-  playerStatus.textContent = formatStatus({
-    resolution: formatResolution(videoEl.videoWidth, videoEl.videoHeight),
-    bitrate: lv ? formatBitrate(lv.bitrate) : "—",
-  });
+  qualityMenuUi.refreshPlayerStatus();
 }
-
-// ---- Меню качества (кнопка + выпадающий список) ----
-function closeQualityMenu(): void {
-  qualityMenu.hidden = true;
-  qualityBtn.setAttribute("aria-expanded", "false");
-}
-
-qualityBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  const willOpen = qualityMenu.hidden;
-  qualityMenu.hidden = !willOpen;
-  qualityBtn.setAttribute("aria-expanded", String(willOpen));
-});
-document.addEventListener("click", (e) => {
-  if (!qualityMenu.hidden && !qualityWrap.contains(e.target as Node)) {
-    closeQualityMenu();
-  }
-});
-
-// меню дорожек — тот же паттерн, что у качества
-document.addEventListener("click", (e) => {
-  if (!audioMenu.hidden && !audioWrap.contains(e.target as Node)) audioMenu.hidden = true;
-  if (!subtitleMenu.hidden && !subtitleWrap.contains(e.target as Node)) subtitleMenu.hidden = true;
-});
-audioBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  audioMenu.hidden = !audioMenu.hidden;
-});
-subtitleBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  subtitleMenu.hidden = !subtitleMenu.hidden;
-});
 
 /** Остановить запись, если идёт (с сохранением). Вызывается при смене плейлиста. */
 function stopIfRecording(): void {
