@@ -49,7 +49,7 @@ import {
   spacerHeight,
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
-import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
+import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
 import { resolveChannelDeepLink } from "./deeplink";
 import {
   initialWakeLockState,
@@ -788,6 +788,42 @@ function renderChannelCard(c: Channel): HTMLElement {
     renderChannels();
   });
   card.append(star);
+
+  // Мини-превью: текстовый тост «сейчас в эфире» (issue #118). Никаких
+  // <video> — десяток одновременных декодеров убил бы мобильную батарею.
+  let pressT = 0;
+  let pressX = 0;
+  let pressY = 0;
+  const showPreview = (): void => {
+    if (!epg) return; // без телепрограммы превью не из чего собрать
+    const { now } = getNowNext(epg, c, snapshot!);
+    if (!now) return;
+    showToast(`${c.name} · сейчас: ${now.title} (с ${clock(Date.parse(now.start))})`);
+  };
+  card.addEventListener("pointerdown", (ev) => {
+    if (ev.pointerType === "touch") {
+      pressT = Date.now();
+      pressX = ev.clientX;
+      pressY = ev.clientY;
+    }
+  });
+  card.addEventListener("pointerup", (ev) => {
+    if (ev.pointerType !== "touch" || pressT === 0) return;
+    const held = Date.now() - pressT;
+    pressT = 0;
+    const moved = Math.hypot(ev.clientX - pressX, ev.clientY - pressY);
+    if (isLongPress(held, moved)) {
+      ev.preventDefault();
+      showPreview();
+    }
+  });
+  card.addEventListener("pointercancel", () => {
+    pressT = 0;
+  });
+  // Мышь: обычный hover по карточке — на десктопе превью ничего не стоит.
+  card.addEventListener("mouseenter", () => {
+    if (window.matchMedia("(hover: hover)").matches) showPreview();
+  });
 
   card.addEventListener("click", () => playChannel(c));
   return card;
