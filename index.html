@@ -186,18 +186,25 @@
             <button id="btn-retry" class="vbtn ghost" title="Перезапустить поток" aria-label="Перезапустить поток" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></button>
             <div class="top-actions">
               <button id="now-fav" class="vbtn ghost fav-star" title="В избранное" aria-label="В избранное или убрать"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
-              <button id="btn-prev" class="vbtn ghost" title="Предыдущий канал (←)" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
-              <button id="btn-next" class="vbtn ghost" title="Следующий канал (→)" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
               <button id="btn-close-player" class="vbtn ghost" title="Закрыть" aria-label="Закрыть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
             </div>
           </div>
 
-          <!-- На телефоне — крупно по центру кадра; на широком экране CSS
-               переносит эту группу в левый угол нижней панели. -->
+          <!-- Транспортная дека «как на магнитофоне»: всё управление
+               воспроизведением в одном ряду, порядок — ход ленты:
+               назад-15 · предыдущий канал · пауза · следующий канал ·
+               вперёд-15 · запись.
+               На телефоне деко крупно по центру кадра, на широком экране
+               CSS переносит её в нижнюю панель (см. .transport в стилях). -->
           <div class="center">
-            <button id="btn-seek-back" class="vbtn" title="Назад 15 сек (J)" aria-label="Назад 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-back"></use></svg></button>
-            <button id="btn-pause" class="vbtn big" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить"><svg class="i i-lg i-fill" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg></button>
-            <button id="btn-seek-fwd" class="vbtn" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-fwd"></use></svg></button>
+            <div class="transport">
+              <button id="btn-seek-back" class="vbtn ghost" title="Назад 15 сек (J)" aria-label="Назад 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-back"></use></svg></button>
+              <button id="btn-prev" class="vbtn ghost" title="Предыдущий канал (←)" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
+              <button id="btn-pause" class="vbtn big" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить"><svg class="i i-lg i-fill" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg></button>
+              <button id="btn-next" class="vbtn ghost" title="Следующий канал (→)" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
+              <button id="btn-seek-fwd" class="vbtn ghost" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-fwd"></use></svg></button>
+              <button id="btn-rec" class="vbtn ghost rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
+            </div>
           </div>
 
           <div class="bottom">
@@ -228,7 +235,6 @@
                   <button id="subtitle-btn" class="vbtn ghost" title="Субтитры" aria-label="Субтитры" aria-haspopup="listbox" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-subtitles"></use></svg></button>
                   <div id="subtitle-menu" class="quality-menu menu" role="listbox" hidden></div>
                 </div>
-                <button id="btn-rec" class="vbtn ghost rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
                 <button id="btn-pip" class="vbtn ghost" title="Плавающее окно (PiP)" aria-label="Плавающее окно"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-pip"></use></svg></button>
                 <button id="btn-expand" class="vbtn ghost" title="Свернуть плеер" aria-label="Свернуть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-chevron-down"></use></svg></button>
                 <button id="btn-fullscreen" class="vbtn ghost" title="На весь экран (F)" aria-label="На весь экран"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-fullscreen"></use></svg></button>
