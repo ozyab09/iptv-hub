@@ -49,6 +49,10 @@ import {
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
+import {
+  loadPosition,
+  savePosition,
+} from "./positions";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -754,6 +758,7 @@ function playChannel(c: Channel): void {
   setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
+  saveCurrentPosition(); // уходим с предыдущего канала — запоминаем позицию (FR-9)
   const refused = player.play(c);
   if (refused) {
     showToast(refused);
@@ -802,7 +807,26 @@ videoEl.addEventListener("loadedmetadata", () => {
     });
   }
   refreshPlayerStatus();
+  // Продолжение с последней позиции (FR-9): только неэфирный контент —
+  // у живого потока длительность конечного файла нет.
+  const dur = videoEl.duration;
+  if (lastPlayed && Number.isFinite(dur) && dur > 0) {
+    const saved = loadPosition(localStorage, lastPlayed.url, Date.now(), dur);
+    if (saved !== null && saved > 15) {
+      videoEl.currentTime = saved;
+      showToast(`Продолжаю с ${Math.floor(saved / 60)}:${String(Math.floor(saved % 60)).padStart(2, "0")} · перемотайте назад, чтобы начать сначала`);
+    }
+  }
 });
+
+// Позиция сохраняется на pause, перед сменой канала и перед выгрузкой страницы.
+const saveCurrentPosition = (): void => {
+  const dur = videoEl.duration;
+  if (!lastPlayed || !Number.isFinite(dur) || dur === 0) return; // эфир — не сохраняем
+  if (videoEl.currentTime > 0) savePosition(localStorage, lastPlayed.url, videoEl.currentTime, Date.now());
+};
+videoEl.addEventListener("pause", saveCurrentPosition);
+window.addEventListener("pagehide", saveCurrentPosition);
 
 btnPrev.addEventListener("click", () => playNeighbor(-1));
 btnNext.addEventListener("click", () => playNeighbor(1));
