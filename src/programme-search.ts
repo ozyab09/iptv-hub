@@ -6,13 +6,18 @@ export interface ProgrammeMatch {
   programme: EpgProgramme;
 }
 
+/** Пунктуация разделяет слова; названия и индексы каналов не меняем. */
+function normalizeProgrammeSearch(value: string): string {
+  return value.normalize("NFC").toLowerCase().replace(/[\p{P}\s]+/gu, " ").trim();
+}
+
 /** Ищем только передачи каналов активного списка; индекс id имеет приоритет. */
 export function searchProgrammes(
   channels: readonly Channel[],
   epg: ReadonlyMap<string, readonly EpgProgramme[]> | null,
   query: string,
 ): ProgrammeMatch[] {
-  const q = query.trim().toLowerCase();
+  const q = normalizeProgrammeSearch(query);
   if (!q || !epg) return [];
   const matches: ProgrammeMatch[] = [];
   for (const channel of channels) {
@@ -20,7 +25,7 @@ export function searchProgrammes(
       ?? epg.get(`name:${channel.normalizedName}`) ?? [];
     const seen = new Set<string>();
     for (const programme of list) {
-      if (!programme.title.toLowerCase().includes(q)) continue;
+      if (!normalizeProgrammeSearch(programme.title).includes(q)) continue;
       const start = Date.parse(programme.start);
       const stop = Date.parse(programme.stop);
       if (!Number.isFinite(start) || !Number.isFinite(stop) || stop <= start) continue;
