@@ -555,7 +555,21 @@ html, body {
 }
 /* Раскрывается вниз: над ним заголовок раздела, а не край окна.
    bottom: auto обязателен — сбрасывает нижнюю привязку .quality-menu. */
-.cat-menu { top: calc(100% + 6px); bottom: auto; }
+.cat-menu { top: calc(100% + 6px); bottom: auto; width: min(360px, 100%); }
+/* Компонент задаёт раскладку; здесь сбрасываем оформление HTML-кнопок. */
+button.menu-item {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  flex-shrink: 0;
+}
+button.menu-item:hover { background: var(--surface-2); }
+button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.cat-menu .menu-item { height: auto; min-height: 40px; padding-block: var(--space-2); }
+.cat-menu .cat-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cat-menu .count { flex: none; color: var(--muted); }
 .quality-item.active { color: var(--accent); font-weight: 600; }
 /* Кнопка-иконка дизайн-системы: 44×44, без рамки; заливка — по месту */
 .icon-btn {

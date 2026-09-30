@@ -654,7 +654,14 @@ function renderCategories(): void {
     const item = document.createElement("button");
     item.className = menuItemClass(activeCategory === value);
     item.setAttribute("role", "option");
-    item.textContent = `${label} (${count})`;
+    item.setAttribute("aria-selected", String(activeCategory === value));
+    const name = document.createElement("span");
+    name.className = "cat-label";
+    name.textContent = label;
+    const total = document.createElement("span");
+    total.className = "count";
+    total.textContent = `(${count})`;
+    item.append(name, total);
     item.addEventListener("click", () => {
       activeCategory = value;
       catMenu.hidden = true;
