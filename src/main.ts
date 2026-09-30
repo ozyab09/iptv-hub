@@ -391,7 +391,7 @@ $("player-settings-reset").addEventListener("click", () => {
 let diagnosticsFor: string | null = null;
 async function diagnoseStreamFailure(): Promise<void> {
   const url = player.currentStreamUrl;
-  if (!url || diagnosticsFor === url) return;
+  if (!url || url.startsWith("blob:") || diagnosticsFor === url) return;
   diagnosticsFor = url;
   try {
     const r = await probeStream(url, (u, init) => fetch(u, init), player.diagnosticsTimeoutMs);
@@ -1694,18 +1694,12 @@ function renderRecordings(): void {
 /** Проиграть сохранённый файл в плеере (#159). */
 function playRecording(file: File, r: RecordingMeta): void {
   stopIfRecording();
-  player.stop();
-  const url = URL.createObjectURL(file);
-  const cleanup = (): void => URL.revokeObjectURL(url);
-  // Сырой MPEG-TS (.ts) элементу <video> не по зубам — он умеет mp4/webm.
-  // Честно сообщаем и предлагаем скачивание, а не молча чёрный кадр.
-  videoEl.onerror = () => {
-    videoEl.onerror = null;
-    cleanup();
-    showToast(tr("error.ts"));
-  };
-  videoEl.src = url;
-  videoEl.play().catch(() => undefined);
+  lastPlayed = null; // позиция записи не должна сохраняться под URL прошлого канала
+  const refused = player.playRecording(file, r.ext, r.durationSec);
+  if (refused) {
+    showToast(refused);
+    return;
+  }
   playerBar.hidden = false;
   setWatching(true);
   nowTitle.textContent = `${r.channelName} · запись`;
@@ -1714,7 +1708,6 @@ function playRecording(file: File, r: RecordingMeta): void {
   btnRetry.hidden = true;
   liveBadge.hidden = true;
   showToast(`Запись от ${new Date(r.startedAt).toLocaleString("ru")}`);
-  videoEl.addEventListener("ended", cleanup, { once: true });
 }
 
 function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {

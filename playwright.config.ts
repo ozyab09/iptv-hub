@@ -23,6 +23,9 @@ export default defineConfig({
     timeout: 30_000,
     reuseExistingServer: !process.env.CI,
   },
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  projects: [
+    { name: "chromium", use: { browserName: "chromium" } },
+    { name: "firefox-recordings", testMatch: /recording-playback\.spec\.ts/, use: { browserName: "firefox" } },
+  ],
   reporter: [["list"]],
 });
