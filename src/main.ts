@@ -743,7 +743,7 @@ window.addEventListener("resize", () => {
   renderVirtualWindow();
 });
 
-function renderChannels(): void {
+function renderChannels(resetScroll = true): void {
   if (!snapshot) return;
   const q = searchInput.value.trim().toLowerCase();
   const inView = channelsForView(activeView, snapshot.channels, favorites, recents);
@@ -769,7 +769,7 @@ function renderChannels(): void {
   ensureVirtualShell();
   // при смене фильтра сбрасываем прокрутку, чтобы окно пересчиталось с нуля
   renderContinue();
-  channelList.scrollTop = 0;
+  if (resetScroll) channelList.scrollTop = 0;
   renderVirtualWindow();
 }
 
@@ -952,7 +952,7 @@ function playChannel(c: Channel, archiveUrl?: string): void {
       );
     } catch { /* приватный режим */ }
     // Раздел «Недавние» показывает этот список — обновляем, если он открыт.
-    if (activeView === "recents") renderChannels();
+    if (activeView === "recents") renderChannels(false);
   }
   nowTitle.textContent = archiveUrl ? `${c.name} · архив` : c.name;
   nowTitle.title = archiveUrl ?? c.url; // ссылка на поток текущего канала
@@ -971,7 +971,7 @@ function playChannel(c: Channel, archiveUrl?: string): void {
   }
   // уровни/дорожки приходят асинхронно после парсинга манифеста
   qualityMenuUi.refreshQualityUi();
-  renderChannels(); // подсветка активного
+  renderChannels(false); // подсветка активного без сброса позиции
 }
 
 /** Переключить на соседний канал в текущем видимом списке (с зацикливанием). */
