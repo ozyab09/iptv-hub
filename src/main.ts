@@ -91,6 +91,10 @@ import {
   trackLabel,
 } from "./quality";
 import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
+import {
+  shouldShowHttpNotice,
+  markHttpNoticeShown,
+} from "./http-notice";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -152,6 +156,8 @@ const nowShow = $("now-show");
 const nowTimeLeft = $("now-time-left");
 const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
 const toastEl = $("toast");
+const httpNotice = $("http-notice");
+const httpNoticeClose = $<HTMLButtonElement>("http-notice-close");
 const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
 const btnFullscreen = $<HTMLButtonElement>("btn-fullscreen");
@@ -279,6 +285,22 @@ function showToastAction(
     if (toastToken === token) toastEl.hidden = true;
   }, durationMs);
 }
+
+/**
+ * Уведомление с колокольчиком (сверху справа): в отличие от тоста
+ * не исчезает само — живёт, пока пользователь не закроет крестиком.
+ * Текст — textContent, не innerHTML: текст плейлиста ненадёжен.
+ */
+function showHttpNotice(message: string): void {
+  const text = httpNotice.querySelector(".n-text");
+  if (!text) throw new Error(".n-text не найден");
+  text.textContent = message;
+  httpNotice.hidden = false;
+}
+
+httpNoticeClose.addEventListener("click", () => {
+  httpNotice.hidden = true;
+});
 
 function showSetup(message?: string): void {
   setView("settings", false);
@@ -2321,12 +2343,16 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   renderCategories();
   renderChannels();
   renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
-  // Скрытые http-каналы — не потеря каналов при загрузке, а фильтр:
-  // сообщаем, иначе пользователь решит, что часть плейлиста пропала.
-  if (snapshot.droppedHttp > 0) {
-    showToast(
+  // Скрытые http-каналы — не потеря каналов при загрузке, а фильтр.
+  // Извещаем уведомлением с колокольчиком сверху справа, ровно один раз
+  // на плейлист (src/http-notice.ts): длинный текст в трёхсекундном тосте
+  // не прочесть, а при каждом переключении плейлистов оно стало бы спамом.
+  if (snapshot.droppedHttp > 0 && plState.activeId &&
+      shouldShowHttpNotice(plState.activeId, localStorage)) {
+    showHttpNotice(
       `Скрыто ${channelsWord(snapshot.droppedHttp)} по http:// — на https-странице браузер их блокирует. Если у провайдера есть https-ссылки — замените их в плейлисте.`,
     );
+    markHttpNoticeShown(plState.activeId, localStorage);
   }
   // Служебная строка нужна, только пока что-то грузится или не удалось:
   // счётчики «Каналов: N · Категорий: M» уже видны в шапке и у категорий.

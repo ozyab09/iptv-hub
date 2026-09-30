@@ -35,6 +35,7 @@ export const ICONS: Record<string, string> = {
   "seek-fwd": '<path d="m13 7 5 5-5 5M5 7l5 5-5 5"/>',
   prev: '<path d="m14.5 6-6 6 6 6"/>',
   next: '<path d="m9.5 6 6 6-6 6"/>',
+  bell: '<path d="M6 16.5v-5a6 6 0 0 1 12 0v5l1.8 2.5H4.2L6 16.5Z"/><path d="M10 21a2.2 2.2 0 0 0 4 0"/>',
   volume: '<path d="M11 5.5 6.5 9.5H3.5v5h3l4.5 4Z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.3 6.6a8 8 0 0 1 0 10.8"/>',
   mute: '<path d="M11 5.5 6.5 9.5H3.5v5h3l4.5 4Z"/><path d="m15.5 10 5 4M20.5 10l-5 4"/>',
   pip: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><rect x="12" y="12" width="7.5" height="5.5" rx="1.5"/>',
