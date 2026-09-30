@@ -2,6 +2,8 @@ import Hls from "hls.js";
 import { isMixedContent, isPrivateHost } from "./config";
 import type { Channel } from "./types";
 import { DEFAULT_PLAYER_SETTINGS, playerHlsConfig, sanitizePlayerSettings, type PlayerSettings } from "./player-settings";
+import { recordingManifest } from "./recording-playback";
+import { t } from "./i18n";
 
 /**
  * Сколько подряд сетевых сбоев переживаем, прежде чем сдаться. Без предела
@@ -39,6 +41,8 @@ export class Player {
   private httpsUpgraded = false;
   private activeSettings: PlayerSettings = { ...DEFAULT_PLAYER_SETTINGS };
   private readSettings: () => PlayerSettings;
+  /** Файл и локальный манифест живут до закрытия/смены записи, включая перемотку. */
+  private recordingUrls: string[] = [];
 
   constructor(
     video: HTMLVideoElement,
@@ -97,6 +101,11 @@ export class Player {
    */
   private handleVideoError = (): void => {
     if (this.hls || !this.currentUrl) return;
+    if (this.recordingUrls.length > 0) {
+      this.toast(t("error.recordPlayback"));
+      this.onFatalError?.();
+      return;
+    }
     const err = this.video.error;
     console.debug(
       `[iptv-hub] native video error: code=${err?.code} ${err?.message ?? ""}`,
@@ -129,7 +138,7 @@ export class Player {
    * показывает вызывающий; сам плеер про это не тостит, чтобы сообщения
    * не наслаивались).
    */
-  play(channel: Channel): string | null {
+  play(channel: Pick<Channel, "url">, forceHls = false): string | null {
     // Смешанный контент: вместо немедленного отказа пробуем https-порт —
     // у большинства IPTV-CDN тот же контент доступен по TLS (issue #67).
     const url = this.resolvePlayableUrl(channel.url);
@@ -139,7 +148,7 @@ export class Player {
     this.networkRetries = 0;
     this.httpsFallbackTried = false;
 
-    const isHls = /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
+    const isHls = forceHls || /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
     const isDash = /\.mpd(\?|$)/i.test(url);
 
     if (isHls && Hls.isSupported()) {
@@ -148,6 +157,11 @@ export class Player {
       this.hls.attachMedia(this.video);
       this.hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return;
+        if (this.recordingUrls.length > 0) {
+          this.toast(t("error.recordPlayback"));
+          this.onFatalError?.();
+          return;
+        }
         // Автовосстановление по типу ошибки (рекомендации hls.js):
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           if (!shouldRetryNetwork(++this.networkRetries)) {
@@ -195,6 +209,27 @@ export class Player {
       // автоплей с звуком может быть заблокирован — юзер нажмёт play вручную
     });
     return null;
+  }
+
+  /** Проиграть запись из OPFS; MPEG-TS преобразуется существующим hls.js через MSE. */
+  playRecording(file: Blob, ext: string, durationSec: number): string | null {
+    this.stop();
+    const ts = ext === "ts";
+    const hls = ts && Hls.isSupported();
+    if (ts && !hls && !this.video.canPlayType("video/mp2t")) {
+      return t("error.recordTsUnsupported");
+    }
+    const mime = ts ? "video/mp2t" : ext === "mp4" ? "video/mp4" : "video/webm";
+    const fileUrl = URL.createObjectURL(new Blob([file], { type: mime }));
+    const urls = [fileUrl];
+    let source = fileUrl;
+    if (hls) {
+      source = URL.createObjectURL(new Blob([recordingManifest(fileUrl, durationSec)], { type: "application/vnd.apple.mpegurl" }));
+      urls.push(source);
+    }
+    const result = this.play({ url: source }, hls);
+    this.recordingUrls = urls;
+    return result;
   }
 
   /** Пауза/продолжить. Возвращает true после вызова — на паузе или играет. */
@@ -249,6 +284,8 @@ export class Player {
     this.video.removeAttribute("src");
     this.video.load();
     this.currentUrl = null;
+    for (const url of this.recordingUrls) URL.revokeObjectURL(url);
+    this.recordingUrls = [];
   }
 
   // ---- Качество / дорожки (работают только когда поток через hls.js) ----
@@ -287,9 +324,12 @@ export class Player {
   retry(): void {
     const url = this.currentUrl;
     if (!url) return;
-    const isHls = /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
+    const isHls = this.hls !== null || /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
     const channel: Channel = { url, name: "", normalizedName: "", tvgId: null, logo: null, group: "", quality: null, catchupDays: 0, catchupSource: null };
+    const recordingUrls = this.recordingUrls;
+    this.recordingUrls = [];
     this.stop();
+    this.recordingUrls = recordingUrls;
     this.networkRetries = 0; // ручной повтор даёт потоку новый лимит попыток
     this.httpsFallbackTried = false;
     if (isHls && Hls.isSupported()) {
@@ -298,7 +338,9 @@ export class Player {
       this.hls.attachMedia(this.video);
       this.hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
-          this.toast(`Ошибка потока: ${data.details ?? "unknown"}`);
+          this.toast(this.recordingUrls.length > 0
+            ? t("error.recordPlayback")
+            : `Ошибка потока: ${data.details ?? "unknown"}`);
           this.onFatalError?.();
         }
       });
