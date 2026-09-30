@@ -44,8 +44,14 @@
           <button id="pl-switch-btn" class="pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false"><span id="pl-switch-name" class="pl-switch-name"></span><span id="pl-switch-count" class="pl-switch-count num"></span><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-chevron-down"></use></svg></button>
           <div id="pl-switch-menu" class="menu pl-switch-menu" role="listbox" hidden></div>
         </div>
+        <label class="search-wrap">
+          <svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+          <input id="search" type="search" placeholder="Поиск каналов" autocomplete="off" aria-label="Поиск каналов" />
+          <span class="kbd" aria-hidden="true">/</span>
+        </label>
         <!-- Центр уведомлений: колокольчик всегда виден, бейдж зовёт
-             заглянуть; клик открывает панель со списком (#98). -->
+             заглянуть; клик открывает панель со списком (#98). Стоит
+             рядом с кнопкой темы — правый угол шапки. -->
         <div id="notif-bell-wrap" class="notif-bell-wrap">
           <button id="notif-bell" class="icon-btn" title="Уведомления" aria-label="Уведомления" aria-haspopup="true" aria-expanded="false">
             <svg class="i" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg>
@@ -56,11 +62,6 @@
             <div id="notif-list" class="notif-list"></div>
           </div>
         </div>
-        <label class="search-wrap">
-          <svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
-          <input id="search" type="search" placeholder="Поиск каналов" autocomplete="off" aria-label="Поиск каналов" />
-          <span class="kbd" aria-hidden="true">/</span>
-        </label>
         <button id="btn-theme" class="icon-btn theme-btn" title="Переключить тему" aria-label="Переключить тему"></button>
       </header>
 
