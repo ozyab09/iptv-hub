@@ -896,7 +896,8 @@ html, body {
 }
 .live.on-video::before { background: #ff4fa3; }
 
-.video .bottom { gap: 6px; padding: 48px var(--space-3) var(--space-2); }
+/* Сверху небольшой отступ: транспортная дека перенесена в свой ряд (#89) */
+.video .bottom { gap: 6px; padding: var(--space-2) var(--space-3); }
 .scrub-row { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-1); }
 .scrub-row .scrub { flex: 1; }
 .scrub-row .num:empty { display: none; }
@@ -941,8 +942,14 @@ html, body {
    списка, на узком кнопка сворачивает страницу плеера обратно в мини. */
 #btn-expand { display: none; }
 
-/* Верх кадра: канал, передача и навигация по каналам */
-.video .top { align-items: flex-start; padding: var(--space-4) var(--space-3) 56px var(--space-4); }
+/* Транспортная дека: все кнопки воспроизведения в одном ряду —
+   «как на магнитофоне» (#89): ◀◀ · ◀ · ▶/⏸ · ▶ · ▶▶ · ⏺.
+   Пауза крупнее остальных, запись краснеет при записи. */
+.video .transport { display: inline-flex; align-items: center; gap: var(--space-3); }
+.video .transport .vbtn.big { width: 64px; height: 64px; }
+/* Верх кадра: канал, передача и навигация по каналам.
+   Нижний отступ небольшой: транспорт переехал в деку (#89). */
+.video .top { align-items: flex-start; padding: var(--space-4) var(--space-3) var(--space-3); }
 .now-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
 .now-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: 13px; line-height: 18px; }
 .now-title { flex: 0 0 auto; max-width: 70%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -994,22 +1001,19 @@ html, body {
   }
   .watch .player-bar > #player-stack { width: var(--frame-w); margin-block: auto; }
 
-  /* Транспорт (пауза, −15, +15) — в левом углу нижней панели, а не по
-     центру кадра: все кнопки в одном месте, картинка не перекрыта. */
+  /* Транспортная дека — вся в левом углу нижней панели: картинка не
+     перекрыта, все кнопки воспроизведения в одном ряду (#89). */
   .video .center {
     inset: auto;
     left: var(--space-3);
     bottom: var(--space-2);
-    height: 44px;
-    gap: 2px;
     justify-content: flex-start;
     z-index: 2;
   }
-  .video .center .vbtn,
-  .video .center .vbtn.big { width: 44px; height: 44px; background: transparent; }
-  .video .center .vbtn:hover { background: rgba(255, 255, 255, 0.12); }
-  #btn-pause { order: -1; }
-  .video-actions { padding-left: 136px; }
+  .video .transport { gap: 2px; }
+  .video .transport .vbtn,
+  .video .transport .vbtn.big { width: 44px; height: 44px; background: transparent; }
+  .video .transport .vbtn:hover { background: rgba(255, 255, 255, 0.12); }
 
   /* Список сворачивается в колонку логотипов (кнопка в его шапке или C) */
   #app.watch.list-collapsed { --list-w: 64px; }
@@ -1050,12 +1054,13 @@ html, body {
   .player-bar:not(.open) .bottom,
   .player-bar:not(.open) #btn-seek-back,
   .player-bar:not(.open) #btn-seek-fwd,
+  .player-bar:not(.open) #btn-prev,
+  .player-bar:not(.open) #btn-next,
+  .player-bar:not(.open) #btn-rec,
   .player-bar:not(.open) #live-badge,
   .player-bar:not(.open) #btn-retry,
   .player-bar:not(.open) #now-fav,
-  .player-bar:not(.open) .now-show,
-  .player-bar:not(.open) #btn-prev,
-  .player-bar:not(.open) #btn-next { display: none; }
+  .player-bar:not(.open) .now-show { display: none; }
   /* Строка «превью · что идёт · пауза · закрыть»: обёртки верха кадра
      растворяются, чтобы порядок задавался здесь, а не разметкой. Цвет —
      темы, а не белый: мини лежит не на видео, а на поверхности. */
