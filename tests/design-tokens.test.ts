@@ -141,15 +141,17 @@ describe("вертикальное центрирование плеера (issu
     // Сам прокручиваемый контейнер центрировать нельзя: при переполнении
     // justify-content/margin-centering делает верх недостижимым прокруткой.
     expect(wide).toMatch(
-      /\.watch \.player-bar > \* \{[^}]*margin-block:\s*auto;[^}]*\}/,
+      /\.watch \.player-bar > #player-stack \{[^}]*margin-block:\s*auto;[^}]*\}/,
     );
     expect(wide).toMatch(/\.watch \.player-bar \{[^}]*margin:\s*auto 0;[^}]*\}/);
   });
 
-  it("страница плеера на телефоне: те же авто-отступы на детях", () => {
-    // Тот же механизм, что у wide-колонки: центрруют дети (margin-block),
-    // не сам прокручиваемый контейнер.
-    expect(narrow).toMatch(/\.player-bar\.open > \* \{[^}]*margin-block:\s*auto;[^}]*\}/);
+  it("страница плеера на телефоне: центрируется группа #player-stack", () => {
+    // Тот же механизм, что у wide-колонки: центррует группа (margin-block),
+    // не сам прокручиваемый контейнер; центрировать каждого ребёнка
+    // по отдельности нельзя — программа отрывается от кадра (#86).
+    expect(narrow).toMatch(/\.player-bar\.open > #player-stack \{[^}]*margin-block:\s*auto;[^}]*\}/);
+    expect(narrow).not.toMatch(/\.player-bar\.open > \* \{[^}]*margin-block:\s*auto;[^}]*\}/);
     expect(narrow).not.toMatch(/\.player-bar\.open \{[^}]*justify-content:\s*center;[^}]*\}/);
   });
 
@@ -186,6 +188,28 @@ describe("каскад позиционирования меню категор�
     const rule = css.slice(at(".quality-menu"), css.indexOf("}", at(".quality-menu")));
     expect(rule).toContain("bottom: calc(100% + 6px)");
     expect(rule).not.toMatch(/\btop:/);
+  });
+});
+
+describe("группа плеера и выход меню за кадр (issues #86, #87)", () => {
+  it("кадр не единственный центрируемый ребёнок — группа #player-stack", () => {
+    expect(css).toMatch(/#player-stack \{[^}]*display:\s*flex;[^}]*\}/);
+    // авто-отступы на каждом ребёнке делили воздух поровну (#86)
+    expect(css).not.toMatch(/\.player-bar[^{]*> \* \{[^}]*margin-block:\s*auto/);
+  });
+
+  it("на странице плеера меню качества не режется overflow: hidden кадра", () => {
+    const narrow = css.slice(
+      css.indexOf("/* ---- узкий экран: мини-плеер"),
+      css.indexOf("/* ---- нативный полный экран"),
+    );
+    expect(narrow).toMatch(/\.player-bar\.open #video-stage \{[^}]*overflow:\s*visible;[^}]*\}/);
+  });
+
+  it("в фуллскрине стек растягивается на высоту, кадр — на ширину", () => {
+    const fs = css.slice(css.indexOf("#player-bar:fullscreen"));
+    expect(fs).toMatch(/#player-bar:fullscreen #player-stack \{[^}]*height:\s*100%;[^}]*\}/);
+    expect(fs).toMatch(/#player-bar:fullscreen #video-stage \{[^}]*width:\s*100%;[^}]*\}/);
   });
 });
 
