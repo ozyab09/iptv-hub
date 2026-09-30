@@ -54,6 +54,19 @@ import {
   loadPosition,
   savePosition,
 } from "./positions";
+import {
+  addRecording,
+  formatBytes,
+  formatDuration,
+  loadRecordings,
+  removeRecording,
+  type RecordingMeta,
+} from "./recordings";
+import {
+  createRecordingsFs,
+  recordingFileName as storedRecordingName,
+  type RecordingsFs,
+} from "./recordings-store";
 import { firstFocus, lastFocus, moveFocus } from "./kbd-nav";
 import {
   defaultLocalName,
@@ -249,6 +262,8 @@ const btnLive = $<HTMLButtonElement>("btn-live");
 const miniProgFill = $("mini-prog-fill");
 const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
+const recordingsBlock = $("recordings-block");
+const recordingsRow = $("recordings-row");
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
 const nowShow = $("now-show");
@@ -580,6 +595,7 @@ function setView(view: View, persist = true): void {
     renderThemeSeg();
     renderRefreshSeg();
   }
+  renderRecordings();
   categoriesNav.hidden = !showsCategories(view);
   catLabel.hidden = !showsCategories(view);
   catPicker.hidden = !showsCategories(view);
@@ -1573,6 +1589,158 @@ function createRecorderAdapter(stream: MediaStream, mimeType: string): RecorderL
  * именем, без prompt. Если браузер настроен «спрашивать, куда сохранять» —
  * покажет свой диалог (это его настройка, см. README), файл НЕ теряется.
  */
+// ---------- Библиотека записанных эфиров (#159) ----------
+// Готовая запись сохраняется в OPFS + метаданные в localStorage; список
+// показывается в блоке «Записанные эфиры» (рядом с «Продолжить»), клик —
+// воспроизведение из приложения. Скачивание — кнопкой в карточке.
+let recordingsFs: RecordingsFs | null = null;
+try {
+  recordingsFs = createRecordingsFs();
+} catch {
+  recordingsFs = null;
+}
+
+/** Момент старта текущей записи (мс эпохи) — выставляется в startRecording. */
+let recordingStartedAt = 0;
+
+/** Передача, идущая в момент записи (для подписи в библиотеке). */
+function currentProgrammeTitle(): string | null {
+  const all = channelProgrammes();
+  const now = Date.now();
+  const cur = all.find(
+    (p) => Date.parse(p.start) <= now && now < Date.parse(p.stop),
+  );
+  return cur?.title ?? null;
+}
+
+async function saveToLibrary(blob: Blob, ext: string, _mime: string): Promise<void> {
+  if (!recordingsFs) {
+    // OPFS нет — прежнее поведение: сразу скачивание.
+    offerDownload(blob, recordingFileName(lastPlayed?.name ?? "recording"));
+    return;
+  }
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const meta: RecordingMeta = {
+    id,
+    channelName: lastPlayed?.name ?? "Запись",
+    channelUrl: lastPlayed?.url ?? "",
+    programmeTitle: currentProgrammeTitle(),
+    startedAt: recordingStartedAt || Date.now(),
+    durationSec: recordedDurationSec,
+    sizeBytes: blob.size,
+    ext,
+  };
+  try {
+    await recordingsFs.write(storedRecordingName(id, ext), blob);
+    addRecording(typeof localStorage !== "undefined" ? localStorage : null, meta);
+    renderRecordings();
+    showToast(`Запись сохранена в библиотеку: ${formatBytes(blob.size)}`);
+  } catch (e) {
+    console.debug("[iptv-hub] записи: не удалось сохранить", e);
+    offerDownload(blob, recordingFileName(meta.channelName)); // откат — скачивание
+  }
+}
+
+/** Секунды фактической записи: от старта до остановки. */
+let recordedDurationSec = 0;
+function noteRecordingStart(): void {
+  recordingStartedAt = Date.now();
+  recordedDurationSec = 0;
+}
+function noteRecordingStop(): void {
+  if (recordingStartedAt) {
+    recordedDurationSec = Math.max(0, (Date.now() - recordingStartedAt) / 1000);
+  }
+}
+
+function renderRecordings(): void {
+  if (!recordingsBlock) return;
+  const list = loadRecordings(typeof localStorage !== "undefined" ? localStorage : null);
+  recordingsBlock.hidden = list.length === 0 || activeView !== "channels";
+  recordingsRow.textContent = "";
+  for (const r of list) {
+    const card = document.createElement("button");
+    card.className = "recording-card";
+    const when = new Date(r.startedAt);
+    card.title = `${r.channelName} · ${when.toLocaleString("ru")} · ${formatDuration(r.durationSec)}`;
+
+    const name = document.createElement("span");
+    name.className = "recording-name ellipsis";
+    name.textContent = r.programmeTitle ?? r.channelName;
+    card.append(name);
+
+    const sub = document.createElement("span");
+    sub.className = "recording-sub muted num";
+    sub.textContent = `${r.channelName} · ${when.toLocaleDateString("ru")} ${when.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} · ${formatDuration(r.durationSec)} · ${formatBytes(r.sizeBytes)}`;
+    card.append(sub);
+
+    // Клик — воспроизведение из OPFS.
+    card.addEventListener("click", () => {
+      if (!recordingsFs) return;
+      void recordingsFs.read(storedRecordingName(r.id, r.ext)).then((file) => {
+        if (!file) {
+          showToast("Файл записи не найден в хранилище");
+          return;
+        }
+        playRecording(file, r);
+      });
+    });
+
+    const download = document.createElement("button");
+    download.className = "recording-act";
+    download.title = "Скачать файл";
+    download.setAttribute("aria-label", "Скачать файл записи");
+    download.innerHTML = iconMarkup("download");
+    download.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (!recordingsFs) return;
+      void recordingsFs.read(storedRecordingName(r.id, r.ext)).then((file) => {
+        if (file) offerDownload(file, recordingFileName(r.channelName, new Date(r.startedAt), r.ext));
+      });
+    });
+    card.append(download);
+
+    const del = document.createElement("button");
+    del.className = "recording-act";
+    del.title = "Удалить запись";
+    del.setAttribute("aria-label", "Удалить запись");
+    del.innerHTML = iconMarkup("trash");
+    del.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (!recordingsFs) return;
+      void recordingsFs.remove(storedRecordingName(r.id, r.ext)).then(() => {
+        removeRecording(typeof localStorage !== "undefined" ? localStorage : null, r.id);
+        renderRecordings();
+      });
+    });
+    card.append(del);
+
+    recordingsRow.append(card);
+  }
+}
+
+/** Проиграть сохранённый файл в плеере (#159). */
+function playRecording(file: File, r: RecordingMeta): void {
+  stopIfRecording();
+  player.stop();
+  const url = URL.createObjectURL(file);
+  videoEl.src = url;
+  videoEl.play().catch(() => undefined);
+  playerBar.hidden = false;
+  setWatching(true);
+  nowTitle.textContent = `${r.channelName} · запись`;
+  nowTitle.title = r.programmeTitle ?? "";
+  playerStatus.textContent = "Записанный эфир";
+  btnRetry.hidden = true;
+  liveBadge.hidden = true;
+  showToast(`Запись от ${new Date(r.startedAt).toLocaleString("ru")}`);
+  videoEl.addEventListener(
+    "ended",
+    () => URL.revokeObjectURL(url),
+    { once: true },
+  );
+}
+
 function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {
   console.debug(
     `[iptv-hub] onstop: ${blob.size} байт, mime=${mimeType}, chunks=${chunkCount}`,
@@ -1583,7 +1751,7 @@ function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {
     );
     return;
   }
-  offerDownload(blob, recordingFileName(lastPlayed?.name ?? "recording"));
+  void saveToLibrary(blob, "webm", mimeType);
 }
 
 /** Отдать готовый файл пользователю — общее для обоих способов записи. */
@@ -1791,10 +1959,8 @@ const segSession = createSegmentSession({
       `[iptv-hub] seg: ${result.bytes} байт, сегментов=${result.segments}, ` +
         `хранилище=${result.sink}, .${result.ext}`,
     );
-    offerDownload(
-      blob,
-      recordingFileName(lastPlayed?.name ?? "recording", new Date(), result.ext),
-    );
+    noteRecordingStop();
+    void saveToLibrary(blob, result.ext, "");
   },
 });
 
@@ -1837,6 +2003,7 @@ function isRecordingNow(): boolean {
 
 /** Остановить запись любым из способов, сохранив записанное. */
 function stopRecordingNow(): void {
+  noteRecordingStop();
   if (segSession.isRecording()) {
     void segSession.stop(true);
     return;
@@ -1845,6 +2012,7 @@ function stopRecordingNow(): void {
 }
 
 function startRecording(): void {
+  noteRecordingStart();
   // HLS пишем сегментами; перекодирование остаётся для остального
   // (нативное воспроизведение, прямые mp4).
   if (player.getHls()) {

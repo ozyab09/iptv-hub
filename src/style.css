@@ -504,6 +504,27 @@ html, body {
 .continue-frame > .prog { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0; }
 .continue-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 
+/* ---- Записанные эфиры (#159): горизонтальная лента карточек ---- */
+.recordings-row {
+  display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory;
+  padding-bottom: var(--space-2);
+}
+.recording-card {
+  flex: none; width: 260px; scroll-snap-align: start;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-3);
+  cursor: pointer; color: inherit; text-align: left; font: inherit;
+}
+.recording-card:hover { border-color: var(--focus); }
+.recording-name { font-weight: 600; }
+.recording-sub { font-size: 12px; }
+.recording-act {
+  position: absolute; margin-left: var(--space-1);
+  color: var(--muted); cursor: pointer;
+}
+.recording-act:hover { color: var(--text); }
+
 
 
 
