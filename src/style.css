@@ -1041,15 +1041,23 @@ html, body {
   }
   .watch .player-bar > #player-stack { width: var(--frame-w); margin-block: auto; }
 
-  /* Транспортная дека — вся в левом углу нижней панели: картинка не
-     перекрыта, все кнопки воспроизведения в одном ряду (#89). */
+  /* Транспортная дека — в левом углу нижней панели, НО выше ряда громкости:
+     .bottom (громкость + правая группа) — absolute во всю ширину низа, и
+     деко с bottom: 8px лежала прямо на ползунке (issue #155). Поднимаем
+     деку на высоту ряда .video-actions (44px + отступы), а правую группу
+     громкости уводим из-под неё вправо. */
   .video .center {
     inset: auto;
     left: var(--space-3);
-    bottom: var(--space-2);
+    bottom: calc(var(--space-2) + 44px);
     justify-content: flex-start;
     z-index: 2;
   }
+  /* Громкость — прижата вправо, под транспортной декой места нет */
+  .video .volume { margin-left: auto; order: 2; }
+  .video-actions-right { order: 3; }
+  #btn-live { order: 1; margin-right: auto; margin-left: 0; }
+  .video .btn-live { margin-left: 0; }
   .video .transport { gap: 2px; }
   .video .transport .vbtn,
   .video .transport .vbtn.big { width: 44px; height: 44px; background: transparent; }
