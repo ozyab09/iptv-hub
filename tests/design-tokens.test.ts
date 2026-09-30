@@ -164,6 +164,31 @@ describe("вертикальное центрирование плеера (issu
   });
 });
 
+describe("каскад позиционирования меню категорий (issue #84)", () => {
+  // #cat-menu несёт классы .quality-menu .cat-menu; специфичность обоих
+  // правил одинаковая, поэтому побеждает позднее в файле.
+  const at = (sel: string): number => css.indexOf(`${sel} {`);
+
+  it(".cat-menu объявлен ПОСЛЕ .quality-menu — иначе bottom уцелеет", () => {
+    const q = at(".quality-menu");
+    const c = at(".cat-menu");
+    expect(q).toBeGreaterThan(-1);
+    expect(c).toBeGreaterThan(q);
+  });
+
+  it(".cat-menu сбрасывает нижнюю привязку .quality-menu", () => {
+    const rule = css.slice(at(".cat-menu"), css.indexOf("}", at(".cat-menu")));
+    expect(rule).toContain("top: calc(100% + 6px)");
+    expect(rule).toContain("bottom: auto");
+  });
+
+  it(".quality-menu не задаёт top — иначе связка top+bottom схлопнет меню", () => {
+    const rule = css.slice(at(".quality-menu"), css.indexOf("}", at(".quality-menu")));
+    expect(rule).toContain("bottom: calc(100% + 6px)");
+    expect(rule).not.toMatch(/\btop:/);
+  });
+});
+
 describe("тема PWA совпадает с фоном", () => {
   const manifest = JSON.parse(
     readFileSync(root("public", "manifest.webmanifest"), "utf-8"),
