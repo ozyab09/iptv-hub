@@ -51,6 +51,23 @@ import {
 import { clock, isBehindLive, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
 import {
+  describeShotFailure,
+  screenshotFileName,
+  type ShotFailure,
+} from "./screenshot";
+import {
+  initialSleepState,
+  sleepCancel,
+  sleepLabel,
+  sleepRemainderMin,
+  sleepStart,
+  sleepStartEpisode,
+  sleepTick,
+  type SleepState,
+} from "./sleep-timer";
+import { classifyStorageChange } from "./cross-tab";
+import { resolveChannelDeepLink } from "./deeplink";
+import {
   initialWakeLockState,
   wakeLockHidden,
   wakeLockPlay,
@@ -276,6 +293,10 @@ const schedList = $("sched-list");
 const btnFullGuide = $<HTMLButtonElement>("btn-full-guide");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
+const btnShot = $<HTMLButtonElement>("btn-shot");
+const btnSleep = $<HTMLButtonElement>("btn-sleep");
+const sleepBadge = $("sleep-badge");
+const sleepMenu = $("sleep-menu");
 const nowFav = $<HTMLButtonElement>("now-fav");
 const btnTheme = $<HTMLButtonElement>("btn-theme");
 
@@ -1720,6 +1741,63 @@ function startRecording(): void {
   if (recSession.isRecording() && recordPathNote) showToast(recordPathNote);
 }
 
+// ---------- Скриншот кадра (FR-14) ----------
+// drawImage(<video>) → PNG. Через MSE кадр не «запачкан», у нативных
+// cross-origin потоков без CORS канвас tainted — браузер бросит при toBlob,
+// честно сообщаем об ограничении. Логика имён/ошибок — src/screenshot.ts.
+function takeScreenshot(): void {
+  if (!lastPlayed) return;
+  if (!videoEl.videoWidth) {
+    showToast(describeShotFailure("empty"));
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = videoEl.videoWidth;
+  canvas.height = videoEl.videoHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.drawImage(videoEl, 0, 0);
+  const fail = (reason: ShotFailure): void => showToast(describeShotFailure(reason));
+  canvas.toBlob(
+    (blob) => {
+      if (!blob) {
+        fail("tainted");
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = screenshotFileName(lastPlayed!.name, new Date());
+      document.body.append(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      showToast("Скриншот сохранён");
+    },
+    "image/png",
+    // toBlob для tainted-канваса кидает SecurityError синхронно в некоторых
+    // браузерах, в других даёт null — покрыты оба варианта.
+  );
+}
+
+try {
+  // Обёртка try: SecurityError от toBlob может прилететь синхронно.
+  btnShot.addEventListener("click", takeScreenshot);
+} catch {
+  showToast(describeShotFailure("tainted"));
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "ы") {
+    if (playerBar.hidden) return;
+    e.preventDefault();
+    try {
+      takeScreenshot();
+    } catch {
+      showToast(describeShotFailure("tainted"));
+    }
+  }
+});
+
 // Единый toggle: старт из idle, стоп+сохранение из recording.
 // (Раньше здесь жили два обработчика — addEventListener + onclick — и оба
 // срабатывали на один клик, показывая ложный тост «Запись уже идёт».)
@@ -1900,6 +1978,91 @@ window.addEventListener("keydown", (e) => {
 function liveEdge(): number {
   const r = videoEl.seekable;
   return r.length > 0 ? r.end(r.length - 1) : NaN;
+}
+
+// ---------- Sleep-таймер (FR-13) ----------
+// «Выключить через 30/60/90 мин / в конце передачи». Логика — чистый
+// модуль sleep-timer.ts, здесь DOM: меню, бейдж, пауза и затемнение.
+let sleepState: SleepState = initialSleepState;
+
+function sleepRender(): void {
+  const label = sleepLabel(sleepState, Date.now());
+  sleepBadge.hidden = label === null;
+  if (label !== null) sleepBadge.textContent = label;
+  for (const b of sleepMenu.querySelectorAll<HTMLButtonElement>("[data-sleep]")) {
+    const v = b.dataset.sleep;
+    const on =
+      (v === "off" && sleepState.mode.kind === "off") ||
+      (v === "episode" && sleepState.mode.kind === "episode") ||
+      (v !== "off" && v !== "episode" && sleepState.mode.kind === "duration" &&
+        sleepRemainderMin(sleepState, Date.now()) !== null &&
+        Math.abs((sleepState.mode.kind === "duration" ? sleepState.mode.endsAt : 0) -
+          (Date.now() + Number(v) * 60_000)) < 60_000);
+    b.classList.toggle("on", on);
+  }
+}
+
+function sleepApplyFired(): void {
+  if (!sleepState.fired) return;
+  if (!videoEl.paused) videoEl.pause();
+  videoStage.classList.add("sleep-dim");
+  showToast("Sleep-таймер: воспроизведение остановлено");
+}
+
+btnSleep.addEventListener("click", (e) => {
+  e.stopPropagation();
+  sleepMenu.hidden = !sleepMenu.hidden;
+  sleepRender();
+});
+
+document.addEventListener("click", (e) => {
+  if (sleepMenu.hidden) return;
+  if (!sleepMenu.contains(e.target as Node) && !btnSleep.contains(e.target as Node)) {
+    sleepMenu.hidden = true;
+  }
+});
+
+sleepMenu.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-sleep]");
+  if (!b) return;
+  const v = b.dataset.sleep;
+  if (v === "off") {
+    sleepState = sleepCancel(sleepState);
+  } else if (v === "episode") {
+    const progs = channelProgrammes();
+    const nowMs = Date.now();
+    const cur = progs.find(
+      (p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop),
+    );
+    if (!cur) {
+      showToast("Нет телепрограммы для этого канала — выберите интервал");
+      return;
+    }
+    sleepState = sleepStartEpisode(sleepState, Date.parse(cur.stop), nowMs);
+  } else {
+    sleepState = sleepStart(sleepState, Number(v), Date.now());
+  }
+  sleepMenu.hidden = true;
+  sleepRender();
+});
+
+// Тик раз в 10 секунд достаточно: точность ±10с для таймера на полчаса.
+window.setInterval(() => {
+  const before = sleepState.fired;
+  sleepState = sleepTick(sleepState, Date.now());
+  if (sleepState.fired && !before) sleepApplyFired();
+  sleepRender();
+  if (sleepState.mode.kind === "off" && !sleepBadge.hidden) sleepBadge.hidden = true;
+}, 10_000);
+
+// Любое действие пользователя снимает затемнение (таймер при этом не сбрасывается:
+// он уже сработал — просто возвращаем картинку).
+for (const ev of ["click", "keydown"] as const) {
+  videoStage.addEventListener(ev, () => {
+    if (videoStage.classList.contains("sleep-dim")) {
+      videoStage.classList.remove("sleep-dim");
+    }
+  });
 }
 
 /**
@@ -2400,6 +2563,41 @@ function activatePlaylist(id: string): void {
   }
 }
 
+// ---------- Кросс-таб синхронизация (FR-15) ----------
+// storage-событие приходит ТОЛЬКО в табы, которые не писали ключ сами —
+// эха нет. Политика last-write-wins: состояние просто перечитывается.
+window.addEventListener("storage", (e) => {
+  const d = classifyStorageChange(e.key);
+  if (d.ignore) return;
+  if (d.playlists) {
+    const prevActive = plState.activeId;
+    plState = loadPlaylists(localStorage);
+    renderPlaylistManager();
+    renderPlaylistSwitcher();
+    if (plState.activeId !== prevActive) {
+      const pl = activePlaylist(plState);
+      if (pl) activatePlaylist(pl.id);
+      else showSetup();
+    }
+  }
+  if (d.favorites) {
+    const activeId = plState.activeId;
+    if (activeId && (e.key === null || e.key === favoritesKey(activeId))) {
+      favorites = loadFavoritesFor(activeId);
+      refreshNowFav();
+      if (showsChannelList(activeView)) renderChannels();
+    }
+  }
+  if (d.theme) {
+    currentTheme = themeChoice(localStorage) === "system"
+      ? resolveTheme(null, systemPrefersDark())
+      : (themeChoice(localStorage) as Theme);
+    applyTheme(currentTheme);
+    setIcon(btnTheme, themeButtonLabel(currentTheme));
+    renderThemeSeg();
+  }
+});
+
 // ---------- Менеджер плейлистов (setup-экран) ----------
 function renderPlaylistManager(): void {
   plList.textContent = "";
@@ -2828,6 +3026,19 @@ async function bootstrap(): Promise<void> {
   favorites = loadFavoritesFor(active.id);
   loadRecentsFor(active.id);
   await openPlaylist(active.playlistUrl, active.epgUrl);
+
+  // Диплинк на канал (FR-12): ?ch=<url> — после загрузки плейлиста
+  // включить канал. Работает и вместе с ?p= (тот же заход).
+  const ch = params.get("ch");
+  if (ch && snapshot) {
+    const hit = resolveChannelDeepLink(snapshot.channels, ch);
+    if (hit.found) {
+      const target = snapshot.channels.find((c) => c.url === hit.url);
+      if (target) playChannel(target);
+    } else {
+      showToast("Канал из ссылки не найден в активном плейлисте");
+    }
+  }
 }
 
 // (legacy STORAGE_KEY из config.ts больше не используется — миграция в playlists.ts)
