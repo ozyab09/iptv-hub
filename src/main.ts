@@ -50,6 +50,7 @@ import {
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
+import { resolveChannelDeepLink } from "./deeplink";
 import {
   initialWakeLockState,
   wakeLockHidden,
@@ -2828,6 +2829,19 @@ async function bootstrap(): Promise<void> {
   favorites = loadFavoritesFor(active.id);
   loadRecentsFor(active.id);
   await openPlaylist(active.playlistUrl, active.epgUrl);
+
+  // Диплинк на канал (FR-12): ?ch=<url> — после загрузки плейлиста
+  // включить канал. Работает и вместе с ?p= (тот же заход).
+  const ch = params.get("ch");
+  if (ch && snapshot) {
+    const hit = resolveChannelDeepLink(snapshot.channels, ch);
+    if (hit.found) {
+      const target = snapshot.channels.find((c) => c.url === hit.url);
+      if (target) playChannel(target);
+    } else {
+      showToast("Канал из ссылки не найден в активном плейлисте");
+    }
+  }
 }
 
 // (legacy STORAGE_KEY из config.ts больше не используется — миграция в playlists.ts)
