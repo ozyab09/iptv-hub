@@ -38,6 +38,7 @@ import {
 } from "./playlists";
 import {
   applyFavorites,
+  buildFavoritesM3U,
   isFavorite,
   toggleFavorite,
 } from "./favorites";
@@ -48,8 +49,18 @@ import {
   spacerHeight,
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
-import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
+import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
 import { classifyStorageChange } from "./cross-tab";
+import { resolveChannelDeepLink } from "./deeplink";
+import {
+  initialWakeLockState,
+  wakeLockHidden,
+  wakeLockPlay,
+  wakeLockStop,
+  wakeLockVisible,
+  type WakeLockState,
+} from "./wake-lock";
+import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -116,6 +127,13 @@ import {
   shouldCheck,
   type RefreshInterval,
 } from "./refresh";
+import { LatestGuard } from "./latest";
+import {
+  probeStream,
+  probeVerdict,
+  corsChecklist,
+  httpChecklist,
+} from "./stream-diagnostics";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -163,6 +181,36 @@ const channelList = $("channel-list");
 const emptyState = $("empty-state");
 const epgNow = $("epg-now");
 const playerBar = $("player-bar");
+
+// Wake Lock (FR-7): запрос/релиз через нативный API, где его нет —
+// hooks без request превращает всё в тихий no-op.
+let wakeLockState: WakeLockState = initialWakeLockState;
+const wakeLockHooks = {
+  request: (): { release: () => void } | null => {
+    const wl = (navigator as Navigator & {
+      wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> };
+    }).wakeLock;
+    if (!wl) return null;
+    let released = false;
+    let lock: { release: () => Promise<void> } | null = null;
+    wl.request("screen").then(
+      (l) => {
+        if (released) {
+          l.release().catch(() => undefined);
+          return;
+        }
+        lock = l;
+      },
+      () => undefined,
+    );
+    return {
+      release: () => {
+        released = true;
+        lock?.release().catch(() => undefined);
+      },
+    };
+  },
+};
 const videoEl = $<HTMLVideoElement>("video");
 const videoStage = $("video-stage");
 const liveBadge = $("live-badge");
@@ -189,6 +237,7 @@ const btnExpand = $<HTMLButtonElement>("btn-expand");
 const btnFullscreen = $<HTMLButtonElement>("btn-fullscreen");
 const btnRetry = $<HTMLButtonElement>("btn-retry");
 const btnExport = $<HTMLButtonElement>("btn-export");
+const btnExportFav = $<HTMLButtonElement>("btn-export-fav");
 const btnImport = $<HTMLButtonElement>("btn-import");
 const importFile = $<HTMLInputElement>("import-file");
 const sideNav = $("side-nav");
@@ -259,6 +308,24 @@ const CHANNEL_COLUMNS = 1;
 
 /** Недавно просмотренные (url → имя берём из snapshot при рендере). */
 let recents: string[] = [];
+// Диагностика потока (#116): один раз на канал при фатальной ошибке.
+let diagnosticsFor: string | null = null;
+async function diagnoseStreamFailure(): Promise<void> {
+  const url = player.currentStreamUrl;
+  if (!url || diagnosticsFor === url) return;
+  diagnosticsFor = url;
+  try {
+    const r = await probeStream(url, (u, init) => fetch(u, init));
+    const verdict = probeVerdict(r);
+    const detail =
+      r.kind === "blocked" ? corsChecklist() : r.kind === "http" ? httpChecklist(r.status) : "";
+    pushNotification(`${verdict}${detail ? `. ${detail}` : ""}`);
+    showToast(verdict);
+  } catch {
+    // диагностика не должна усугублять сбой — молча
+  }
+}
+
 const player = new Player(
   videoEl,
   showToast,
@@ -269,6 +336,7 @@ const player = new Player(
   },
   () => {
     btnRetry.hidden = false; // фатальная ошибка — показываем retry
+    void diagnoseStreamFailure();
   },
 );
 
@@ -367,6 +435,8 @@ notifBell.addEventListener("click", (e) => {
   notifPanel.hidden = !willOpen;
   notifBell.setAttribute("aria-expanded", String(willOpen));
   if (willOpen) {
+    overlayStack = pushOverlay(overlayStack, "notifications");
+    history.pushState({ overlay: "notifications" }, "");
     // Открыл панель — прочитал всё, что в ней видно
     notifications = markAllRead(notifications);
     saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
@@ -383,8 +453,7 @@ notifClear.addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   if (notifPanel.hidden) return;
   if (!notifBell.contains(e.target as Node) && !notifPanel.contains(e.target as Node)) {
-    notifPanel.hidden = true;
-    notifBell.setAttribute("aria-expanded", "false");
+    closeOverlay("notifications");
   }
 });
 
@@ -721,6 +790,42 @@ function renderChannelCard(c: Channel): HTMLElement {
   });
   card.append(star);
 
+  // Мини-превью: текстовый тост «сейчас в эфире» (issue #118). Никаких
+  // <video> — десяток одновременных декодеров убил бы мобильную батарею.
+  let pressT = 0;
+  let pressX = 0;
+  let pressY = 0;
+  const showPreview = (): void => {
+    if (!epg) return; // без телепрограммы превью не из чего собрать
+    const { now } = getNowNext(epg, c, snapshot!);
+    if (!now) return;
+    showToast(`${c.name} · сейчас: ${now.title} (с ${clock(Date.parse(now.start))})`);
+  };
+  card.addEventListener("pointerdown", (ev) => {
+    if (ev.pointerType === "touch") {
+      pressT = Date.now();
+      pressX = ev.clientX;
+      pressY = ev.clientY;
+    }
+  });
+  card.addEventListener("pointerup", (ev) => {
+    if (ev.pointerType !== "touch" || pressT === 0) return;
+    const held = Date.now() - pressT;
+    pressT = 0;
+    const moved = Math.hypot(ev.clientX - pressX, ev.clientY - pressY);
+    if (isLongPress(held, moved)) {
+      ev.preventDefault();
+      showPreview();
+    }
+  });
+  card.addEventListener("pointercancel", () => {
+    pressT = 0;
+  });
+  // Мышь: обычный hover по карточке — на десктопе превью ничего не стоит.
+  card.addEventListener("mouseenter", () => {
+    if (window.matchMedia("(hover: hover)").matches) showPreview();
+  });
+
   card.addEventListener("click", () => playChannel(c));
   return card;
 }
@@ -790,9 +895,21 @@ btnClosePlayer.addEventListener("click", () => {
 
 btnPause.addEventListener("click", () => {
   player.togglePause();
-});
-videoEl.addEventListener("play", () => setIcon(btnPause, "pause"));
-videoEl.addEventListener("pause", () => setIcon(btnPause, "play"));
+});  videoEl.addEventListener("play", () => setIcon(btnPause, "play"));  // Wake Lock (FR-7): пока играет и вкладка видима — экран не гаснет.
+  videoEl.addEventListener("play", () => {
+    wakeLockState = wakeLockPlay(wakeLockState, wakeLockHooks, document.visibilityState === "visible");
+    setIcon(btnPause, "pause");
+  });
+  videoEl.addEventListener("pause", () => {
+    wakeLockState = wakeLockStop(wakeLockState);
+    setIcon(btnPause, "play");
+  });
+  document.addEventListener("visibilitychange", () => {
+    wakeLockState =
+      document.visibilityState === "visible"
+        ? wakeLockVisible(wakeLockState, wakeLockHooks)
+        : wakeLockHidden(wakeLockState);
+  });
 videoEl.addEventListener("loadedmetadata", () => {
   // нативный playback: разрешение становится известно здесь
   if (videoEl.videoWidth) {
@@ -1390,6 +1507,60 @@ function setWatching(on: boolean): void {
   appEl.classList.toggle("watch", on);
 }
 
+// ---------- Кнопка «назад» и стек оверлеев (FR-6) ----------
+// Открытие оверлея кладёт запись в history: системный «назад» (свайп на
+// Android, кнопка мыши) закрывает верхний оверлей, а не приложение.
+// Логика стека — чистый модуль overlays.ts, здесь только DOM-синхронизация.
+let overlayStack: string[] = [];
+let historyGuard = false; // не зеркалить собственные history.back()
+
+/** Показать/скрыть DOM-узел оверлея по имени. */
+function applyOverlay(name: OverlayName, on: boolean): void {
+  if (name === "guide") guideOverlay.hidden = !on;
+  else if (name === "notifications") {
+    notifPanel.hidden = !on;
+    notifBell.setAttribute("aria-expanded", String(on));
+  } else if (name === "manager") {
+    setView(on ? "settings" : "channels");
+  } else if (name === "quality") {
+    qualityMenu.hidden = !on;
+  }
+}
+
+/** Открыть оверлей: DOM + запись в history. */
+function openOverlay(name: OverlayName): void {
+  if (topOverlay(overlayStack) === name) return;
+  applyOverlay(name, true);
+  overlayStack = pushOverlay(overlayStack, name);
+  history.pushState({ overlay: name }, "");
+}
+
+/** Закрыть оверлей из UI (крестик, Escape, клик мимо): DOM + history.back(). */
+function closeOverlay(name: OverlayName): void {
+  if (topOverlay(overlayStack) !== name) {
+    // Закрыли не верхний (или стек рассинхронизировался) — чистим тихо.
+    applyOverlay(name, false);
+    overlayStack = popOverlay(overlayStack, name);
+    return;
+  }
+  applyOverlay(name, false);
+  overlayStack = popOverlay(overlayStack, name);
+  historyGuard = true;
+  history.back();
+}
+
+/** Системный «назад»: закрываем верхний оверлей без повторного history.back(). */
+window.addEventListener("popstate", () => {
+  if (historyGuard) {
+    historyGuard = false;
+    return;
+  }
+  const top = topOverlay(overlayStack);
+  if (top === null) return; // оверлеев нет — стандартное поведение (закрытие PWA)
+  applyOverlay(top, false);
+  overlayStack = popOverlay(overlayStack, top);
+});
+
 /**
  * Свернуть список каналов рядом с плеером в колонку логотипов: плеер
  * забирает освободившееся место. Выбор запоминается — кто смотрит без
@@ -1573,7 +1744,7 @@ function openGuide(): void {
   if (!lastPlayed) return;
   guideTitle.textContent = `Программа · ${lastPlayed.name}`;
   guideDayIdx = 0;
-  guideOverlay.hidden = false;
+  openOverlay("guide");
   renderGuide();
 }
 
@@ -1719,12 +1890,12 @@ function renderSchedule(): void {
 
 btnGuide.addEventListener("click", openGuide);
 btnFullGuide.addEventListener("click", openGuide);
-guideClose.addEventListener("click", () => (guideOverlay.hidden = true));
+guideClose.addEventListener("click", () => closeOverlay("guide"));
 guideOverlay.addEventListener("click", (e) => {
-  if (e.target === guideOverlay) guideOverlay.hidden = true;
+  if (e.target === guideOverlay) closeOverlay("guide");
 });
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !guideOverlay.hidden) guideOverlay.hidden = true;
+  if (e.key === "Escape" && !guideOverlay.hidden) closeOverlay("guide");
 });
 
 /** Край живого буфера или NaN, если поток ещё не начал грузиться. */
@@ -2053,6 +2224,8 @@ let refreshInterval: RefreshInterval = loadInterval(
   typeof localStorage !== "undefined" ? localStorage : null,
 );
 let refreshBusy = false;
+// Гард от гонки загрузок EPG (#112): сменили плейлист — старый ответ игнорируется.
+const epgGuard = new LatestGuard();
 
 function renderRefreshSeg(): void {
   for (const b of refreshSeg.querySelectorAll<HTMLButtonElement>("[data-refresh-choice]")) {
@@ -2092,13 +2265,18 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
       diff.added > 0 || diff.removed > 0 || diff.changed > 0 || httpNew > 0;
 
     // Программа меняется постоянно — обновляем её при каждой проверке,
-    // а не только когда изменился сам плейлист (#104).
+    // а не только когда изменился сам плейлист (#104). Гард (#112): если
+    // во время проверки переключили плейлист, её EPG не применяется.
     const epgUrl = item.epgUrl ?? fresh.headerTvgUrl;
     let programmes: number | null = null;
     if (epgUrl) {
+      const epgLoad = epgGuard.begin();
       try {
-        epg = await loadEpg(epgUrl);
-        programmes = countProgrammes(epg);
+        const parsed = await loadEpg(epgUrl);
+        if (epgLoad.isCurrent()) {
+          epg = parsed;
+          programmes = countProgrammes(epg);
+        }
       } catch {
         // программа не критична: списки всё равно обновим, уведомим «передач нет»
       }
@@ -2144,6 +2322,18 @@ setInterval(() => {
     void refreshPlaylist(true);
   }
 }, 60_000);
+
+// Возврат из долгого фона: если с последней проверки прошло больше выбранного
+// интервала — проверяем сразу, не дожидаясь минутного тика. Пока вкладка
+// в фоне таймеры троттлятся, поэтому без этого данные могли бы устареть.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (refreshInterval === 0 || refreshBusy) return;
+  const storage = typeof localStorage !== "undefined" ? localStorage : null;
+  if (shouldCheck(Date.now(), loadLastCheck(storage), refreshInterval)) {
+    void refreshPlaylist(true);
+  }
+});
 
 function systemPrefersDark(): boolean | null {
   return typeof window.matchMedia === "function"
@@ -2418,6 +2608,29 @@ btnExport.addEventListener("click", () => {
   showToast("Настройки экспортированы");
 });
 
+// Экспорт избранного в .m3u (FR-11): совместимый файл для любых плееров
+btnExportFav.addEventListener("click", () => {
+  if (!snapshot || !plState.activeId) {
+    showToast("Сначала откройте плейлист");
+    return;
+  }
+  const favs = loadFavoritesFor(plState.activeId);
+  const m3u = buildFavoritesM3U(snapshot.channels, favs);
+  if (!m3u.includes("#EXTINF")) {
+    showToast("В избранном нет каналов из текущего плейлиста");
+    return;
+  }
+  const blob = new Blob([m3u], { type: "audio/x-mpegurl" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "favorites.m3u";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  showToast("Избранное экспортировано");
+});
+
 btnImport.addEventListener("click", () => importFile.click());
 importFile.addEventListener("change", () => {
   const file = importFile.files?.[0];
@@ -2607,14 +2820,19 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   if (finalEpgUrl) {
     epgNow.hidden = false;
     epgNow.textContent = "Загружаем телепрограмму…";
+    // Гард от гонки (#112): пока грузится EPG, можно успеть сменить плейлист —
+    // поздний ответ старой загрузки не должен затирать данные нового.
+    const epgLoad = epgGuard.begin();
     loadEpg(finalEpgUrl)
       .then((parsed) => {
+        if (!epgLoad.isCurrent()) return;
         epg = parsed;
         renderChannels();
         refreshNowFav();
         epgNow.hidden = true;
       })
       .catch(() => {
+        if (!epgLoad.isCurrent()) return;
         epgNow.textContent = "Телепрограмма не загрузилась — каналы работают без неё";
       });
   }
@@ -2647,6 +2865,19 @@ async function bootstrap(): Promise<void> {
   favorites = loadFavoritesFor(active.id);
   loadRecentsFor(active.id);
   await openPlaylist(active.playlistUrl, active.epgUrl);
+
+  // Диплинк на канал (FR-12): ?ch=<url> — после загрузки плейлиста
+  // включить канал. Работает и вместе с ?p= (тот же заход).
+  const ch = params.get("ch");
+  if (ch && snapshot) {
+    const hit = resolveChannelDeepLink(snapshot.channels, ch);
+    if (hit.found) {
+      const target = snapshot.channels.find((c) => c.url === hit.url);
+      if (target) playChannel(target);
+    } else {
+      showToast("Канал из ссылки не найден в активном плейлисте");
+    }
+  }
 }
 
 // (legacy STORAGE_KEY из config.ts больше не используется — миграция в playlists.ts)
