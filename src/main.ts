@@ -49,6 +49,7 @@ import {
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
+import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -392,6 +393,8 @@ notifBell.addEventListener("click", (e) => {
   notifPanel.hidden = !willOpen;
   notifBell.setAttribute("aria-expanded", String(willOpen));
   if (willOpen) {
+    overlayStack = pushOverlay(overlayStack, "notifications");
+    history.pushState({ overlay: "notifications" }, "");
     // Открыл панель — прочитал всё, что в ней видно
     notifications = markAllRead(notifications);
     saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
@@ -408,8 +411,7 @@ notifClear.addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   if (notifPanel.hidden) return;
   if (!notifBell.contains(e.target as Node) && !notifPanel.contains(e.target as Node)) {
-    notifPanel.hidden = true;
-    notifBell.setAttribute("aria-expanded", "false");
+    closeOverlay("notifications");
   }
 });
 
@@ -1451,6 +1453,60 @@ function setWatching(on: boolean): void {
   appEl.classList.toggle("watch", on);
 }
 
+// ---------- Кнопка «назад» и стек оверлеев (FR-6) ----------
+// Открытие оверлея кладёт запись в history: системный «назад» (свайп на
+// Android, кнопка мыши) закрывает верхний оверлей, а не приложение.
+// Логика стека — чистый модуль overlays.ts, здесь только DOM-синхронизация.
+let overlayStack: string[] = [];
+let historyGuard = false; // не зеркалить собственные history.back()
+
+/** Показать/скрыть DOM-узел оверлея по имени. */
+function applyOverlay(name: OverlayName, on: boolean): void {
+  if (name === "guide") guideOverlay.hidden = !on;
+  else if (name === "notifications") {
+    notifPanel.hidden = !on;
+    notifBell.setAttribute("aria-expanded", String(on));
+  } else if (name === "manager") {
+    setView(on ? "settings" : "channels");
+  } else if (name === "quality") {
+    qualityMenu.hidden = !on;
+  }
+}
+
+/** Открыть оверлей: DOM + запись в history. */
+function openOverlay(name: OverlayName): void {
+  if (topOverlay(overlayStack) === name) return;
+  applyOverlay(name, true);
+  overlayStack = pushOverlay(overlayStack, name);
+  history.pushState({ overlay: name }, "");
+}
+
+/** Закрыть оверлей из UI (крестик, Escape, клик мимо): DOM + history.back(). */
+function closeOverlay(name: OverlayName): void {
+  if (topOverlay(overlayStack) !== name) {
+    // Закрыли не верхний (или стек рассинхронизировался) — чистим тихо.
+    applyOverlay(name, false);
+    overlayStack = popOverlay(overlayStack, name);
+    return;
+  }
+  applyOverlay(name, false);
+  overlayStack = popOverlay(overlayStack, name);
+  historyGuard = true;
+  history.back();
+}
+
+/** Системный «назад»: закрываем верхний оверлей без повторного history.back(). */
+window.addEventListener("popstate", () => {
+  if (historyGuard) {
+    historyGuard = false;
+    return;
+  }
+  const top = topOverlay(overlayStack);
+  if (top === null) return; // оверлеев нет — стандартное поведение (закрытие PWA)
+  applyOverlay(top, false);
+  overlayStack = popOverlay(overlayStack, top);
+});
+
 /**
  * Свернуть список каналов рядом с плеером в колонку логотипов: плеер
  * забирает освободившееся место. Выбор запоминается — кто смотрит без
@@ -1634,7 +1690,7 @@ function openGuide(): void {
   if (!lastPlayed) return;
   guideTitle.textContent = `Программа · ${lastPlayed.name}`;
   guideDayIdx = 0;
-  guideOverlay.hidden = false;
+  openOverlay("guide");
   renderGuide();
 }
 
@@ -1780,12 +1836,12 @@ function renderSchedule(): void {
 
 btnGuide.addEventListener("click", openGuide);
 btnFullGuide.addEventListener("click", openGuide);
-guideClose.addEventListener("click", () => (guideOverlay.hidden = true));
+guideClose.addEventListener("click", () => closeOverlay("guide"));
 guideOverlay.addEventListener("click", (e) => {
-  if (e.target === guideOverlay) guideOverlay.hidden = true;
+  if (e.target === guideOverlay) closeOverlay("guide");
 });
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !guideOverlay.hidden) guideOverlay.hidden = true;
+  if (e.key === "Escape" && !guideOverlay.hidden) closeOverlay("guide");
 });
 
 /** Край живого буфера или NaN, если поток ещё не начал грузиться. */
