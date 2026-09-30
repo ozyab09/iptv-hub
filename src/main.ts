@@ -65,6 +65,7 @@ import {
   buildBackup,
   parseBackup,
   pushRecent,
+  recentsKey,
 } from "./backup";
 import {
   canRecord,
@@ -736,7 +737,7 @@ function playChannel(c: Channel): void {
   if (plState.activeId) {
     try {
       localStorage.setItem(
-        `iptv-hub.recents.v1:${plState.activeId}`,
+        recentsKey(plState.activeId),
         JSON.stringify(recents),
       );
     } catch { /* приватный режим */ }
@@ -2008,7 +2009,7 @@ searchInput.addEventListener("input", () => renderChannels());
 // ---------- Недавно просмотренные ----------
 function loadRecentsFor(id: string): void {
   try {
-    const raw = localStorage.getItem(`iptv-hub.recents.v1:${id}`);
+    const raw = localStorage.getItem(recentsKey(id));
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     recents = Array.isArray(parsed)
       ? parsed.filter((x): x is string => typeof x === "string")
@@ -2350,11 +2351,23 @@ btnExport.addEventListener("click", () => {
     const list = loadFavoritesFor(p.id);
     if (list.size > 0) favs[p.id] = [...list];
   }
+  const recentsBackup: Record<string, string[]> = {};
+  for (const p of plState.items) {
+    try {
+      const raw = localStorage.getItem(recentsKey(p.id));
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        const urls = parsed.filter((x): x is string => typeof x === "string");
+        if (urls.length > 0) recentsBackup[p.id] = urls;
+      }
+    } catch { /* битые данные — пропускаем */ }
+  }
   const backup = buildBackup({
     theme: document.documentElement.dataset.theme ?? "dark",
     playlists: plState.items,
     activeId: plState.activeId,
     favorites: favs,
+    recents: recentsBackup,
   });
   const blob = new Blob([JSON.stringify(backup, null, 2)], {
     type: "application/json",
@@ -2394,6 +2407,17 @@ importFile.addEventListener("change", () => {
           localStorage.setItem(favoritesKey(plId), JSON.stringify(urls));
         } catch { /* приватный режим */ }
       }
+      // «Недавние» — только для плейлистов из бэкапа (существующие ключи
+      // других плейлистов не трогаем).
+      if (data.recents) {
+        for (const [plId, urls] of Object.entries(data.recents)) {
+          try {
+            localStorage.setItem(recentsKey(plId), JSON.stringify(urls));
+          } catch { /* приватный режим */ }
+        }
+      }
+      // Сразу отражаем recents активного плейлиста в UI.
+      if (data.activeId) loadRecentsFor(data.activeId);
       renderPlaylistManager();
       renderPlaylistSwitcher();
       showToast(`Импортировано плейлистов: ${data.playlists.length}`);
