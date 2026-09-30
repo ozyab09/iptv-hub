@@ -75,3 +75,23 @@ export function applyFavorites(
 export function exportFavorites(favs: Set<string>): string {
   return JSON.stringify([...favs], null, 2);
 }
+
+/**
+ * Собрать валидный M3U из избранных каналов (FR-11): #EXTM3U + #EXTINF
+ * с tvg-id/tvg-logo/group-title. Результат парсится собственным parseM3U
+ * без потерь и совместим со стандартными плеерами.
+ */
+export function buildFavoritesM3U(channels: Channel[], favs: Set<string>): string {
+  const esc = (v: string): string => v.replace(/"/g, "'");
+  const lines = ["#EXTM3U"];
+  for (const c of channels) {
+    if (!favs.has(c.url)) continue;
+    const attrs = [
+      `tvg-id="${esc(c.tvgId ?? "")}"`,
+      `tvg-logo="${esc(c.logo ?? "")}"`,
+      `group-title="${esc(c.group ?? "")}"`,
+    ].join(" ");
+    lines.push(`#EXTINF:-1 ${attrs},${esc(c.name)}`, c.url);
+  }
+  return lines.join("\n") + "\n";
+}
