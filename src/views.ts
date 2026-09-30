@@ -73,8 +73,9 @@ export function channelsForView(
 /** Текст пустого состояния — он разный по смыслу в каждом разделе. */
 export function emptyMessage(view: View, hasQuery: boolean): string {
   if (hasQuery) return "Ничего не найдено";
-  if (view === "favorites") return "Пока ничего не в избранном";
-  if (view === "recents") return "Вы ещё ничего не смотрели";
+  // Пустой раздел подсказывает, как его наполнить, а не только констатирует
+  if (view === "favorites") return "Пока ничего не в избранном. Нажмите звёздочку у канала — он появится здесь.";
+  if (view === "recents") return "Вы ещё ничего не смотрели. Включённые каналы появятся здесь.";
   return "Ничего не найдено";
 }
 

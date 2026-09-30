@@ -3,14 +3,18 @@
  *
  * Стратегии:
  *  - app shell (прекеш статики): cache-first → сеть, оффлайн отдаётся из кэша;
- *  - навигации: network-first с fallback на закешированный index.html;
+ *  - навигации: network-first мимо HTTP-кэша (cache: "no-cache") с fallback
+ *    на закешированный index.html — иначе Pages отдавал бы старую страницу
+ *    ещё до 10 минут после деплоя;
  *  - плейлист/EPG (кросс-доменные S3-запросы): network-first с кэш-fallback —
  *    оффлайн показываем последнюю успешную копию.
  *
  * Медиа-потоки (hls.js сегменты, .ts/.m3u8) НЕ кешируются осознанно:
  * живой телевизор в оффлайне не существует, а кеш сегментов раздувает storage.
  */
-const VERSION = "v0.2.4";
+// При сборке к версии дописывается хэш index.html (vite.config.ts →
+// src/sw-version.ts), поэтому каждый деплой — новый SW и новый кэш.
+const VERSION = "v0.2.5";
 const SHELL_CACHE = `iptv-hub-shell-${VERSION}`;
 const DATA_CACHE = `iptv-hub-data-${VERSION}`;
 
@@ -76,7 +80,11 @@ async function networkFirstData(request) {
 async function networkFirstNavigation(request) {
   const cache = await caches.open(SHELL_CACHE);
   try {
-    return await fetch(request);
+    // no-cache: браузер обязан сверить страницу с сервером (по ETag это
+    // дёшево), а не взять из HTTP-кэша копию прошлого деплоя
+    const resp = await fetch(request.url, { cache: "no-cache", credentials: "same-origin" });
+    if (resp.ok) cache.put("./index.html", resp.clone());
+    return resp;
   } catch {
     return (await cache.match("./index.html")) ?? Response.error();
   }
