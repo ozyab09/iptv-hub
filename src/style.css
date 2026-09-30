@@ -901,10 +901,13 @@ html, body {
 .scrub-row { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-1); }
 .scrub-row .scrub { flex: 1; }
 .scrub-row .num:empty { display: none; }
+/* При нехватке ширины flex сжимал всё, кроме инпута: у range сильный
+   min-content, и ползунок наезжал на правую группу (#93). min-width: 0
+   разрешает ему сжиматься, clamp держит разумный минимум. */
 .video-actions { display: flex; align-items: center; gap: 2px; min-height: 44px; }
-.video-actions-right { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-.video .volume { display: flex; align-items: center; gap: var(--space-1); }
-#volume-slider { width: 72px; accent-color: #fff; }
+.video .volume { display: flex; align-items: center; gap: var(--space-1); min-width: 0; flex: 0 1 auto; }
+#volume-slider { width: clamp(40px, 8vw, 72px); min-width: 0; accent-color: #fff; }
+.video-actions-right { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
 /* «К эфиру» — зовёт к действию, поэтому это единственная подписанная кнопка */
 .video .btn-live {
   width: auto;

@@ -213,6 +213,16 @@ describe("группа плеера и выход меню за кадр (issues
   });
 });
 
+describe("громкость не наезжает на кнопки справа (issue #93)", () => {
+  it("ползунку разрешено сжиматься, правая группа не растёт за счёт соседей", () => {
+    expect(css).toMatch(/#volume-slider \{[^}]*min-width:\s*0;[^}]*\}/);
+    expect(css).toMatch(/\.video \.volume \{[^}]*min-width:\s*0;[^}]*\}/);
+    expect(css).toMatch(
+      /\.video-actions-right \{[^}]*margin-left:\s*auto;[^}]*flex:\s*none;[^}]*\}/,
+    );
+  });
+});
+
 describe("тема PWA совпадает с фоном", () => {
   const manifest = JSON.parse(
     readFileSync(root("public", "manifest.webmanifest"), "utf-8"),
