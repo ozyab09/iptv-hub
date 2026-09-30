@@ -125,6 +125,35 @@ describe("шрифт", () => {
   });
 });
 
+describe("вертикальное центрирование плеера (issue #82)", () => {
+  // Медиа-условия в файле повторяются, поэтому секции плеера вырезаем
+  // по заголовкам-комментариям, а не по строке @media.
+  const wide = css.slice(
+    css.indexOf("/* ---- широкий экран: плеер колонкой справа"),
+    css.indexOf("/* ---- узкий экран: мини-плеер"),
+  );
+  const narrow = css.slice(
+    css.indexOf("/* ---- узкий экран: мини-плеер"),
+    css.indexOf("/* ---- нативный полный экран"),
+  );
+
+  it("wide-колонка плеера: авто-отступы детей по вертикали", () => {
+    // Сам прокручиваемый контейнер центрировать нельзя: при переполнении
+    // justify-content/margin-centering делает верх недостижимым прокруткой.
+    expect(wide).toMatch(
+      /\.watch \.player-bar > \* \{[^}]*margin-block:\s*auto;[^}]*\}/,
+    );
+    expect(wide).toMatch(/\.watch \.player-bar \{[^}]*margin:\s*auto 0;[^}]*\}/);
+  });
+
+  it("страница плеера на телефоне центрирована и не ломает прокрутку", () => {
+    expect(narrow).toMatch(/\.player-bar\.open \{[^}]*justify-content:\s*center;[^}]*\}/);
+    // осознанный выбор: у страницы центрирование flex-ом, авто-отступы —
+    // только у wide-колонки; иначе правило уедет в прокручиваемый контейнер
+    expect(narrow).not.toMatch(/\.player-bar\.open \{[^}]*margin:\s*auto 0;[^}]*\}/);
+  });
+});
+
 describe("тема PWA совпадает с фоном", () => {
   const manifest = JSON.parse(
     readFileSync(root("public", "manifest.webmanifest"), "utf-8"),
