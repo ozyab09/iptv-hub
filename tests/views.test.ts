@@ -33,17 +33,19 @@ const c = ch("Третий", "http://c");
 const all = [a, b, c];
 
 describe("состав разделов", () => {
-  it("четыре раздела в порядке дизайн-системы", () => {
+  it("пять разделов в порядке дизайн-системы", () => {
     expect(VIEWS.map((v) => v.id)).toEqual([
       "channels",
       "favorites",
       "recents",
+      "recordings",
       "settings",
     ]);
     expect(VIEWS.map((v) => v.label)).toEqual([
       "Каналы",
       "Избранное",
       "Недавние",
+      "Записи",
       "Настройки",
     ]);
   });

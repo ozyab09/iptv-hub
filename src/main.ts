@@ -255,8 +255,7 @@ const btnLive = $<HTMLButtonElement>("btn-live");
 const miniProgFill = $("mini-prog-fill");
 const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
-const recordingsBlock = $("recordings-block");
-const recordingsRow = $("recordings-row");
+
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
 const nowShow = $("now-show");
@@ -538,7 +537,8 @@ function setView(view: View, persist = true): void {
   }
   const settings = view === "settings";
   setupScreen.hidden = !settings;
-  playerScreen.hidden = settings;
+  // Раздел «Записи» — свой экран; на остальных показывается список каналов.
+  playerScreen.hidden = settings || view === "recordings";
   if (settings) {
     setupError.hidden = true;
     renderPlaylistManager();
@@ -1587,9 +1587,12 @@ async function saveToLibrary(blob: Blob, ext: string, _mime: string): Promise<vo
     await recordingsFs.write(storedRecordingName(id, ext), blob);
     addRecording(typeof localStorage !== "undefined" ? localStorage : null, meta);
     renderRecordings();
-    showToast(`Запись сохранена в библиотеку: ${formatBytes(blob.size)}`);
+    // Файл и в библиотеке, и в загрузках: сырой .ts браузерный <video>
+    // играть не умеет (только через MSE), поэтому прежнее скачивание —
+    // не опция, а необходимость.
+    offerDownload(blob, recordingFileName(meta.channelName, new Date(meta.startedAt), ext));
   } catch (e) {
-    console.debug("[iptv-hub] записи: не удалось сохранить", e);
+    console.debug("[iptv-hub] записи: не удалось сохранить в библиотеку, скачиваю", e);
     offerDownload(blob, recordingFileName(meta.channelName)); // откат — скачивание
   }
 }
@@ -1607,10 +1610,15 @@ function noteRecordingStop(): void {
 }
 
 function renderRecordings(): void {
-  if (!recordingsBlock) return;
   const list = loadRecordings(typeof localStorage !== "undefined" ? localStorage : null);
-  recordingsBlock.hidden = list.length === 0 || activeView !== "channels";
-  recordingsRow.textContent = "";
+  // Раздел «Записи» — самостоятельный экран из сайдбара (см. VIEWS).
+  const recordingsScreen = $("recordings-screen");
+  recordingsScreen.hidden = activeView !== "recordings";
+  const empty = $("recordings-empty");
+  empty.hidden = list.length > 0;
+  const row = $("recordings-list");
+  row.textContent = "";
+  if (activeView !== "recordings") return;
   for (const r of list) {
     const card = document.createElement("button");
     card.className = "recording-card";
@@ -1668,7 +1676,7 @@ function renderRecordings(): void {
     });
     card.append(del);
 
-    recordingsRow.append(card);
+    row.append(card);
   }
 }
 
@@ -1677,6 +1685,14 @@ function playRecording(file: File, r: RecordingMeta): void {
   stopIfRecording();
   player.stop();
   const url = URL.createObjectURL(file);
+  const cleanup = (): void => URL.revokeObjectURL(url);
+  // Сырой MPEG-TS (.ts) элементу <video> не по зубам — он умеет mp4/webm.
+  // Честно сообщаем и предлагаем скачивание, а не молча чёрный кадр.
+  videoEl.onerror = () => {
+    videoEl.onerror = null;
+    cleanup();
+    showToast("Браузер не умеет играть этот формат (.ts) — используйте скачивание");
+  };
   videoEl.src = url;
   videoEl.play().catch(() => undefined);
   playerBar.hidden = false;
@@ -1687,11 +1703,7 @@ function playRecording(file: File, r: RecordingMeta): void {
   btnRetry.hidden = true;
   liveBadge.hidden = true;
   showToast(`Запись от ${new Date(r.startedAt).toLocaleString("ru")}`);
-  videoEl.addEventListener(
-    "ended",
-    () => URL.revokeObjectURL(url),
-    { once: true },
-  );
+  videoEl.addEventListener("ended", cleanup, { once: true });
 }
 
 function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {

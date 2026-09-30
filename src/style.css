@@ -525,6 +525,13 @@ html, body {
 }
 .recording-act:hover { color: var(--text); }
 
+/* Экран раздела «Записи»: вертикальный список карточек. */
+.recordings-list {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  overflow-y: auto; min-height: 0;
+}
+.recordings-list .recording-card { width: 100%; }
+
 
 
 
