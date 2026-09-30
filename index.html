@@ -272,6 +272,15 @@
       </div>
 
       <div id="toast" class="toast" hidden></div>
+
+      <!-- Уведомление о скрытых http-каналах: сверху справа, с колокольчиком.
+           Показывается один раз на плейлист (src/http-notice.ts), живёт,
+           пока пользователь не закроет. -->
+      <div id="http-notice" class="http-notice" role="status" hidden>
+        <span class="n-icon"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg></span>
+        <span class="n-text"></span>
+        <button id="http-notice-close" class="n-close" title="Закрыть" aria-label="Закрыть уведомление"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
