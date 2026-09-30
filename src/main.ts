@@ -49,6 +49,7 @@ import {
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
+import { classifyStorageChange } from "./cross-tab";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -2210,6 +2211,41 @@ function activatePlaylist(id: string): void {
     void openPlaylist(pl.playlistUrl, pl.epgUrl);
   }
 }
+
+// ---------- Кросс-таб синхронизация (FR-15) ----------
+// storage-событие приходит ТОЛЬКО в табы, которые не писали ключ сами —
+// эха нет. Политика last-write-wins: состояние просто перечитывается.
+window.addEventListener("storage", (e) => {
+  const d = classifyStorageChange(e.key);
+  if (d.ignore) return;
+  if (d.playlists) {
+    const prevActive = plState.activeId;
+    plState = loadPlaylists(localStorage);
+    renderPlaylistManager();
+    renderPlaylistSwitcher();
+    if (plState.activeId !== prevActive) {
+      const pl = activePlaylist(plState);
+      if (pl) activatePlaylist(pl.id);
+      else showSetup();
+    }
+  }
+  if (d.favorites) {
+    const activeId = plState.activeId;
+    if (activeId && (e.key === null || e.key === favoritesKey(activeId))) {
+      favorites = loadFavoritesFor(activeId);
+      refreshNowFav();
+      if (showsChannelList(activeView)) renderChannels();
+    }
+  }
+  if (d.theme) {
+    currentTheme = themeChoice(localStorage) === "system"
+      ? resolveTheme(null, systemPrefersDark())
+      : (themeChoice(localStorage) as Theme);
+    applyTheme(currentTheme);
+    setIcon(btnTheme, themeButtonLabel(currentTheme));
+    renderThemeSeg();
+  }
+});
 
 // ---------- Менеджер плейлистов (setup-экран) ----------
 function renderPlaylistManager(): void {
