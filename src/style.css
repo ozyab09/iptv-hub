@@ -1052,7 +1052,17 @@ html, body {
 
   /* Список сворачивается в колонку логотипов (кнопка в его шапке или C) */
   #app.watch.list-collapsed { --list-w: 64px; }
+  /* Полное скрытие (кнопка в свёрнутом списке): уходит и рельс сайдбара,
+     и панель списка — плеер занимает весь экран. Вернуть — C или кнопка
+     в углу кадра. */
+  #app.watch.list-collapsed.panel-hidden { --list-w: 0px; --rail-w: 0px; }
+  #app.watch.list-collapsed.panel-hidden { grid-template-columns: 0 0; }
+  #app.watch.list-collapsed.panel-hidden .sidebar,
+  #app.watch.list-collapsed.panel-hidden .screens { display: none; }
+  #app.watch.list-collapsed.panel-hidden { --player-w: 100vw; }
   #app.watch .list-toggle { display: inline-flex; }
+  .video .btn-restore-panel { display: inline-flex; position: absolute; top: var(--space-3); right: var(--space-3); z-index: 3; }
+  .video .btn-restore-panel[hidden] { display: none; }
   #app.watch.list-collapsed .topbar,
   #app.watch.list-collapsed .view-title,
   #app.watch.list-collapsed .cat-picker,
