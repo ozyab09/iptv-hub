@@ -15,6 +15,27 @@ const epg = new Map([["id:sport", [programme]], ["name:спорт", [programme]]
 const now = new Date("2026-09-30T13:00:00Z");
 
 describe("searchProgrammes", () => {
+  it.each([
+    ["Что? Где? Когда?", "что где когда"],
+    ["Что? Где? Когда?", " Что? Где? Когда? "],
+    ["Что? Где? Когда?", "ГДЕ КОГДА"],
+    ["Что?\u00a0Где?\tКогда?", "что   где\nкогда"],
+    ["Новости—24: выпуск №1", "новости 24 выпуск №1"],
+    ["«Футбол»: финал (2026)", "футбол-финал, 2026"],
+    ["HD: Москва", "hd москва"],
+    ["Café: новости", "Cafe\u0301 новости"],
+  ])("находит «%s» по запросу «%s», сохраняя исходное название", (title, query) => {
+    const original = { ...programme, title };
+    const result = searchProgrammes([channel], new Map([["id:sport", [original]]]), query);
+    expect(result).toEqual([{ channel, programme: original }]);
+    expect(result[0]?.programme).toBe(original);
+  });
+  it.each(["???", " — … , : «» ", "\t\n\u00a0"])("не выводит все передачи для пустого запроса «%s»", (query) => {
+    expect(searchProgrammes([channel], epg, query)).toEqual([]);
+  });
+  it("пунктуация разделяет слова, не склеивая их", () => {
+    expect(searchProgrammes([channel], epg, "футболфинал")).toEqual([]);
+  });
   it("ищет подстроку названия без учёта регистра и краевых пробелов", () => {
     expect(searchProgrammes([channel], epg, " ФУТБОЛ ")).toEqual([{ channel, programme }]);
   });
