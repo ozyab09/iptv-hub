@@ -56,6 +56,14 @@ import {
 } from "./positions";
 import { firstFocus, lastFocus, moveFocus } from "./kbd-nav";
 import {
+  defaultLocalName,
+  loadLocalPlaylist,
+  looksLikeM3U,
+  removeLocalPlaylist,
+  saveLocalPlaylist,
+  type LocalFs,
+} from "./local-playlist";
+import {
   describeShotFailure,
   screenshotFileName,
   type ShotFailure,
@@ -246,6 +254,8 @@ const nowCategory = $("now-category");
 const nowShow = $("now-show");
 const nowTimeLeft = $("now-time-left");
 const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
+const btnHidePanel = $<HTMLButtonElement>("btn-hide-panel");
+const btnRestorePanel = $<HTMLButtonElement>("btn-restore-panel");
 const toastEl = $("toast");
 const notifBell = $<HTMLButtonElement>("notif-bell");
 const notifBadge = $("notif-badge");
@@ -1140,6 +1150,11 @@ window.addEventListener("keydown", (e) => {
       // иначе прокрутка к списку под ней ничего бы не показала.
       e.preventDefault();
       if (!isCompact()) {
+        // Панель скрыта целиком — C сначала возвращает её (и список).
+        if (appEl.classList.contains("panel-hidden")) {
+          setPanelHidden(false);
+          break;
+        }
         setListCollapsed(!appEl.classList.contains("list-collapsed"));
         break;
       }
@@ -1699,8 +1714,29 @@ function setListCollapsed(on: boolean): void {
 btnCollapseList.addEventListener("click", () =>
   setListCollapsed(!appEl.classList.contains("list-collapsed")),
 );
+
+// ---------- Полное скрытие панели (сайдбар + список каналов) ----------
+// Кнопка «Скрыть панель целиком» рядом со сворачиванием: уходит и рельс
+// навигации, и панель каналов — плеер занимает весь экран. Возврат —
+// кнопка на кадре, клавиша C или Escape.
+function setPanelHidden(on: boolean): void {
+  if (on && !appEl.classList.contains("list-collapsed")) setListCollapsed(true);
+  appEl.classList.toggle("panel-hidden", on);
+  btnRestorePanel.hidden = !on;
+  btnRestorePanel.title = on ? "Показать список (C)" : "";
+  try {
+    localStorage.setItem(PANEL_HIDDEN_KEY, on ? "1" : "0");
+  } catch {
+    // приватный режим
+  }
+}
+
+const PANEL_HIDDEN_KEY = "iptv-hub.panel-hidden.v1";
+btnHidePanel.addEventListener("click", () => setPanelHidden(true));
+btnRestorePanel.addEventListener("click", () => setPanelHidden(false));
 try {
   if (localStorage.getItem(LIST_COLLAPSED_KEY) === "1") setListCollapsed(true);
+  if (localStorage.getItem(PANEL_HIDDEN_KEY) === "1") setPanelHidden(true);
 } catch {
   // storage недоступен — список развёрнут
 }
@@ -2799,6 +2835,11 @@ function renderPlaylistManager(): void {
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem(favoritesKey(p.id));
       }
+      // Локальный плейлист: чистим и содержимое в OPFS (FR-10)
+      if (p.playlistUrl.startsWith("local:")) {
+        const fs = getLocalFs();
+        if (fs) void fs.then((f) => removeLocalPlaylist(f, p.playlistUrl.slice("local:".length)));
+      }
       plState = removePlaylist(plState, p.id);
       savePlaylists(localStorage, plState);
       renderPlaylistManager();
@@ -2995,7 +3036,92 @@ addForm.addEventListener("submit", (e) => {
   activatePlaylist(plState.items[plState.items.length - 1]!.id);
 });
 
+// ---------- Локальный плейлист из файла (FR-10) ----------
+// Содержимое .m3u хранится в OPFS; Playlist.playlistUrl = "local:<id>" —
+// маркер, который loadPlaylist перехватывает и читает из OPFS. Файл
+// не покинет устройство. Где OPFS нет — кнопка честно сообщит.
+// LocalFs создаётся лениво (без top-level await — таргет сборки его не даёт):
+// каталог OPFS запрашивается при первом обращении.
+let localFsPromise: Promise<LocalFs> | null = null;
+function getLocalFs(): Promise<LocalFs> | null {
+  if (
+    typeof navigator === "undefined" ||
+    !navigator.storage ||
+    !("getDirectory" in navigator.storage)
+  ) {
+    return null;
+  }
+  if (!localFsPromise) {
+    localFsPromise = navigator.storage.getDirectory().then(
+      (dir): LocalFs => ({
+        read: async (key) => {
+          try {
+            const h = await dir.getFileHandle(key);
+            const f = await h.getFile();
+            return await f.text();
+          } catch {
+            return null;
+          }
+        },
+        write: async (key, content) => {
+          const h = await dir.getFileHandle(key, { create: true });
+          const w = await h.createWritable();
+          await w.write(content);
+          await w.close();
+        },
+        remove: async (key) => {
+          try {
+            await dir.removeEntry(key);
+          } catch {
+            /* файла уже нет */
+          }
+        },
+      }),
+    );
+  }
+  return localFsPromise;
+}
+
+const btnLocalFile = $<HTMLButtonElement>("btn-local-file");
+const localFile = $<HTMLInputElement>("local-file");
+
+btnLocalFile.addEventListener("click", () => {
+  if (!getLocalFs()) {
+    showSetup("Браузер не поддерживает OPFS — локальный плейлист недоступен");
+    return;
+  }
+  localFile.click();
+});
+
+localFile.addEventListener("change", async () => {
+  const file = localFile.files?.[0];
+  localFile.value = "";
+  const fs = getLocalFs();
+  if (!file || !fs) return;
+  const content = await file.text();
+  if (!looksLikeM3U(content)) {
+    showSetup("Это не похоже на M3U: нужен файл с #EXTM3U и #EXTINF");
+    return;
+  }
+  const pl = addPlaylist(plState, defaultLocalName(file.name), `local:${Date.now()}`, null);
+  plState = pl;
+  const id = pl.items[pl.items.length - 1]!.id;
+  await saveLocalPlaylist(await fs, id, content, null);
+  savePlaylists(localStorage, plState);
+  renderPlaylistManager();
+  renderPlaylistSwitcher();
+  activatePlaylist(id);
+});
+
 async function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
+  // Локальный источник: маркер local:<id> — читаем содержимое из OPFS.
+  if (url.startsWith("local:")) {
+    const fs = getLocalFs();
+    if (!fs) throw new Error("локальный плейлист недоступен (нет OPFS)");
+    const m3u = await loadLocalPlaylist(await fs, url.slice("local:".length));
+    if (m3u === null) throw new Error("локальный файл не найден — добавьте плейлист заново");
+    return parseM3U(m3u);
+  }
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`плейлист: HTTP ${resp.status}`);
   if (!/^application\/(x-mpegurl|vnd\.apple\.mpegurl|octet-stream)/.test(
