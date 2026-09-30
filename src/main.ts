@@ -44,6 +44,7 @@ import {
 } from "./favorites";
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
+import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
 import {
   computeWindow,
   spacerHeight,
@@ -329,6 +330,7 @@ let activeView: View = parseView(
 );
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
+let visibleResults: (Channel | ProgrammeMatch)[] = [];
 /**
  * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
  * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
@@ -661,22 +663,26 @@ function renderVirtualWindow(): void {
   const win = computeWindow(
     channelList.scrollTop,
     vh,
-    visibleChannels.length,
+    visibleResults.length,
     CHANNEL_ROW_HEIGHT,
     undefined,
     CHANNEL_COLUMNS,
   );
-  virtualSpacer.style.height = `${spacerHeight(visibleChannels.length, CHANNEL_ROW_HEIGHT, CHANNEL_COLUMNS)}px`;
+  virtualSpacer.style.height = `${spacerHeight(visibleResults.length, CHANNEL_ROW_HEIGHT, CHANNEL_COLUMNS)}px`;
   virtualInner.style.transform = `translateY(${win.offset}px)`;
   virtualInner.textContent = "";
   const first = win.start * CHANNEL_COLUMNS;
   const last = Math.min(
-    visibleChannels.length,
+    visibleResults.length,
     first + win.count * CHANNEL_COLUMNS,
   );
   for (let i = first; i < last; i++) {
-    const c = visibleChannels[i];
-    if (c) virtualInner.append(renderChannelCard(c));
+    const c = visibleResults[i];
+    if (c) {
+      const row = "programme" in c ? renderProgrammeMatch(c) : renderChannelCard(c);
+      row.dataset.resultIndex = String(i);
+      virtualInner.append(row);
+    }
   }
 }
 
@@ -705,15 +711,48 @@ function renderChannels(): void {
   // бессмысленным; в остальных избранное поднимается наверх.
   const sorted =
     activeView === "recents" ? list : applyFavorites(list, favorites, false);
-  visibleChannels = sorted;
-  viewCount.textContent = groupDigits(sorted.length);
+  const programmes = searchProgrammes(inView.filter((c) => !activeCategory || c.group === activeCategory), epg, q);
+  visibleResults = [...sorted, ...programmes];
+  visibleChannels = [...new Map([...sorted, ...programmes.map((m) => m.channel)].map((c) => [c.url, c])).values()];
+  viewCount.textContent = groupDigits(visibleResults.length);
   emptyState.textContent = emptyMessage(activeView, q !== "");
-  emptyState.hidden = sorted.length > 0;
+  emptyState.hidden = visibleResults.length > 0;
   ensureVirtualShell();
   // при смене фильтра сбрасываем прокрутку, чтобы окно пересчиталось с нуля
   renderContinue();
   channelList.scrollTop = 0;
   renderVirtualWindow();
+}
+
+/** Результат поиска сохраняет высоту виртуальной строки канала. */
+function renderProgrammeMatch(match: ProgrammeMatch): HTMLButtonElement {
+  const { channel, programme } = match;
+  const row = document.createElement("button");
+  row.className = channelRowClass(lastPlayed?.url === channel.url);
+  row.setAttribute("role", "listitem");
+  const logo = document.createElement("span");
+  logo.className = "logo sm";
+  setIcon(logo, "tv");
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  const name = document.createElement("span");
+  name.className = "t-strong ellipsis";
+  name.textContent = `${channel.name} · ${programme.title}`;
+  const time = document.createElement("span");
+  time.className = "row-now ellipsis muted num";
+  const date = new Date(programme.start).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+  time.textContent = `${date} · ${formatRange(programme)}`;
+  meta.append(name, time);
+  row.append(logo, meta);
+  row.title = `${name.textContent} · ${time.textContent}`;
+  row.addEventListener("click", () => {
+    const archive = programmeArchiveUrl(match);
+    playChannel(channel, archive ?? undefined);
+    if (!archive && Date.parse(programme.start) > Date.now()) {
+      showToast("Передача ещё не началась — включён эфир канала");
+    }
+  });
+  return row;
 }
 
 function renderChannelCard(c: Channel): HTMLElement {
@@ -845,9 +884,9 @@ function renderChannelCard(c: Channel): HTMLElement {
 }
 
 // ---------- Плеер ----------
-function playChannel(c: Channel): void {
+function playChannel(c: Channel, archiveUrl?: string): void {
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
-  if (isRecordingNow() && lastPlayed && lastPlayed.url !== c.url) {
+  if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined)) {
     stopRecordingNow();
     showToast("Запись остановлена: канал переключён");
   }
@@ -864,8 +903,8 @@ function playChannel(c: Channel): void {
     // Раздел «Недавние» показывает этот список — обновляем, если он открыт.
     if (activeView === "recents") renderChannels();
   }
-  nowTitle.textContent = c.name;
-  nowTitle.title = c.url; // ссылка на поток текущего канала
+  nowTitle.textContent = archiveUrl ? `${c.name} · архив` : c.name;
+  nowTitle.title = archiveUrl ?? c.url; // ссылка на поток текущего канала
   nowCategory.textContent = c.group;
   playerBar.hidden = false;
   setWatching(true);
@@ -874,7 +913,7 @@ function playChannel(c: Channel): void {
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
   saveCurrentPosition(); // уходим с предыдущего канала — запоминаем позицию (FR-9)
-  const refused = player.play(c);
+  const refused = player.play(archiveUrl ? { ...c, url: archiveUrl } : c);
   if (refused) {
     showToast(refused);
     return;
@@ -1006,21 +1045,15 @@ nowFav.addEventListener("click", () => {
 function focusedChannelIndex(): number {
   const t = document.activeElement;
   if (!(t instanceof HTMLElement)) return -1;
-  const url = t.dataset.channelUrl;
-  if (!url) return -1;
-  return visibleChannels.findIndex((c) => c.url === url);
+  const index = t.dataset.resultIndex;
+  return index === undefined ? -1 : Number(index);
 }
 
 function focusChannelAt(index: number): void {
-  const url = visibleChannels[index]?.url;
-  if (!url) return;
-  const el = channelList.querySelector<HTMLElement>(`[data-channel-url="${CSS.escape(url)}"]`);
-  if (el) {
-    el.focus();
-    // Карточка вне видимого окна виртуализации? Прокручиваем к ней.
-    const top = el.offsetTop - channelList.clientHeight / 2 + el.clientHeight / 2;
-    channelList.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-  }
+  if (!visibleResults[index]) return;
+  channelList.scrollTop = Math.floor(index / CHANNEL_COLUMNS) * CHANNEL_ROW_HEIGHT;
+  renderVirtualWindow();
+  channelList.querySelector<HTMLElement>(`[data-result-index="${index}"]`)?.focus();
 }
 
 window.addEventListener("keydown", (e) => {
@@ -1028,9 +1061,9 @@ window.addEventListener("keydown", (e) => {
   const typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA";
   if (typing) {
     // Из поиска: ↓ уводит фокус в список — продолжить набор можно по «/».
-    if (e.key === "ArrowDown" && visibleChannels.length > 0) {
+    if (e.key === "ArrowDown" && visibleResults.length > 0) {
       e.preventDefault();
-      focusChannelAt(firstFocus(visibleChannels.length)!);
+      focusChannelAt(firstFocus(visibleResults.length)!);
     }
     return;
   }
@@ -1040,23 +1073,23 @@ window.addEventListener("keydown", (e) => {
   switch (e.key) {
     case "ArrowDown": {
       e.preventDefault();
-      const next = cur < 0 ? firstFocus(visibleChannels.length) : moveFocus(visibleChannels.length, cur, 1);
+      const next = cur < 0 ? firstFocus(visibleResults.length) : moveFocus(visibleResults.length, cur, 1);
       if (next !== null) focusChannelAt(next);
       break;
     }
     case "ArrowUp": {
       e.preventDefault();
-      const prev = moveFocus(visibleChannels.length, cur, -1);
+      const prev = moveFocus(visibleResults.length, cur, -1);
       if (prev !== null) focusChannelAt(prev);
       break;
     }
     case "Home":
       e.preventDefault();
-      focusChannelAt(firstFocus(visibleChannels.length)!);
+      focusChannelAt(firstFocus(visibleResults.length)!);
       break;
     case "End":
       e.preventDefault();
-      focusChannelAt(lastFocus(visibleChannels.length)!);
+      focusChannelAt(lastFocus(visibleResults.length)!);
       break;
     case "Enter":
       // Карточка — <button>: Enter сработает сам; здесь ничего не делаем.
