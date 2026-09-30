@@ -90,6 +90,12 @@
                     <label for="setup-playlist">Ссылка на плейлист</label>
                     <div class="input"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg><input id="setup-playlist" type="url" inputmode="url" placeholder="https://…/playlist.m3u" autocomplete="off" required /></div>
                   </div>
+                  <div class="field">
+                    <label for="local-file">…или файлом с устройства</label>
+                    <button type="button" id="btn-local-file" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span>Выбрать .m3u файл</span></button>
+                    <input id="local-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/x-mpegurl" hidden />
+                    <p class="set-note muted">Файл останется на устройстве (OPFS) — никуда не отправляется.</p>
+                  </div>
                   <details class="more">
                     <summary><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg>Название и телепрограмма <span class="muted">(необязательно)</span></summary>
                     <div class="more-fields">

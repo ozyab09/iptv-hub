@@ -56,6 +56,14 @@ import {
 } from "./positions";
 import { firstFocus, lastFocus, moveFocus } from "./kbd-nav";
 import {
+  defaultLocalName,
+  loadLocalPlaylist,
+  looksLikeM3U,
+  removeLocalPlaylist,
+  saveLocalPlaylist,
+  type LocalFs,
+} from "./local-playlist";
+import {
   describeShotFailure,
   screenshotFileName,
   type ShotFailure,
@@ -2799,6 +2807,10 @@ function renderPlaylistManager(): void {
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem(favoritesKey(p.id));
       }
+      // Локальный плейлист: чистим и содержимое в OPFS (FR-10)
+      if (p.playlistUrl.startsWith("local:") && localFs) {
+        void removeLocalPlaylist(localFs, p.playlistUrl.slice("local:".length));
+      }
       plState = removePlaylist(plState, p.id);
       savePlaylists(localStorage, plState);
       renderPlaylistManager();
@@ -2995,7 +3007,81 @@ addForm.addEventListener("submit", (e) => {
   activatePlaylist(plState.items[plState.items.length - 1]!.id);
 });
 
+// ---------- Локальный плейлист из файла (FR-10) ----------
+// Содержимое .m3u хранится в OPFS; Playlist.playlistUrl = "local:<id>" —
+// маркер, который loadPlaylist перехватывает и читает из OPFS. Файл
+// не покидает устройство. Где OPFS нет — кнопка честно сообщит.
+const localFs: LocalFs | null =
+  typeof navigator !== "undefined" &&
+  navigator.storage &&
+  "getDirectory" in navigator.storage
+    ? await (async (): Promise<LocalFs> => {
+        const dir = await navigator.storage.getDirectory();
+        return {
+          read: async (key) => {
+            try {
+              const h = await dir.getFileHandle(key);
+              const f = await h.getFile();
+              return await f.text();
+            } catch {
+              return null;
+            }
+          },
+          write: async (key, content) => {
+            const h = await dir.getFileHandle(key, { create: true });
+            const w = await h.createWritable();
+            await w.write(content);
+            await w.close();
+          },
+          remove: async (key) => {
+            try {
+              await dir.removeEntry(key);
+            } catch {
+              /* файла уже нет */
+            }
+          },
+        };
+      })()
+    : null;
+
+const btnLocalFile = $<HTMLButtonElement>("btn-local-file");
+const localFile = $<HTMLInputElement>("local-file");
+
+btnLocalFile.addEventListener("click", () => {
+  if (!localFs) {
+    showSetup("Браузер не поддерживает OPFS — локальный плейлист недоступен");
+    return;
+  }
+  localFile.click();
+});
+
+localFile.addEventListener("change", async () => {
+  const file = localFile.files?.[0];
+  localFile.value = "";
+  if (!file || !localFs) return;
+  const content = await file.text();
+  if (!looksLikeM3U(content)) {
+    showSetup("Это не похоже на M3U: нужен файл с #EXTM3U и #EXTINF");
+    return;
+  }
+  const pl = addPlaylist(plState, defaultLocalName(file.name), `local:${Date.now()}`, null);
+  plState = pl;
+  const id = pl.items[pl.items.length - 1]!.id;
+  await saveLocalPlaylist(localFs, id, content, null);
+  savePlaylists(localStorage, plState);
+  renderPlaylistManager();
+  renderPlaylistSwitcher();
+  activatePlaylist(id);
+});
+
 async function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
+  // Локальный источник: маркер local:<id> — читаем содержимое из OPFS.
+  if (url.startsWith("local:")) {
+    if (!localFs) throw new Error("локальный плейлист недоступен (нет OPFS)");
+    const m3u = await loadLocalPlaylist(localFs, url.slice("local:".length));
+    if (m3u === null) throw new Error("локальный файл не найден — добавьте плейлист заново");
+    return parseM3U(m3u);
+  }
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`плейлист: HTTP ${resp.status}`);
   if (!/^application\/(x-mpegurl|vnd\.apple\.mpegurl|octet-stream)/.test(
