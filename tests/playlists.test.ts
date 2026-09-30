@@ -117,6 +117,23 @@ describe("upsertByUrl", () => {
     expect(activePlaylist(st)!.playlistUrl).toBe("https://new/pl.m3u");
     expect(activePlaylist(st)!.epgUrl).toBe("https://new/epg.gz");
   });
+
+  // Регрессия #71: ссылка ?p=на существующий + ?e= должна обновить EPG, а не
+  // просто активировать плейлист со старой телепрограммой.
+  it("updates EPG when an existing playlist is opened with a new e= link (#71)", () => {
+    let st = addPlaylist(empty, "A", "https://a/pl.m3u", "https://old/epg.gz");
+    const id = st.items[0]!.id;
+    st = upsertByUrl(st, "https://a/pl.m3u", "https://new/epg.gz");
+    expect(st.activeId).toBe(id);
+    expect(st.items).toHaveLength(1);
+    expect(st.items[0]!.epgUrl).toBe("https://new/epg.gz");
+  });
+
+  it("keeps the old EPG when the same link has no e=", () => {
+    let st = addPlaylist(empty, "A", "https://a/pl.m3u", "https://old/epg.gz");
+    st = upsertByUrl(st, "https://a/pl.m3u", null);
+    expect(st.items[0]!.epgUrl).toBe("https://old/epg.gz");
+  });
 });
 
 describe("favoritesKey", () => {
