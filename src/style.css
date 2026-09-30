@@ -874,6 +874,11 @@ html, body {
   gap: var(--space-4);
 }
 #video-stage { width: 100%; aspect-ratio: 16 / 9; flex: none; }
+/* Группа «кадр + прогресс + программа» — единственный центрируемый ребёнок
+   плеера: воздух делится вокруг группы, а не между детьми по отдельности,
+   иначе программа отрывается от кадра (#86). В мини-плеере растворяется
+   (display: contents), чтобы прежняя раскладка строки не менялась. */
+#player-stack { display: flex; flex-direction: column; gap: var(--space-4); }
 .player-bar video {
   /* Канал открывают, чтобы смотреть: видео видно сразу, без лишнего действия */
   display: block;
@@ -980,14 +985,14 @@ html, body {
        кадру, а не по краям колонки. */
     --frame-w: min(100%, calc((100vh - 250px) * 16 / 9));
     /* Кадр по вертикали — посередине колонки, а не у верхней кромки.
-       justify-content: center в самом прокручиваемом контейнере брать
-       нельзя: при переполнении (длинная программа) центральная часть
-       становится недостижимой прокруткой. margin: auto на детях сжимает
-       свободное место только тогда, когда оно есть, и никак не мешает,
-       когда его нет. */
+       Центрируется группа #player-stack (кадр + прогресс + программа):
+       авто-отступы на каждом ребёнке делили место поровну между ними,
+       и программа отрывалась от кадра (#86). Центрировать сам прокручиваемый
+       контейнер нельзя: при переполнении центральная часть становится
+       недостижимой прокруткой — margin-механизм лишён этого дефекта. */
     margin: auto 0;
   }
-  .watch .player-bar > * { width: var(--frame-w); margin-block: auto; }
+  .watch .player-bar > #player-stack { width: var(--frame-w); margin-block: auto; }
 
   /* Транспорт (пауза, −15, +15) — в левом углу нижней панели, а не по
      центру кадра: все кнопки в одном месте, картинка не перекрыта. */
@@ -1040,6 +1045,7 @@ html, body {
     cursor: pointer;
   }
   .player-bar:not(.open) #video-stage { display: contents; }
+  .player-bar:not(.open) #player-stack { display: contents; }
   .player-bar:not(.open) video { width: 72px; height: 40px; border-radius: 8px; flex: none; }
   .player-bar:not(.open) .bottom,
   .player-bar:not(.open) #btn-seek-back,
@@ -1073,20 +1079,25 @@ html, body {
     background: var(--bg);
     overflow-y: auto;
   }
-  /* Кадр посередине страницы, а не у верхней кромки. Центрируют дети,
-     а не сам прокручиваемый контейнер: justify-content: center при
-     переполнении делает верх недостижимым прокруткой, а авто-отступы
-     при переполнении просто схлопываются (подробнее — в wide-блоке).
-     Важно: #video-stage ниже задаёт отрицательные поля через margin-inline,
-     не шорткатом, иначе он перетёр бы себе margin-block: auto. */
-  .player-bar.open > * { margin-block: auto; }
+  /* Кадр посередине страницы, а не у верхней кромки. Центрируется группа
+     #player-stack (см. комментарий в wide-блоке): авто-отступы на каждом
+     ребёнке делили воздух поровну и отрывали программу от кадра (#86).
+     Центрируют дети, не сам прокручиваемый контейнер: justify-content:
+     center при переполнении делает верх недостижимым прокруткой. */
+  .player-bar.open > #player-stack { margin-block: auto; }
   .player-bar.open #video-stage {
     width: calc(100% + 2 * var(--space-5));
-    /* margin-inline, не шорткат: центрирующие блок-поля кадру задаёт
-       правило выше — .player-bar.open > * с margin-block: auto (#82) */
+    /* margin-inline, не шорткат: отрицательные поля кадра живут рядом с
+       центрирующими блок-полями группы #player-stack (#82, #86) */
     margin-inline: calc(-1 * var(--space-5));
     border-radius: 0;
   }
+
+  /* Меню качества/дорожек открывается вверх от кнопки и на телефоне не
+     влезает в невысокий кадр: overflow: hidden резал его (#87). На
+     странице плеера кадр без скруглений, и скрытие ему не нужно —
+     разрешаем меню выходить наружу кадра. */
+  .player-bar.open #video-stage { overflow: visible; }
   /* На узком кадре название передачи в одну строку помельче */
   .player-bar.open .now-show { font-size: 16px; line-height: 22px; }
   #btn-expand { display: inline-flex; }
@@ -1109,7 +1120,8 @@ html, body {
   justify-content: center;
 }
 #player-bar:fullscreen > * { width: 100%; }
-#player-bar:fullscreen #video-stage { height: 100%; aspect-ratio: auto; border-radius: 0; margin: 0; }
+#player-bar:fullscreen #player-stack { height: 100%; }
+#player-bar:fullscreen #video-stage { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; margin: 0; }
 #player-bar:fullscreen .mini-prog,
 #player-bar:fullscreen .now-schedule { display: none; }
 
