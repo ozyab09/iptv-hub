@@ -508,9 +508,11 @@ html, body {
 /* Кнопка качества + выпадающее меню в палитре сайта */
 .quality-wrap { position: relative; }
 .cat-picker { position: relative; display: none; margin-bottom: var(--space-3); }
-/* Раскрывается вниз: над ним заголовок раздела, а не край окна */
-.cat-menu { top: calc(100% + 6px); bottom: auto; }
-/* Только позиционирование: вид меню задаёт .menu дизайн-системы */
+/* Только позиционирование: вид меню задаёт .menu дизайн-системы.
+   #cat-menu несёт оба класса (.quality-menu .cat-menu): специфичность
+   одинаковая, поэтому ПОРЯДОК решает — .cat-menu обязан стоять после,
+   иначе bottom из .quality-menu уцелеет, и меню со связкой top+bottom
+   схлопнется в нулевую высоту (#84). */
 .quality-menu {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -520,6 +522,9 @@ html, body {
   max-height: 260px;
   overflow-y: auto;
 }
+/* Раскрывается вниз: над ним заголовок раздела, а не край окна.
+   bottom: auto обязателен — сбрасывает нижнюю привязку .quality-menu. */
+.cat-menu { top: calc(100% + 6px); bottom: auto; }
 .quality-item.active { color: var(--accent); font-weight: 600; }
 /* Кнопка-иконка дизайн-системы: 44×44, без рамки; заливка — по месту */
 .icon-btn {
