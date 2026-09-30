@@ -177,10 +177,6 @@
                 <h3 class="t-heading">Продолжить</h3>
                 <div id="continue-row" class="continue-row"></div>
               </section>
-              <section id="recordings-block" class="continue-block" hidden>
-                <h3 class="t-heading">Записанные эфиры</h3>
-                <div id="recordings-row" class="recordings-row"></div>
-              </section>
               <div class="view-head">
                 <h2 class="t-heading view-title"><span id="view-title">Каналы</span> <span id="view-count" class="view-count num"></span></h2>
                 <!-- Только в режиме просмотра на широком экране: список
@@ -199,6 +195,15 @@
                    высоту, и текст под ним уезжал за край экрана -->
               <div id="empty-state" class="empty-state" hidden>Ничего не найдено</div>
               <div id="channel-list" class="channel-list" role="list"></div>
+            </section>
+
+            <!-- Экран 3: записанные эфиры — свой раздел с списком записей -->
+            <section id="recordings-screen" class="screen" hidden>
+              <div class="view-head">
+                <h2 class="t-heading view-title">Записи</h2>
+              </div>
+              <div id="recordings-empty" class="empty-state" hidden>Записей пока нет</div>
+              <div id="recordings-list" class="recordings-list" role="list"></div>
             </section>
       </main>
 

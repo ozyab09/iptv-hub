@@ -11,7 +11,12 @@
  */
 import type { Channel } from "./types";
 
-export type View = "channels" | "favorites" | "recents" | "settings";
+export type View =
+  | "channels"
+  | "favorites"
+  | "recents"
+  | "recordings"
+  | "settings";
 
 export interface ViewMeta {
   id: View;
@@ -26,6 +31,7 @@ export const VIEWS: readonly ViewMeta[] = [
   { id: "channels", label: "Каналы", icon: "tv" },
   { id: "favorites", label: "Избранное", icon: "star" },
   { id: "recents", label: "Недавние", icon: "clock" },
+  { id: "recordings", label: "Записи", icon: "record" },
   { id: "settings", label: "Настройки", icon: "settings" },
 ];
 
@@ -36,9 +42,9 @@ export function parseView(raw: string | null): View {
   return VIEWS.some((v) => v.id === raw) ? (raw as View) : DEFAULT_VIEW;
 }
 
-/** Показывает ли раздел список каналов (у настроек своя разметка). */
+/** Показывает ли раздел список каналов (у настроек и записей своя разметка). */
 export function showsChannelList(view: View): boolean {
-  return view !== "settings";
+  return view !== "settings" && view !== "recordings";
 }
 
 /** Есть ли в разделе фильтр по категориям. */
@@ -58,7 +64,7 @@ export function channelsForView(
   favorites: ReadonlySet<string>,
   recents: readonly string[],
 ): Channel[] {
-  if (view === "settings") return [];
+  if (view === "settings" || view === "recordings") return [];
   if (view === "favorites") return channels.filter((c) => favorites.has(c.url));
   if (view === "recents") {
     const byUrl = new Map(channels.map((c) => [c.url, c]));
@@ -76,6 +82,8 @@ export function emptyMessage(view: View, hasQuery: boolean): string {
   // Пустой раздел подсказывает, как его наполнить, а не только констатирует
   if (view === "favorites") return "Пока ничего не в избранном. Нажмите звёздочку у канала — он появится здесь.";
   if (view === "recents") return "Вы ещё ничего не смотрели. Включённые каналы появятся здесь.";
+  if (view === "recordings")
+    return "Записей пока нет. Кнопка записи в плеере — записи появятся здесь.";
   return "Ничего не найдено";
 }
 
