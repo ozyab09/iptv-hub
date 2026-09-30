@@ -44,6 +44,18 @@
           <button id="pl-switch-btn" class="pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false"><span id="pl-switch-name" class="pl-switch-name"></span><span id="pl-switch-count" class="pl-switch-count num"></span><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-chevron-down"></use></svg></button>
           <div id="pl-switch-menu" class="menu pl-switch-menu" role="listbox" hidden></div>
         </div>
+        <!-- Центр уведомлений: колокольчик всегда виден, бейдж зовёт
+             заглянуть; клик открывает панель со списком (#98). -->
+        <div id="notif-bell-wrap" class="notif-bell-wrap">
+          <button id="notif-bell" class="icon-btn" title="Уведомления" aria-label="Уведомления" aria-haspopup="true" aria-expanded="false">
+            <svg class="i" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg>
+            <span id="notif-badge" class="notif-badge" hidden></span>
+          </button>
+          <div id="notif-panel" class="notif-panel menu" role="region" aria-label="Уведомления" hidden>
+            <div class="notif-head"><span class="t-overline">Уведомления</span><button id="notif-clear" class="notif-clear">Очистить</button></div>
+            <div id="notif-list" class="notif-list"></div>
+          </div>
+        </div>
         <label class="search-wrap">
           <svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
           <input id="search" type="search" placeholder="Поиск каналов" autocomplete="off" aria-label="Поиск каналов" />
@@ -292,14 +304,8 @@
 
       <div id="toast" class="toast" hidden></div>
 
-      <!-- Уведомление о скрытых http-каналах: сверху справа, с колокольчиком.
-           Показывается один раз на плейлист (src/http-notice.ts), живёт,
-           пока пользователь не закроет. -->
-      <div id="http-notice" class="http-notice" role="status" hidden>
-        <span class="n-icon"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg></span>
-        <span class="n-text"></span>
-        <button id="http-notice-close" class="n-close" title="Закрыть" aria-label="Закрыть уведомление"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
-      </div>
+      <!-- Плашка http-уведомления из #92 заменена центром уведомлений
+           в шапке (#98): история живёт в колокольчике. -->
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

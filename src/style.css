@@ -1173,48 +1173,6 @@ html, body {
   font-size: 14px;
   line-height: 20px;
 }
-/* Уведомление о скрытых http-каналах: сверху справа, с колокольчиком.
-   Не тост: читается без спешки и закрывается крестиком, показывается
-   один раз на плейлист (src/http-notice.ts). */
-.http-notice {
-  position: fixed;
-  top: calc(var(--space-5) + env(safe-area-inset-top, 0px));
-  right: var(--space-5);
-  z-index: 110;
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  width: min(420px, calc(100vw - 32px));
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-1);
-  box-shadow: var(--shadow-pop);
-  color: var(--text);
-  font-size: 14px;
-  line-height: 20px;
-}
-.http-notice .n-icon {
-  flex: none;
-  display: inline-flex;
-  color: var(--accent);
-}
-.http-notice .n-text { min-width: 0; }
-.http-notice .n-close {
-  flex: none;
-  margin: -2px -6px -2px 0;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.http-notice .n-close:hover { background: var(--surface-2); color: var(--text); }
 .toast-action {
   flex: none;
   height: 32px;

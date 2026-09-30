@@ -38,7 +38,8 @@ PWA.
 3. **Чистые модули.** Логика без DOM/fetch (`m3u.ts`, `epg.ts`, `config.ts`,
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
-   `recording-sink.ts`, `debug-log.ts`) — полностью покрыта тестами.
+   `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
+   `refresh.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
 4. **Не расширять зависимости.** Новый runtime-пакет = взвешенное решение.
    DASH, если понадобится, добавлять через отдельный адаптер в `player.ts`

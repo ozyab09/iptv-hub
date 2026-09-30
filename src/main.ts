@@ -96,6 +96,14 @@ import {
   markHttpNoticeShown,
 } from "./http-notice";
 import {
+  addNotification,
+  loadNotifications,
+  markAllRead,
+  nextId,
+  saveNotifications,
+  unreadCount,
+} from "./notifications";
+import {
   diffSnapshots,
   loadInterval,
   loadLastCheck,
@@ -168,8 +176,11 @@ const nowShow = $("now-show");
 const nowTimeLeft = $("now-time-left");
 const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
 const toastEl = $("toast");
-const httpNotice = $("http-notice");
-const httpNoticeClose = $<HTMLButtonElement>("http-notice-close");
+const notifBell = $<HTMLButtonElement>("notif-bell");
+const notifBadge = $("notif-badge");
+const notifPanel = $("notif-panel");
+const notifList = $("notif-list");
+const notifClear = $<HTMLButtonElement>("notif-clear");
 const btnClosePlayer = $<HTMLButtonElement>("btn-close-player");
 const btnExpand = $<HTMLButtonElement>("btn-expand");
 const btnFullscreen = $<HTMLButtonElement>("btn-fullscreen");
@@ -298,21 +309,83 @@ function showToastAction(
   }, durationMs);
 }
 
-/**
- * Уведомление с колокольчиком (сверху справа): в отличие от тоста
- * не исчезает само — живёт, пока пользователь не закроет крестиком.
- * Текст — textContent, не innerHTML: текст плейлиста ненадёжен.
- */
-function showHttpNotice(message: string): void {
-  const text = httpNotice.querySelector(".n-text");
-  if (!text) throw new Error(".n-text не найден");
-  text.textContent = message;
-  httpNotice.hidden = false;
+// ---------- Центр уведомлений (#98) ----------
+/** История уведомлений; хранится в localStorage, переживает перезагрузку. */
+let notifications = loadNotifications(
+  typeof localStorage !== "undefined" ? localStorage : null,
+);
+
+/** Свежие уведомления поднимают бейдж на колокольчике. */
+function renderNotifications(): void {
+  const unread = unreadCount(notifications);
+  notifBadge.hidden = unread === 0;
+  notifBadge.textContent = unread > 9 ? "9+" : String(unread);
+  notifList.textContent = "";
+  if (notifications.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "notif-empty";
+    empty.textContent = "Пока ничего не случилось";
+    notifList.append(empty);
+    return;
+  }
+  for (const item of notifications) {
+    const row = document.createElement("div");
+    row.className = item.read ? "notif-item" : "notif-item unread";
+    const time = document.createElement("span");
+    time.className = "n-time num";
+    time.textContent = new Date(item.at).toLocaleString("ru", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const text = document.createElement("span");
+    text.textContent = item.text; // текст плейлиста ненадёжен — только textContent
+    row.append(time, text);
+    notifList.append(row);
+  }
 }
 
-httpNoticeClose.addEventListener("click", () => {
-  httpNotice.hidden = true;
+/** Положить уведомление в колокольчик (данные + бейдж). */
+function pushNotification(message: string): void {
+  notifications = addNotification(
+    notifications,
+    nextId(notifications),
+    message,
+    Date.now(),
+  );
+  saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
+  renderNotifications();
+}
+
+notifBell.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = notifPanel.hidden;
+  notifPanel.hidden = !willOpen;
+  notifBell.setAttribute("aria-expanded", String(willOpen));
+  if (willOpen) {
+    // Открыл панель — прочитал всё, что в ней видно
+    notifications = markAllRead(notifications);
+    saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
+    renderNotifications();
+  }
 });
+
+notifClear.addEventListener("click", () => {
+  notifications = [];
+  saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
+  renderNotifications();
+});
+
+document.addEventListener("click", (e) => {
+  if (notifPanel.hidden) return;
+  if (!notifBell.contains(e.target as Node) && !notifPanel.contains(e.target as Node)) {
+    notifPanel.hidden = true;
+    notifBell.setAttribute("aria-expanded", "false");
+  }
+});
+
+renderNotifications();
 
 function showSetup(message?: string): void {
   setView("settings", false);
@@ -2016,7 +2089,7 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
     const interesting =
       diff.added > 0 || diff.removed > 0 || diff.changed > 0 || httpNew > 0;
     if (interesting || !silentOnNoChange) {
-      showHttpNotice(refreshNotice(diff, httpNew > 0 ? httpNew : (httpTotal > 0 ? fresh.droppedHttp : 0)));
+      pushNotification(refreshNotice(diff, httpNew > 0 ? httpNew : (httpTotal > 0 ? fresh.droppedHttp : 0)));
     }
     if (interesting) {
       snapshot = fresh;
@@ -2438,7 +2511,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   // не прочесть, а при каждом переключении плейлистов оно стало бы спамом.
   if (snapshot.droppedHttp > 0 && plState.activeId &&
       shouldShowHttpNotice(plState.activeId, localStorage)) {
-    showHttpNotice(
+    pushNotification(
       `Скрыто ${channelsWord(snapshot.droppedHttp)} по http:// — на https-странице браузер их блокирует. Если у провайдера есть https-ссылки — замените их в плейлисте.`,
     );
     markHttpNoticeShown(plState.activeId, localStorage);
