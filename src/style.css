@@ -500,6 +500,11 @@ html, body {
 .continue-frame > img { max-width: 60%; max-height: 60%; object-fit: contain; }
 .continue-mark { font-size: 44px; font-weight: 700; letter-spacing: -0.04em; color: rgba(255, 255, 255, 0.16); }
 .continue-frame:has(img) .continue-mark { display: none; }
+/* Нейтральная подложка сохраняет белые и тёмные детали прозрачных логотипов.
+   Только для изображений: монограммы остаются на исходной поверхности. */
+.logo:has(> img), .continue-frame:has(> img) {
+  background: color-mix(in srgb, var(--surface-3), var(--text));
+}
 .continue-frame > .live { position: absolute; left: var(--space-2); top: var(--space-2); }
 .continue-frame > .prog { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0; }
 .continue-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
