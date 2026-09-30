@@ -910,10 +910,15 @@ html, body {
 /* При нехватке ширины flex сжимал всё, кроме инпута: у range сильный
    min-content, и ползунок наезжал на правую группу (#93). min-width: 0
    разрешает ему сжиматься, clamp держит разумный минимум. */
-.video-actions { display: flex; align-items: center; gap: 2px; min-height: 44px; }
+.video-actions { display: flex; align-items: center; gap: 2px; min-height: 44px; min-width: 0; }
 .video .volume { display: flex; align-items: center; gap: var(--space-1); min-width: 0; flex: 0 1 auto; }
-#volume-slider { width: clamp(40px, 8vw, 72px); min-width: 0; accent-color: #fff; }
-.video-actions-right { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
+/* Сжимаемый ползунок: без flex-shrink при узком мини-плеере он наезжал
+   на правую группу (issue #155); clamp держит разумный минимум. */
+#volume-slider { width: clamp(36px, 7vw, 72px); min-width: 0; flex: 0 1 auto; accent-color: #fff; }
+.video-actions-right { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; min-width: 0; }
+/* Статус — единственное, что в деке может уступать место: длинная строка
+   разрешения/скорости выталкивала правую группу на ползунок (issue #155). */
+.video .player-status { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* «К эфиру» — зовёт к действию, поэтому это единственная подписанная кнопка */
 .video .btn-live {
   width: auto;
