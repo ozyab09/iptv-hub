@@ -1,5 +1,6 @@
 import type { Channel, PlaylistSnapshot } from "./types";
 import { parseCatchup } from "./catchup";
+import { isPrivateHost } from "./config";
 
 /**
  * Нормализация имени канала: нижний регистр, без эмодзи, quality-маркеров,
@@ -49,12 +50,35 @@ export function extractAttr(attrs: string, key: string): string | null {
   return m?.[1] ?? null;
 }
 
+/**
+ * Канал с http:// на публичном хосте с https-страницы играть не может:
+ * браузер блокирует mixed content до сети, и никакие retry это не чинят.
+ * Раньше такие каналы лежали в списке наравне с рабочими, и пользователь
+ * натыкался на них клик за кликом, получая тост об ошибке. Теперь они
+ * отбрасываются при разборе, но не молча — countDroppedHttp отдаёт число
+ * для тоста после загрузки плейлиста.
+ *
+ * Локальные и приватные хосты (localhost, *.local, RFC1918) остаются:
+ * mixed content на них не действует, домашние IPTV-серверы играют.
+ */
+export function isPlayableStreamUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol === "https:") return true;
+    if (u.protocol !== "http:") return true; // rtmp/udp/… не трогаем
+    return isPrivateHost(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** Разбор M3U-контента в снимок плейлиста. */
 export function parseM3U(content: string): PlaylistSnapshot {
   const lines = content.split(/\r?\n/);
   const channels: Channel[] = [];
   const seenUrls = new Set<string>();
   let headerTvgUrl: string | null = null;
+  let droppedHttp = 0;
   let pending: {
     attrs: string;
     name: string;
@@ -97,7 +121,12 @@ export function parseM3U(content: string): PlaylistSnapshot {
         pending = null; // дедуп по URL: первый вариант выигрывает
         continue;
       }
-      seenUrls.add(line);
+      seenUrls.add(line); // до проверки http: дубликат не считает скрытым второй раз
+      if (!isPlayableStreamUrl(line)) {
+        droppedHttp++; // http-канал на публичном хосте — в браузере не заиграет
+        pending = null;
+        continue;
+      }
 
       const name = pending.name || "Без названия";
       const catchupInfo = parseCatchup(
@@ -129,7 +158,7 @@ export function parseM3U(content: string): PlaylistSnapshot {
     a.localeCompare(b, "ru", { sensitivity: "base" }),
   );
 
-  return { channels, categories, headerTvgUrl };
+  return { channels, categories, headerTvgUrl, droppedHttp };
 }
 
 export { QUALITY_RANK };

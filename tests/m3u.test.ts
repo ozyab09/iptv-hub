@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseM3U, normalizeName, detectQuality, extractAttr } from "../src/m3u";
+import {
+  parseM3U,
+  normalizeName,
+  detectQuality,
+  extractAttr,
+  isPlayableStreamUrl,
+} from "../src/m3u";
 
 describe("normalizeName", () => {
   it("strips emoji, quality and separators", () => {
@@ -100,5 +106,72 @@ describe("parseM3U", () => {
 
   it("collects unique sorted categories", () => {
     expect(parsed.categories).toEqual(["Кино", "Новости", "Основные", "Спорт"]);
+  });
+});
+
+describe("isPlayableStreamUrl", () => {
+  it("keeps https and non-http schemes", () => {
+    expect(isPlayableStreamUrl("https://cdn.example.com/live.m3u8")).toBe(true);
+    expect(isPlayableStreamUrl("rtmp://server/live")).toBe(true);
+    expect(isPlayableStreamUrl("udp://@239.1.1.1:1234")).toBe(true);
+  });
+
+  it("drops public http hosts (mixed content on https page)", () => {
+    expect(isPlayableStreamUrl("http://cdn.example.com/live.m3u8")).toBe(false);
+    expect(isPlayableStreamUrl("http://cdn.example.com:8080/live.m3u8")).toBe(false);
+  });
+
+  it("keeps http on localhost and private networks", () => {
+    expect(isPlayableStreamUrl("http://localhost:8080/live.m3u8")).toBe(true);
+    expect(isPlayableStreamUrl("http://192.168.1.10:8000/live.m3u8")).toBe(true);
+    expect(isPlayableStreamUrl("http://10.0.0.5/live.m3u8")).toBe(true);
+    expect(isPlayableStreamUrl("http://mybox.local/live.m3u8")).toBe(true);
+  });
+
+  it("is false for garbage", () => {
+    expect(isPlayableStreamUrl("not a url")).toBe(false);
+    expect(isPlayableStreamUrl("")).toBe(false);
+  });
+});
+
+describe("parseM3U: скрытие http-каналов", () => {
+  const mixed = [
+    "#EXTM3U",
+    '#EXTINF:-1 group-title="Спорт",Public HTTP',
+    "http://cdn.example.com/one.m3u8",
+    '#EXTINF:-1 group-title="Спорт",Public HTTP Duplicate',
+    "http://cdn.example.com/one.m3u8", // дедуп: не второй скрытый
+    '#EXTINF:-1 group-title="Новости",HTTPS Channel',
+    "https://stream.example.com/two.m3u8",
+    '#EXTINF:-1 group-title="Основные",Home IPTV',
+    "http://192.168.1.50:8000/three.m3u8",
+  ].join("\n");
+
+  const parsed = parseM3U(mixed);
+
+  it("drops public http channels and counts them", () => {
+    expect(parsed.channels.map((c) => c.name)).toEqual([
+      "Home IPTV",
+      "HTTPS Channel",
+    ]);
+    expect(parsed.droppedHttp).toBe(1);
+  });
+
+  it("keeps a duplicate http URL from double-counting", () => {
+    expect(parsed.droppedHttp).toBe(1);
+  });
+
+  it("keeps home IPTV http channels playable in the list", () => {
+    const home = parsed.channels.find((c) => c.name === "Home IPTV");
+    expect(home?.url).toBe("http://192.168.1.50:8000/three.m3u8");
+  });
+
+  it("counts zero for an all-https playlist", () => {
+    const allHttps = [
+      "#EXTM3U",
+      '#EXTINF:-1 group-title="Кино",Kino 4K',
+      "https://stream.example.com/kino.m3u8",
+    ].join("\n");
+    expect(parseM3U(allHttps).droppedHttp).toBe(0);
   });
 });

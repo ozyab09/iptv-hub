@@ -28,6 +28,12 @@ export interface PlaylistSnapshot {
   categories: string[];
   /** Заголовок #EXTM3U (там бывает tvg-url — fallback для EPG). */
   headerTvgUrl: string | null;
+  /**
+   * Скрытые http-каналы (публичные хосты): на https-странице браузер
+   * блокирует mixed content, играть они не могут. Счётчик нужен для тоста,
+   * чтобы пропажа каналов не выглядела потерей части плейлиста.
+   */
+  droppedHttp: number;
 }
 
 /** Передача из телепрограммы (XMLTV). */
