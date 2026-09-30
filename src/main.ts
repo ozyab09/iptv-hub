@@ -149,14 +149,7 @@ import {
   shouldShowHttpNotice,
   markHttpNoticeShown,
 } from "./http-notice";
-import {
-  addNotification,
-  loadNotifications,
-  markAllRead,
-  nextId,
-  saveNotifications,
-  unreadCount,
-} from "./notifications";
+import { createNotificationBell } from "./notification-bell";
 import {
   checkSummary,
   countProgrammes,
@@ -429,75 +422,35 @@ function showToastAction(
   }, durationMs);
 }
 
-// ---------- Центр уведомлений (#98) ----------
-/** История уведомлений; хранится в localStorage, переживает перезагрузку. */
-let notifications = loadNotifications(
-  typeof localStorage !== "undefined" ? localStorage : null,
-);
-
-/** Свежие уведомления поднимают бейдж на колокольчике. */
-function renderNotifications(): void {
-  const unread = unreadCount(notifications);
-  notifBadge.hidden = unread === 0;
-  notifBadge.textContent = unread > 9 ? "9+" : String(unread);
-  notifList.textContent = "";
-  if (notifications.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "notif-empty";
-    empty.textContent = "Пока ничего не случилось";
-    notifList.append(empty);
-    return;
-  }
-  for (const item of notifications) {
-    const row = document.createElement("div");
-    row.className = item.read ? "notif-item" : "notif-item unread";
-    const time = document.createElement("span");
-    time.className = "n-time num";
-    time.textContent = new Date(item.at).toLocaleString("ru", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const text = document.createElement("span");
-    text.textContent = item.text; // текст плейлиста ненадёжен — только textContent
-    row.append(time, text);
-    notifList.append(row);
-  }
-}
-
+// ---------- Центр уведомлений (#98) — UI-слой вынесен в notification-bell.ts ----------
+const notifBellUi = createNotificationBell({
+  badge: notifBadge,
+  list: notifList,
+  storage: typeof localStorage !== "undefined" ? localStorage : null,
+  onOpen: () => {
+    notifPanel.hidden = false;
+    notifBell.setAttribute("aria-expanded", "true");
+    overlayStack = pushOverlay(overlayStack, "notifications");
+    history.pushState({ overlay: "notifications" }, "");
+  },
+  onClose: () => closeOverlay("notifications"),
+});
 /** Положить уведомление в колокольчик (данные + бейдж). */
 function pushNotification(message: string): void {
-  notifications = addNotification(
-    notifications,
-    nextId(notifications),
-    message,
-    Date.now(),
-  );
-  saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
-  renderNotifications();
+  notifBellUi.push(message);
 }
 
 notifBell.addEventListener("click", (e) => {
   e.stopPropagation();
   const willOpen = notifPanel.hidden;
-  notifPanel.hidden = !willOpen;
-  notifBell.setAttribute("aria-expanded", String(willOpen));
-  if (willOpen) {
-    overlayStack = pushOverlay(overlayStack, "notifications");
-    history.pushState({ overlay: "notifications" }, "");
-    // Открыл панель — прочитал всё, что в ней видно
-    notifications = markAllRead(notifications);
-    saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
-    renderNotifications();
+  if (willOpen) notifBellUi.open();
+  else {
+    notifPanel.hidden = true;
+    notifBell.setAttribute("aria-expanded", "false");
   }
 });
 
-notifClear.addEventListener("click", () => {
-  notifications = [];
-  saveNotifications(notifications, typeof localStorage !== "undefined" ? localStorage : null);
-  renderNotifications();
-});
+notifClear.addEventListener("click", () => notifBellUi.clear());
 
 document.addEventListener("click", (e) => {
   if (notifPanel.hidden) return;
@@ -506,7 +459,7 @@ document.addEventListener("click", (e) => {
   }
 });
 
-renderNotifications();
+notifBellUi.render();
 
 function showSetup(message?: string): void {
   setView("settings", false);
