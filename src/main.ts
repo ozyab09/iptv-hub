@@ -49,6 +49,16 @@ import {
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
+import {
+  initialSleepState,
+  sleepCancel,
+  sleepLabel,
+  sleepRemainderMin,
+  sleepStart,
+  sleepStartEpisode,
+  sleepTick,
+  type SleepState,
+} from "./sleep-timer";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -228,6 +238,9 @@ const schedList = $("sched-list");
 const btnFullGuide = $<HTMLButtonElement>("btn-full-guide");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
+const btnSleep = $<HTMLButtonElement>("btn-sleep");
+const sleepBadge = $("sleep-badge");
+const sleepMenu = $("sleep-menu");
 const nowFav = $<HTMLButtonElement>("now-fav");
 const btnTheme = $<HTMLButtonElement>("btn-theme");
 
@@ -1730,6 +1743,91 @@ window.addEventListener("keydown", (e) => {
 function liveEdge(): number {
   const r = videoEl.seekable;
   return r.length > 0 ? r.end(r.length - 1) : NaN;
+}
+
+// ---------- Sleep-таймер (FR-13) ----------
+// «Выключить через 30/60/90 мин / в конце передачи». Логика — чистый
+// модуль sleep-timer.ts, здесь DOM: меню, бейдж, пауза и затемнение.
+let sleepState: SleepState = initialSleepState;
+
+function sleepRender(): void {
+  const label = sleepLabel(sleepState, Date.now());
+  sleepBadge.hidden = label === null;
+  if (label !== null) sleepBadge.textContent = label;
+  for (const b of sleepMenu.querySelectorAll<HTMLButtonElement>("[data-sleep]")) {
+    const v = b.dataset.sleep;
+    const on =
+      (v === "off" && sleepState.mode.kind === "off") ||
+      (v === "episode" && sleepState.mode.kind === "episode") ||
+      (v !== "off" && v !== "episode" && sleepState.mode.kind === "duration" &&
+        sleepRemainderMin(sleepState, Date.now()) !== null &&
+        Math.abs((sleepState.mode.kind === "duration" ? sleepState.mode.endsAt : 0) -
+          (Date.now() + Number(v) * 60_000)) < 60_000);
+    b.classList.toggle("on", on);
+  }
+}
+
+function sleepApplyFired(): void {
+  if (!sleepState.fired) return;
+  if (!videoEl.paused) videoEl.pause();
+  videoStage.classList.add("sleep-dim");
+  showToast("Sleep-таймер: воспроизведение остановлено");
+}
+
+btnSleep.addEventListener("click", (e) => {
+  e.stopPropagation();
+  sleepMenu.hidden = !sleepMenu.hidden;
+  sleepRender();
+});
+
+document.addEventListener("click", (e) => {
+  if (sleepMenu.hidden) return;
+  if (!sleepMenu.contains(e.target as Node) && !btnSleep.contains(e.target as Node)) {
+    sleepMenu.hidden = true;
+  }
+});
+
+sleepMenu.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-sleep]");
+  if (!b) return;
+  const v = b.dataset.sleep;
+  if (v === "off") {
+    sleepState = sleepCancel(sleepState);
+  } else if (v === "episode") {
+    const progs = channelProgrammes();
+    const nowMs = Date.now();
+    const cur = progs.find(
+      (p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop),
+    );
+    if (!cur) {
+      showToast("Нет телепрограммы для этого канала — выберите интервал");
+      return;
+    }
+    sleepState = sleepStartEpisode(sleepState, Date.parse(cur.stop), nowMs);
+  } else {
+    sleepState = sleepStart(sleepState, Number(v), Date.now());
+  }
+  sleepMenu.hidden = true;
+  sleepRender();
+});
+
+// Тик раз в 10 секунд достаточно: точность ±10с для таймера на полчаса.
+window.setInterval(() => {
+  const before = sleepState.fired;
+  sleepState = sleepTick(sleepState, Date.now());
+  if (sleepState.fired && !before) sleepApplyFired();
+  sleepRender();
+  if (sleepState.mode.kind === "off" && !sleepBadge.hidden) sleepBadge.hidden = true;
+}, 10_000);
+
+// Любое действие пользователя снимает затемнение (таймер при этом не сбрасывается:
+// он уже сработал — просто возвращаем картинку).
+for (const ev of ["click", "keydown"] as const) {
+  videoStage.addEventListener(ev, () => {
+    if (videoStage.classList.contains("sleep-dim")) {
+      videoStage.classList.remove("sleep-dim");
+    }
+  });
 }
 
 /**
