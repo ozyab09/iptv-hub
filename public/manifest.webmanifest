@@ -1,4 +1,5 @@
 {
+  "id": "./",
   "name": "IPTV Hub",
   "short_name": "IPTV Hub",
   "description": "Self-hosted веб-плеер для IPTV-плейлистов с телепрограммой",
