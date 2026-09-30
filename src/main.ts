@@ -49,6 +49,14 @@ import {
 } from "./virtual-list";
 import { clock, isBehindLive, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
+import {
+  initialWakeLockState,
+  wakeLockHidden,
+  wakeLockPlay,
+  wakeLockStop,
+  wakeLockVisible,
+  type WakeLockState,
+} from "./wake-lock";
 import { neighborIndex, Player, seekBy } from "./player";
 import {
   applyTheme,
@@ -161,6 +169,36 @@ const channelList = $("channel-list");
 const emptyState = $("empty-state");
 const epgNow = $("epg-now");
 const playerBar = $("player-bar");
+
+// Wake Lock (FR-7): запрос/релиз через нативный API, где его нет —
+// hooks без request превращает всё в тихий no-op.
+let wakeLockState: WakeLockState = initialWakeLockState;
+const wakeLockHooks = {
+  request: (): { release: () => void } | null => {
+    const wl = (navigator as Navigator & {
+      wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> };
+    }).wakeLock;
+    if (!wl) return null;
+    let released = false;
+    let lock: { release: () => Promise<void> } | null = null;
+    wl.request("screen").then(
+      (l) => {
+        if (released) {
+          l.release().catch(() => undefined);
+          return;
+        }
+        lock = l;
+      },
+      () => undefined,
+    );
+    return {
+      release: () => {
+        released = true;
+        lock?.release().catch(() => undefined);
+      },
+    };
+  },
+};
 const videoEl = $<HTMLVideoElement>("video");
 const videoStage = $("video-stage");
 const liveBadge = $("live-badge");
@@ -788,9 +826,21 @@ btnClosePlayer.addEventListener("click", () => {
 
 btnPause.addEventListener("click", () => {
   player.togglePause();
-});
-videoEl.addEventListener("play", () => setIcon(btnPause, "pause"));
-videoEl.addEventListener("pause", () => setIcon(btnPause, "play"));
+});  videoEl.addEventListener("play", () => setIcon(btnPause, "play"));  // Wake Lock (FR-7): пока играет и вкладка видима — экран не гаснет.
+  videoEl.addEventListener("play", () => {
+    wakeLockState = wakeLockPlay(wakeLockState, wakeLockHooks, document.visibilityState === "visible");
+    setIcon(btnPause, "pause");
+  });
+  videoEl.addEventListener("pause", () => {
+    wakeLockState = wakeLockStop(wakeLockState);
+    setIcon(btnPause, "play");
+  });
+  document.addEventListener("visibilitychange", () => {
+    wakeLockState =
+      document.visibilityState === "visible"
+        ? wakeLockVisible(wakeLockState, wakeLockHooks)
+        : wakeLockHidden(wakeLockState);
+  });
 videoEl.addEventListener("loadedmetadata", () => {
   // нативный playback: разрешение становится известно здесь
   if (videoEl.videoWidth) {
