@@ -14,6 +14,7 @@ import {
   unreadCount,
   type Notification,
 } from "./notifications";
+import { t, translateMessage, type Language } from "./i18n";
 
 type KV = Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
 
@@ -26,6 +27,7 @@ export interface NotifBellOptions {
   /** Вызывается, когда панель надо закрыть извне (клик мимо). */
   onClose: () => void;
   now?: () => number;
+  language?: () => Language;
 }
 
 /** Подпись времени уведомления: «12 фев, 09:41». Чистая функция. */
@@ -43,6 +45,7 @@ export function createNotificationBell(opts: NotifBellOptions) {
 
   /** Свежие уведомления поднимают бейдж на колокольчике. */
   function render(): void {
+    const language = opts.language?.() ?? "ru";
     const unread = unreadCount(items);
     opts.badge.hidden = unread === 0;
     opts.badge.textContent = unread > 9 ? "9+" : String(unread);
@@ -50,7 +53,7 @@ export function createNotificationBell(opts: NotifBellOptions) {
     if (items.length === 0) {
       const empty = document.createElement("div");
       empty.className = "notif-empty";
-      empty.textContent = "Пока ничего не случилось";
+      empty.textContent = t("notifications.empty", language);
       opts.list.append(empty);
       return;
     }
@@ -59,9 +62,9 @@ export function createNotificationBell(opts: NotifBellOptions) {
       row.className = item.read ? "notif-item" : "notif-item unread";
       const time = document.createElement("span");
       time.className = "n-time num";
-      time.textContent = formatNotifTime(item.at);
+      time.textContent = formatNotifTime(item.at, language);
       const text = document.createElement("span");
-      text.textContent = item.text; // текст ненадёжен — только textContent
+      text.textContent = translateMessage(item.text, language); // только textContent
       row.append(time, text);
       opts.list.append(row);
     }

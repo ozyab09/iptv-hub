@@ -12,6 +12,7 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: process.env.VISUAL_BASE_URL ?? "http://localhost:4173",
+    locale: "ru-RU",
     screenshot: "only-on-failure",
     video: "off",
     trace: "retain-on-failure",

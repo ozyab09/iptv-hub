@@ -34,35 +34,35 @@
       <aside class="sidebar">
         <a class="brand" href="./" title="На главную"><span class="brand-mark"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></span><span class="brand-name">IPTV Hub</span></a>
         <nav id="side-nav" class="side-nav" aria-label="Разделы"></nav>
-        <div id="cat-label" class="side-label t-overline">Категории</div>
-        <nav id="categories" class="categories" aria-label="Категории"></nav>
+        <div id="cat-label" class="side-label t-overline" data-i18n="nav.categories">Категории</div>
+        <nav id="categories" class="categories" aria-label="Категории" data-i18n-aria-label="nav.categories"></nav>
       </aside>
 
       <!-- Шапка: какой плейлист открыт (он же переключатель), поиск, тема -->
       <header class="topbar">
         <div class="pl-switch" id="pl-switch" hidden>
-          <button id="pl-switch-btn" class="pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false"><span id="pl-switch-name" class="pl-switch-name"></span><span id="pl-switch-count" class="pl-switch-count num"></span><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-chevron-down"></use></svg></button>
+          <button id="pl-switch-btn" class="pl-switch-btn" title="Переключить плейлист" aria-label="Переключить плейлист" aria-haspopup="listbox" aria-expanded="false" data-i18n-title="playlist.switch" data-i18n-aria-label="playlist.switch"><span id="pl-switch-name" class="pl-switch-name"></span><span id="pl-switch-count" class="pl-switch-count num"></span><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-chevron-down"></use></svg></button>
           <div id="pl-switch-menu" class="menu pl-switch-menu" role="listbox" hidden></div>
         </div>
         <label class="search-wrap">
           <svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
-          <input id="search" type="search" placeholder="Поиск каналов и передач" autocomplete="off" aria-label="Поиск каналов и передач" />
+          <input id="search" type="search" placeholder="Поиск каналов и передач" autocomplete="off" aria-label="Поиск каналов и передач" data-i18n-aria-label="search.placeholder" data-i18n-placeholder="search.placeholder">
           <span class="kbd" aria-hidden="true">/</span>
         </label>
         <!-- Центр уведомлений: колокольчик всегда виден, бейдж зовёт
              заглянуть; клик открывает панель со списком (#98). Стоит
              рядом с кнопкой темы — правый угол шапки. -->
         <div id="notif-bell-wrap" class="notif-bell-wrap">
-          <button id="notif-bell" class="icon-btn" title="Уведомления" aria-label="Уведомления" aria-haspopup="true" aria-expanded="false">
+          <button id="notif-bell" class="icon-btn" title="Уведомления" aria-label="Уведомления" aria-haspopup="true" aria-expanded="false" data-i18n-title="notifications.title" data-i18n-aria-label="notifications.title">
             <svg class="i" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg>
             <span id="notif-badge" class="notif-badge" hidden></span>
           </button>
-          <div id="notif-panel" class="notif-panel menu" role="region" aria-label="Уведомления" hidden>
-            <div class="notif-head"><span class="t-overline">Уведомления</span><button id="notif-clear" class="notif-clear">Очистить</button></div>
+          <div id="notif-panel" class="notif-panel menu" role="region" aria-label="Уведомления" hidden data-i18n-aria-label="notifications.title">
+            <div class="notif-head"><span class="t-overline" data-i18n="notifications.title">Уведомления</span><button id="notif-clear" class="notif-clear" data-i18n="notifications.clear">Очистить</button></div>
             <div id="notif-list" class="notif-list"></div>
           </div>
         </div>
-        <button id="btn-theme" class="icon-btn theme-btn" title="Переключить тему" aria-label="Переключить тему"></button>
+        <button id="btn-theme" class="icon-btn theme-btn" title="Переключить тему" aria-label="Переключить тему" data-i18n-title="theme.switch" data-i18n-aria-label="theme.switch"></button>
       </header>
 
       <main id="main" class="screens">
@@ -72,126 +72,136 @@
               <div class="settings-inner">
                 <div class="onboard">
                   <span class="onboard-mark"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></span>
-                  <h1 class="t-display">Ваше ТВ — в&nbsp;одном месте</h1>
-                  <p class="muted">Вставьте ссылку на плейлист M3U. Если в нём указана телепрограмма, она подтянется сама.</p>
+                  <h1 class="t-display" data-i18n="onboard.title">Ваше ТВ — в&nbsp;одном месте</h1>
+                  <p class="muted" data-i18n="onboard.note">Вставьте ссылку на плейлист M3U. Если в нём указана телепрограмма, она подтянется сама.</p>
                 </div>
-                <h1 class="t-display settings-title">Настройки</h1>
+                <h1 class="t-display settings-title" data-i18n="settings.title">Настройки</h1>
 
                 <section class="set-group pl-group">
-                  <h2 class="set-label t-overline">Плейлисты</h2>
+                  <h2 class="set-label t-overline" data-i18n="settings.playlists">Плейлисты</h2>
                   <div class="group">
                     <div id="pl-list" class="pl-list"></div>
-                    <button id="btn-add-pl" class="item add-pl" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg><span>Добавить плейлист</span></button>
+                    <button id="btn-add-pl" class="item add-pl" aria-expanded="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg><span data-i18n="playlist.add">Добавить плейлист</span></button>
                   </div>
                 </section>
 
                 <form id="add-form" class="add-form" novalidate>
                   <div class="field">
-                    <label for="setup-playlist">Ссылка на плейлист</label>
+                    <label for="setup-playlist" data-i18n="playlist.url">Ссылка на плейлист</label>
                     <div class="input"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg><input id="setup-playlist" type="url" inputmode="url" placeholder="https://…/playlist.m3u" autocomplete="off" required /></div>
                   </div>
                   <div class="field">
-                    <label for="local-file">…или файлом с устройства</label>
-                    <button type="button" id="btn-local-file" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span>Выбрать .m3u файл</span></button>
+                    <label for="local-file" data-i18n="playlist.local">…или файлом с устройства</label>
+                    <button type="button" id="btn-local-file" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span data-i18n="playlist.chooseFile">Выбрать .m3u файл</span></button>
                     <input id="local-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/x-mpegurl" hidden />
-                    <p class="set-note muted">Файл останется на устройстве (OPFS) — никуда не отправляется.</p>
+                    <p class="set-note muted" data-i18n="playlist.localNote">Файл останется на устройстве (OPFS) — никуда не отправляется.</p>
                   </div>
                   <details class="more">
-                    <summary><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg>Название и телепрограмма <span class="muted">(необязательно)</span></summary>
+                    <summary><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg><span data-i18n="playlist.more">Название и телепрограмма </span><span class="muted" data-i18n="playlist.optional">(необязательно)</span></summary>
                     <div class="more-fields">
                       <div class="field">
-                        <label for="setup-name">Название</label>
-                        <div class="input"><input id="setup-name" type="text" placeholder="Например, Домашний" autocomplete="off" /></div>
+                        <label for="setup-name" data-i18n="playlist.name">Название</label>
+                        <div class="input"><input id="setup-name" type="text" placeholder="Например, Домашний" autocomplete="off" data-i18n-placeholder="playlist.nameExample"></div>
                       </div>
                       <div class="field">
-                        <label for="setup-epg">Ссылка на телепрограмму (XMLTV)</label>
+                        <label for="setup-epg" data-i18n="playlist.epg">Ссылка на телепрограмму (XMLTV)</label>
                         <div class="input"><input id="setup-epg" type="url" inputmode="url" placeholder="https://…/epg.xml.gz" autocomplete="off" /></div>
                       </div>
                     </div>
                   </details>
                   <p id="setup-error" class="error" role="alert" hidden></p>
-                  <button id="setup-load" class="btn btn-primary btn-block" type="submit">Открыть каналы</button>
+                  <button id="setup-load" class="btn btn-primary btn-block" type="submit" data-i18n="playlist.open">Открыть каналы</button>
                 </form>
-                <p class="privacy"><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>Ссылки хранятся только на этом устройстве. Без аккаунтов и аналитики.</p>
+                <p class="privacy"><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg><span data-i18n="playlist.privacy">Ссылки хранятся только на этом устройстве. Без аккаунтов и аналитики.</span></p>
 
                 <section class="set-group theme-group">
-                  <h2 class="set-label t-overline">Оформление</h2>
+                  <h2 class="set-label t-overline" data-i18n="settings.appearance">Оформление</h2>
                   <div class="group">
                     <div class="item">
-                      <span class="item-label">Тема</span>
-                      <div id="theme-seg" class="seg" role="radiogroup" aria-label="Тема">
-                        <button type="button" role="radio" data-theme-choice="system">Как в системе</button>
-                        <button type="button" role="radio" data-theme-choice="dark">Тёмная</button>
-                        <button type="button" role="radio" data-theme-choice="light">Светлая</button>
+                      <span class="item-label" data-i18n="settings.theme">Тема</span>
+                      <div id="theme-seg" class="seg" role="radiogroup" aria-label="Тема" data-i18n-aria-label="settings.theme">
+                        <button type="button" role="radio" data-theme-choice="system" data-i18n="settings.system">Как в системе</button>
+                        <button type="button" role="radio" data-theme-choice="dark" data-i18n="settings.dark">Тёмная</button>
+                        <button type="button" role="radio" data-theme-choice="light" data-i18n="settings.light">Светлая</button>
                       </div>
                     </div>
                   </div>
                 </section>
 
+                <section class="set-group">
+                  <h2 class="set-label t-overline" data-i18n="settings.language">Язык интерфейса</h2>
+                  <div class="group"><div class="item">
+                    <div id="language-seg" class="seg" role="radiogroup" aria-label="Язык интерфейса" data-i18n-aria-label="settings.language">
+                      <button type="button" role="radio" data-language="ru" lang="ru">Русский</button>
+                      <button type="button" role="radio" data-language="en" lang="en">English</button>
+                    </div>
+                  </div></div>
+                </section>
+
                 <section class="set-group player-settings-group">
-                  <h2 class="set-label t-overline">Плеер</h2>
+                  <h2 class="set-label t-overline" data-i18n="settings.player">Плеер</h2>
                   <form id="player-settings-form">
                     <div class="group">
                       <div class="item">
-                        <label for="player-buffer">Буфер HLS, секунды</label>
+                        <label for="player-buffer" data-i18n="settings.buffer">Буфер HLS, секунды</label>
                         <div class="input"><input id="player-buffer" type="number" min="5" max="600" step="1" required /></div>
                       </div>
                       <div class="item">
-                        <label for="player-low-latency">Низкая задержка HLS</label>
+                        <label for="player-low-latency" data-i18n="settings.latency">Низкая задержка HLS</label>
                         <input id="player-low-latency" type="checkbox" />
                       </div>
                       <div class="item">
-                        <label for="player-diagnostics-timeout">Таймаут диагностики, секунды</label>
+                        <label for="player-diagnostics-timeout" data-i18n="settings.timeout">Таймаут диагностики, секунды</label>
                         <div class="input"><input id="player-diagnostics-timeout" type="number" min="1" max="60" step="1" required /></div>
                       </div>
                       <div class="item">
-                        <button type="submit" class="btn">Сохранить</button>
-                        <button id="player-settings-reset" type="button" class="btn">По умолчанию</button>
+                        <button type="submit" class="btn" data-i18n="common.save">Сохранить</button>
+                        <button id="player-settings-reset" type="button" class="btn" data-i18n="settings.defaults">По умолчанию</button>
                       </div>
                     </div>
                   </form>
-                  <p class="set-note muted">Применяются к следующему запуску канала. Буфер: 5–600 с, диагностика: 1–60 с. Больший буфер требует больше памяти; доступная пауза зависит от потока. Низкая задержка работает с поддерживающими её HLS-потоками.</p>
+                  <p class="set-note muted" data-i18n="settings.playerNote">Применяются к следующему запуску канала. Буфер: 5–600 с, диагностика: 1–60 с. Больший буфер требует больше памяти; доступная пауза зависит от потока. Низкая задержка работает с поддерживающими её HLS-потоками.</p>
                   <p id="player-settings-status" class="set-note muted" role="status"></p>
                 </section>
 
                 <section class="set-group refresh-group">
-                  <h2 class="set-label t-overline">Обновление плейлиста</h2>
+                  <h2 class="set-label t-overline" data-i18n="settings.refresh">Обновление плейлиста</h2>
                   <div class="group">
                     <div class="item">
-                      <span class="item-label">Проверять</span>
-                      <div id="refresh-seg" class="seg" role="radiogroup" aria-label="Периодичность проверки плейлиста">
-                        <button type="button" role="radio" data-refresh-choice="0">Выключено</button>
-                        <button type="button" role="radio" data-refresh-choice="60">Час</button>
-                        <button type="button" role="radio" data-refresh-choice="360">6 часов</button>
-                        <button type="button" role="radio" data-refresh-choice="1440">Сутки</button>
+                      <span class="item-label" data-i18n="settings.check">Проверять</span>
+                      <div id="refresh-seg" class="seg" role="radiogroup" aria-label="Периодичность проверки плейлиста" data-i18n-aria-label="settings.interval">
+                        <button type="button" role="radio" data-refresh-choice="0" data-i18n="settings.off">Выключено</button>
+                        <button type="button" role="radio" data-refresh-choice="60" data-i18n="settings.hour">Час</button>
+                        <button type="button" role="radio" data-refresh-choice="360" data-i18n="settings.sixHours">6 часов</button>
+                        <button type="button" role="radio" data-refresh-choice="1440" data-i18n="settings.day">Сутки</button>
                       </div>
                     </div>
                     <div class="item">
-                      <button id="btn-refresh-now" type="button" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg><span>Проверить сейчас</span></button>
+                      <button id="btn-refresh-now" type="button" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg><span data-i18n="settings.checkNow">Проверить сейчас</span></button>
                     </div>
                   </div>
-                  <p class="set-note muted">Список перечитывается из сети по расписанию; о результатах сообщит колокольчик.</p>
+                  <p class="set-note muted" data-i18n="settings.refreshNote">Список перечитывается из сети по расписанию; о результатах сообщит колокольчик.</p>
                 </section>
 
                 <section class="set-group backup-group">
-                  <h2 class="set-label t-overline">Резервная копия</h2>
+                  <h2 class="set-label t-overline" data-i18n="settings.backup">Резервная копия</h2>
                   <div class="group">
-                    <button id="btn-export" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg><span>Сохранить в файл</span></button>
-                    <button id="btn-import" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span>Восстановить из файла</span></button>
-                    <button id="btn-export-fav" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg><span>Экспорт избранного в .m3u</span></button>
+                    <button id="btn-export" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg><span data-i18n="settings.export">Сохранить в файл</span></button>
+                    <button id="btn-import" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span data-i18n="settings.import">Восстановить из файла</span></button>
+                    <button id="btn-export-fav" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg><span data-i18n="settings.favorites">Экспорт избранного в .m3u</span></button>
                   </div>
                   <input id="import-file" type="file" accept="application/json,.json" hidden />
-                  <p class="set-note muted">Файл хранит плейлисты, избранное и тему — удобно перенести на другое устройство.</p>
+                  <p class="set-note muted" data-i18n="settings.backupNote">Файл хранит плейлисты, избранное и тему — удобно перенести на другое устройство.</p>
                 </section>
 
                 <details class="hint">
-                  <summary>Как это работает</summary>
+                  <summary data-i18n="settings.how">Как это работает</summary>
                   <ul>
-                    <li>Приложение — статика (GitHub Pages), бэкенда нет.</li>
-                    <li>Плейлистов может быть несколько — переключение в шапке.</li>
-                    <li>Избранное у каждого плейлиста своё. При обновлении со
+                    <li data-i18n="settings.static">Приложение — статика (GitHub Pages), бэкенда нет.</li>
+                    <li data-i18n="settings.multiple">Плейлистов может быть несколько — переключение в шапке.</li>
+                    <li data-i18n="settings.migration">Избранное у каждого плейлиста своё. При обновлении со
                       старой версии общее избранное переносится первому плейлисту.</li>
-                    <li>На бакете должен быть включён CORS (см. README).</li>
+                    <li data-i18n="settings.cors">На бакете должен быть включён CORS (см. README).</li>
                   </ul>
                 </details>
               </div>
@@ -226,7 +236,7 @@
             <!-- Экран 3: записанные эфиры — свой раздел с списком записей -->
             <section id="recordings-screen" class="screen" hidden>
               <div class="view-head">
-                <h2 class="t-heading view-title">Записи</h2>
+                <h2 class="t-heading view-title" data-i18n="nav.recordings">Записи</h2>
               </div>
               <div id="recordings-empty" class="empty-state" hidden>Записей пока нет</div>
               <div id="recordings-list" class="recordings-list" role="list"></div>
