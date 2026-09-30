@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AndroidManifest.xml — TWA (Trusted Web Activity) для IPTV Hub.
+     TWA-обёртка открывает public/manifest.webmanifest в современном WebView
+     Chrome. Все настройки плеера и UI живут в web-статике.
+     SHELL ACTIVITY + WAYFINDING + ALT_HOME + taskAffinity "." дают
+     native Android-полноэкранный режим без адресной строки. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:versionCode="1000"
+    android:versionName="0.2.5">
+
+    <!-- Минимальный SDK 24 (Android 7.0). -->
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35" />
+
+    <!-- Требуется для авторизации через TWA и автообновления. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Для записи эфира захват с<video> (MediaRecorder) — не требуется для
+         TWA, но оставлен, если пригодится в будущем. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Сеть: межсайловой вызов для PWA (запоминаем localStorage, XHR). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="IPTV Hub"
+        android:theme="@android:style/Theme.Black.NoTitleBar"
+        android:resizeableActivity="true"
+        android:supportsRtl="true"
+        android:requestLegacyExternalStorage="true"
+        tools:targetApi="35">
+
+        <!-- Точка входа. SHELL ACTIVITY = TWA. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="."
+            android:theme="@style/Theme.App.Starting"
+            android:configChanges="orientation|keyboardHidden|screenSize|immersiveMode"
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustResize">
+
+            <!-- Шаблон TWA (SHELL ACTIVITY). -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!-- WAYFINDING: TWA-активность может быть запущена явно (например,
+                 из notification/deep link). singleTask + taskAffinity "." гарантирует
+                 один экземпляр для всего приложения. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https"
+                    android:host="ozyab09.github.io"
+                    android:pathPrefix="/iptv-hub/" />
+            </intent-filter>
+
+            <!-- ALT_HOME: когда пользователь «уходит» из TWA (двойной тап
+                 в левом верхнем углу), приложение показывает home-ярлык и
+                 возвращается в TWA при следующем запуске. -->
+            <meta-data
+                android:name="android.app.default_searchable"
+                android:value=".MainActivity" />
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="" />
+        </activity>
+
+        <!-- Assets: twa-manifest.json (копия manifest.webmanifest), version.json. -->
+        <meta-data
+            android:name="android.app.backgroundUsageRestrictions"
+            android:icon="@mipmap/ic_launcher" />
+
+        <!-- PWA-режим: WebView должен работать как TWA. -->
+        <meta-data
+            android:name="android.xwalk.update.method"
+            android:value="app_update" />
+        <meta-data
+            android:name="android.xwalk.use_library"
+            android:value="true" />
+
+        <!-- Прокси-ресурс для записи эфира (MediaRecorder + canvas). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- TWA: обновление Web-контента. -->
+        <meta-data
+            android:name="android.app.lib_name"
+            android:value="" />
+    </application>
+</manifest>

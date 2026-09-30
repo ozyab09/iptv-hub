@@ -1,0 +1,127 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "org.jetbrains.kotlin.kapt"
+}
+
+// Версии синхронизируются с package.json/ROADMAP (0.2.5 → 0.2.6 при основном релизе).
+// BuildConfig.VERSION_NAME = versionName; BuildConfig.VERSION_CODE = versionCode.
+def versionProps = new Properties()
+def versionPropsFile = rootProject.file("version.properties")
+if (versionPropsFile.exists()) {
+    versionProps.load(new FileInputStream(versionPropsFile))
+}
+
+android {
+    namespace "com.izzy.twa"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.izzy.twa"
+        minSdk 24
+        targetSdk 35
+        versionName "${versionProps['versionName'] ?: '0.2.5'}"
+        versionCode defaultConfigs.versionCode.toInteger()
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables.useSupportLibrary = true
+    }
+
+    // CI: переменные ANDROID_* переопределяют локальные.
+    if (System.getenv("ANDROID_KEYSTORE_FILE")) {
+        signingConfigs {
+            release {
+                storeFile file(System.getenv("ANDROID_KEYSTORE_FILE"))
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+        buildTypes {
+            release {
+                signingConfig signingConfigs.release
+                minifyEnabled true
+                proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            }
+        }
+    } else if (file("local.properties").exists()) {
+        def local = new Properties()
+        local.load(new FileInputStream("local.properties"))
+        def ksFile = local.getProperty("keystore.file")
+        def ksAlias = local.getProperty("keystore.alias")
+        def ksPass = local.getProperty("keystore.password")
+        def kaPass = local.getProperty("keystore.alias.password")
+        if (ksFile) {
+            signingConfigs.debug {
+                storeFile file(ksFile)
+                storePassword ksPass ?: ""
+                keyAlias ksAlias
+                keyPassword kaPass ?: ""
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            minifyEnabled false
+            applicationIdSuffix ".debug"
+        }
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+    }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+
+    // Android 10 (API 29) — дефолтный вынос тегов запросов локального кэша.
+    android {
+        defaultConfig {
+            ndk {
+                abiFilters "arm64-v8a", "x86_64", "armeabi-v7a"
+            }
+        }
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // TWA 12.4.x (Bubblewrap), совместимая с API 24.
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:1.2.4"
+
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "androidx.window:window:1.3.0"
+    implementation "androidx.webkit:webkit:1.11.0"
+
+    // Необходимо для WorkManager (автообновление на фоне, когда доступно).
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
+
+    testImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test:rules:1.6.1"
+    androidTestImplementation "androidx.test:runner:1.6.1"
+}
