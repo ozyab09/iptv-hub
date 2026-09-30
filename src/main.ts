@@ -2144,6 +2144,18 @@ setInterval(() => {
   }
 }, 60_000);
 
+// Возврат из долгого фона: если с последней проверки прошло больше выбранного
+// интервала — проверяем сразу, не дожидаясь минутного тика. Пока вкладка
+// в фоне таймеры троттлятся, поэтому без этого данные могли бы устареть.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (refreshInterval === 0 || refreshBusy) return;
+  const storage = typeof localStorage !== "undefined" ? localStorage : null;
+  if (shouldCheck(Date.now(), loadLastCheck(storage), refreshInterval)) {
+    void refreshPlaylist(true);
+  }
+});
+
 function systemPrefersDark(): boolean | null {
   return typeof window.matchMedia === "function"
     ? window.matchMedia("(prefers-color-scheme: dark)").matches
