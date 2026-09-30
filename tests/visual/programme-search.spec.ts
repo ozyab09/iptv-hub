@@ -1,11 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function openSearch(page: Page, withEpg = true): Promise<void> {
+async function openSearch(page: Page, withEpg = true, title?: string): Promise<void> {
   const now = Date.now();
   const xmlDate = (ms: number): string => new Date(ms).toISOString().replace(/[-:T]/g, "").slice(0, 14) + " +0000";
   const xml = `<tv><channel id="sport"><display-name>Спорт</display-name></channel>
-    <programme channel="sport" start="${xmlDate(now - 7200000)}" stop="${xmlDate(now - 3600000)}"><title>Футбол: финал</title></programme>
-    <programme channel="sport" start="${xmlDate(now - 600000)}" stop="${xmlDate(now + 3600000)}"><title>Футбол: эфир</title></programme></tv>`;
+    <programme channel="sport" start="${xmlDate(now - 7200000)}" stop="${xmlDate(now - 3600000)}"><title>${title ?? "Футбол: финал"}</title></programme>
+    <programme channel="sport" start="${xmlDate(now - 600000)}" stop="${xmlDate(now + 3600000)}"><title>${title ?? "Футбол: эфир"}</title></programme></tv>`;
   const m3u = '#EXTM3U\n#EXTINF:-1 tvg-id="sport" catchup-days="2" catchup-source="https://fixture.test/archive/{utc}.mp4",Спорт\nhttps://fixture.test/live.mp4\n';
   await page.route("https://fixture.test/**", async (route) => {
     const url = route.request().url();
@@ -26,6 +26,25 @@ async function openSearch(page: Page, withEpg = true): Promise<void> {
 }
 
 for (const width of [390, 1440]) {
+  test(`поиск без пунктуации (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openSearch(page, true, "Что? Где? Когда?");
+    const search = page.locator("#search");
+    const rows = page.locator("#channel-list .channel-card");
+    for (const query of ["что где когда", "Что? Где? Когда?", " ГДЕ   КОГДА ", "что—где—когда"]) {
+      await search.fill(query);
+      await expect(rows).toHaveCount(2);
+      await expect(rows.first()).toContainText("Спорт · Что? Где? Когда?");
+    }
+    await search.fill("???");
+    await expect(rows).toHaveCount(0);
+    await expect(page.locator("#empty-state")).toBeVisible();
+    await search.fill("что где когда");
+    const request = page.waitForRequest((r) => r.url().includes("/archive/"));
+    await rows.first().click();
+    await request;
+    await expect(page.locator("#now-title")).toHaveText("Спорт · архив");
+  });
   test(`поиск передач, архив и эфир (${width}px)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await openSearch(page);
