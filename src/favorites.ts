@@ -6,7 +6,10 @@ import type { Channel } from "./types";
  * стабилен между прогонами пайплайна и не зависит от эмодзи-суффиксов имени.
  */
 
-const FAV_KEY = "iptv-hub.favorites.v1";
+/** Легаси-ключ эпохи до мультиплейлистов (теперь — favorites.v1:<id>). */
+export const LEGACY_FAVORITES_KEY = "iptv-hub.favorites.v1";
+
+const FAV_KEY = LEGACY_FAVORITES_KEY;
 
 export type FavoritesStore = Storage | null;
 
