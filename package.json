@@ -1,6 +1,6 @@
 {
   "name": "iptv-hub",
-  "version": "0.2.0",
+  "version": "0.2.5",
   "private": true,
   "type": "module",
   "description": "Self-hosted web player for IPTV playlists (M3U) with EPG, PWA, deployable to GitHub Pages",
