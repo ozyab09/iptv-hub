@@ -580,6 +580,8 @@ function renderNav(): void {
  */
 function setView(view: View, persist = true): void {
   activeView = view;
+  // Сворачивание относится только к списку; выбор сохраняется между разделами.
+  appEl.classList.toggle("channel-view", showsChannelList(view));
   if (persist) {
     try {
       localStorage.setItem(VIEW_KEY, view);
@@ -1193,6 +1195,7 @@ window.addEventListener("keydown", (e) => {
       break;
     case "c":
     case "с": // ru-раскладка
+      if (!showsChannelList(activeView)) return;
       // На широком экране C сворачивает и разворачивает список рядом с
       // плеером. На узком — возврат к списку: сворачиваем страницу плеера,
       // иначе прокрутка к списку под ней ничего бы не показала.

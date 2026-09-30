@@ -293,7 +293,7 @@ html, body {
   padding: 0 var(--space-10);
 }
 #player-screen:not([hidden]) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-#setup-screen:not([hidden]) { flex: 1; min-height: 0; overflow-y: auto; }
+#setup-screen:not([hidden]) { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 .view-head { margin: var(--space-2) 0 var(--space-3); }
 .view-count { margin-left: var(--space-1); color: var(--muted); font-size: 13px; font-weight: 500; }
 
@@ -376,11 +376,11 @@ html, body {
   .watch .continue-block { display: none; }
   /* Взамен скрытых категорий — компактный выбор над списком */
   #app.watch #cat-picker:not([hidden]) { display: block; }
-  #app.watch.list-collapsed .screens { padding: 0 var(--space-2); }
+  #app.watch.channel-view.list-collapsed .screens { padding: 0 var(--space-2); }
   /* Узкая колонка логотипов прокручивается колесом и жестом, но без
      видимой полосы: 64px не хватает, и полоса ложилась поверх плиток */
-  #app.watch.list-collapsed .channel-list { margin: 0; scrollbar-width: none; }
-  #app.watch.list-collapsed .channel-list::-webkit-scrollbar { display: none; }
+  #app.watch.channel-view.list-collapsed .channel-list { margin: 0; scrollbar-width: none; }
+  #app.watch.channel-view.list-collapsed .channel-list::-webkit-scrollbar { display: none; }
 }
 
 /* ---------- screens ---------- */
@@ -718,6 +718,8 @@ html, body {
 
 /* ---------- настройки и первый запуск ---------- */
 .settings-inner {
+  width: 100%;
+  container-type: inline-size;
   max-width: 640px;
   margin: 0 auto;
   padding: var(--space-6) 0 var(--space-10);
@@ -887,6 +889,14 @@ html, body {
   cursor: pointer;
 }
 .seg button.on { background: var(--surface-1); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+/* Настройки бывают в узкой панели и на широком экране: важна ширина
+   контейнера, а не viewport. */
+@container (max-width: 380px) {
+  .theme-group .item,
+  .refresh-group .item { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  .seg { flex-wrap: wrap; }
+  .pl-edit-actions { flex-wrap: wrap; }
+}
 @media (max-width: 719px) {
   .settings-inner { padding-top: var(--space-2); }
   .first-run .settings-inner { padding-top: var(--space-6); }
@@ -1091,28 +1101,28 @@ html, body {
   .video .transport .vbtn:hover { background: rgba(255, 255, 255, 0.12); }
 
   /* Список сворачивается в колонку логотипов (кнопка в его шапке или C) */
-  #app.watch.list-collapsed { --list-w: 64px; }
+  #app.watch.channel-view.list-collapsed { --list-w: 64px; }
   /* Полное скрытие (кнопка в свёрнутом списке): уходит и рельс сайдбара,
      и панель списка — плеер занимает весь экран. Вернуть — C или кнопка
      в углу кадра. */
-  #app.watch.list-collapsed.panel-hidden { --list-w: 0px; --rail-w: 0px; }
-  #app.watch.list-collapsed.panel-hidden { grid-template-columns: 0 0; }
-  #app.watch.list-collapsed.panel-hidden .sidebar,
-  #app.watch.list-collapsed.panel-hidden .screens { display: none; }
-  #app.watch.list-collapsed.panel-hidden { --player-w: 100vw; }
+  #app.watch.channel-view.list-collapsed.panel-hidden { --list-w: 0px; --rail-w: 0px; }
+  #app.watch.channel-view.list-collapsed.panel-hidden { grid-template-columns: 0 0; }
+  #app.watch.channel-view.list-collapsed.panel-hidden .sidebar,
+  #app.watch.channel-view.list-collapsed.panel-hidden .screens { display: none; }
+  #app.watch.channel-view.list-collapsed.panel-hidden { --player-w: 100vw; }
   #app.watch .list-toggle { display: inline-flex; }
   .video .btn-restore-panel { display: inline-flex; position: absolute; top: var(--space-3); right: var(--space-3); z-index: 3; }
   .video .btn-restore-panel[hidden] { display: none; }
-  #app.watch.list-collapsed .topbar,
-  #app.watch.list-collapsed .view-title,
-  #app.watch.list-collapsed .cat-picker,
-  #app.watch.list-collapsed .epg-now,
-  #app.watch.list-collapsed .continue-block,
-  #app.watch.list-collapsed .row .meta,
-  #app.watch.list-collapsed .row .star { display: none !important; }
-  #app.watch.list-collapsed .view-head { justify-content: center; padding-top: var(--space-4); }
-  #app.watch.list-collapsed .row { justify-content: center; padding-left: 0; padding-right: 0; }
-  #app.watch.list-collapsed .row.on .logo { box-shadow: 0 0 0 2px var(--accent); }
+  #app.watch.channel-view.list-collapsed .topbar,
+  #app.watch.channel-view.list-collapsed .view-title,
+  #app.watch.channel-view.list-collapsed .cat-picker,
+  #app.watch.channel-view.list-collapsed .epg-now,
+  #app.watch.channel-view.list-collapsed .continue-block,
+  #app.watch.channel-view.list-collapsed .row .meta,
+  #app.watch.channel-view.list-collapsed .row .star { display: none !important; }
+  #app.watch.channel-view.list-collapsed .view-head { justify-content: center; padding-top: var(--space-4); }
+  #app.watch.channel-view.list-collapsed .row { justify-content: center; padding-left: 0; padding-right: 0; }
+  #app.watch.channel-view.list-collapsed .row.on .logo { box-shadow: 0 0 0 2px var(--accent); }
 }
 
 /* ---- узкий экран: мини-плеер и страница плеера ---- */
