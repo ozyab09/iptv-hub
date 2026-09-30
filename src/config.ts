@@ -80,3 +80,25 @@ export function isMixedContent(pageUrl: string, targetUrl: string): boolean {
     return false;
   }
 }
+
+/**
+ * Локальный или приватный хост: localhost, *.local, loopback и RFC1918-сети.
+ * Общий предикат для httpToHttps (player.ts) и фильтра http-каналов (m3u.ts):
+ * у таких хостов TLS на 443 обычно не поднят, зато mixed content с них
+ * браузер прощает — http-канал домашнего IPTV-сервера на https-странице
+ * играет, и прятать его из списка не нужно.
+ */
+export function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host === "127.0.0.1" ||
+    host === "[::1]" ||
+    host === "::1" ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { resolveConfig, isMixedContent, STORAGE_KEY } from "../src/config";
+import {
+  resolveConfig,
+  isMixedContent,
+  isPrivateHost,
+  STORAGE_KEY,
+} from "../src/config";
 
 const store = (): Storage => {
   const map = new Map<string, string>();
@@ -83,5 +88,27 @@ describe("isMixedContent", () => {
 
   it("is false for garbage URLs", () => {
     expect(isMixedContent("https://x/", "not a url")).toBe(false);
+  });
+});
+
+describe("isPrivateHost", () => {
+  it("flags localhost and loopback", () => {
+    expect(isPrivateHost("localhost")).toBe(true);
+    expect(isPrivateHost("127.0.0.1")).toBe(true);
+    expect(isPrivateHost("::1")).toBe(true);
+  });
+
+  it("flags RFC1918 networks and .local", () => {
+    expect(isPrivateHost("192.168.1.10")).toBe(true);
+    expect(isPrivateHost("10.0.0.5")).toBe(true);
+    expect(isPrivateHost("172.16.0.1")).toBe(true);
+    expect(isPrivateHost("172.31.255.1")).toBe(true);
+    expect(isPrivateHost("mybox.local")).toBe(true);
+  });
+
+  it("does not flag public hosts", () => {
+    expect(isPrivateHost("cdn.example.com")).toBe(false);
+    expect(isPrivateHost("172.32.0.1")).toBe(false);
+    expect(isPrivateHost("example.localhosts.com")).toBe(false);
   });
 });

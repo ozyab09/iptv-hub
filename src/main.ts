@@ -2321,6 +2321,13 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   renderCategories();
   renderChannels();
   renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
+  // Скрытые http-каналы — не потеря каналов при загрузке, а фильтр:
+  // сообщаем, иначе пользователь решит, что часть плейлиста пропала.
+  if (snapshot.droppedHttp > 0) {
+    showToast(
+      `Скрыто ${channelsWord(snapshot.droppedHttp)} по http:// — на https-странице браузер их блокирует. Если у провайдера есть https-ссылки — замените их в плейлисте.`,
+    );
+  }
   // Служебная строка нужна, только пока что-то грузится или не удалось:
   // счётчики «Каналов: N · Категорий: M» уже видны в шапке и у категорий.
   epgNow.hidden = true;

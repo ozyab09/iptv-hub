@@ -1,5 +1,5 @@
 import Hls from "hls.js";
-import { isMixedContent } from "./config";
+import { isMixedContent, isPrivateHost } from "./config";
 import type { Channel } from "./types";
 
 /**
@@ -318,18 +318,9 @@ export function httpToHttps(url: string): string | null {
   try {
     const u = new URL(url);
     if (u.protocol !== "http:") return null;
-    const host = u.hostname.toLowerCase();
-    const local =
-      host === "localhost" ||
-      host.endsWith(".localhost") ||
-      host.endsWith(".local") ||
-      host === "127.0.0.1" ||
-      host === "[::1]" ||
-      host === "::1" ||
-      /^10\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(host);
-    if (local) return null;
+    // Исключения для локальных/приватных адресов — общий предикат с фильтром
+    // http-каналов в m3u.ts, чтобы оба решения не разъехались.
+    if (isPrivateHost(u.hostname)) return null;
     u.protocol = "https:";
     if (u.port === "80") u.port = ""; // :80 → дефолтный https-порт 443
     return u.toString();

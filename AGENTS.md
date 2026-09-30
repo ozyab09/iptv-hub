@@ -19,8 +19,9 @@ Go-пайплайн, который ежедневно фильтрует M3U/EP
 (`.xml` или `.xml.gz`).
 
 **Текущий статус:** v0.2.3 — мультиплейлисты, плеер (hls.js + нативный, quality,
-аудио/субтитры, retry, mixed-content-апгрейд), EPG + catchup-архив, запись эфира
-(HLS — сегментами, остальное — перекодированием), PWA, 155 юнит-тестов.
+аудио/субтитры, retry, mixed-content-апгрейд), скрытие http-каналов, EPG +
+catchup-архив, запись эфира (HLS — сегментами, остальное — перекодированием),
+PWA.
 
 ---
 
@@ -48,6 +49,11 @@ Go-пайплайн, который ежедневно фильтрует M3U/EP
 - Разбор M3U: атрибуты `tvg-id`/`tvg-logo`/`group-title` (+ `tvg-rec`/
   `catchup-*` в `catchup.ts`), дедуп по URL, сортировка по алфавиту, дроп
   entries без URL, `#EXTM3U` `tvg-url`/`url-tvg`.
+- Http-каналы на публичных хостах скрываются при разборе (mixed content на
+  https-странице неразрешим): `isPlayableStreamUrl` в `m3u.ts`, счётчик
+  `droppedHttp` в снапшоте, тост после загрузки. Исключение — localhost,
+  `*.local` и RFC1918 (`isPrivateHost` в `config.ts`, тот же предикат, что
+  в `httpToHttps` у плеера) — домашние IPTV-серверы остаются в списке.
 - Нормализация имён (`normalizeName`): нижний регистр, без эмодзи, без
   quality-маркеров, без региональных суффиксов. Используется и поиском,
   и матчингом EPG — изменил её, обнови тесты **обоих** потребителей.
@@ -145,7 +151,7 @@ iptv-hub/
 │   ├── components.css      # КОПИЯ bundle.css дизайн-системы (править в системе)
 │   ├── types.ts            # Channel, PlaylistSnapshot, EpgProgramme, NowNext
 │   └── style.css           # токены v2 + раскладка, mobile-first, safe-area
-├── tests/                  # vitest: 14 файлов, node env, без DOM и сети
+├── tests/                  # vitest: 20 файлов, node env, без DOM и сети
 ├── .github/workflows/ci.yml  # PR: build+test; push main: + deploy Pages
 ├── vite.config.ts          # vitest config (environment: node)
 └── AGENTS.md               # этот файл
@@ -189,7 +195,7 @@ HLS  ─→ FRAG_LOADED ─→ segment-recorder ─→ OPFS/память ─→ 
 ### Ключевые типы (`src/types.ts`)
 
 - `Channel { name, normalizedName, url, tvgId, logo, group, quality, catchupDays, catchupSource }`
-- `PlaylistSnapshot { channels, categories, headerTvgUrl }`
+- `PlaylistSnapshot { channels, categories, headerTvgUrl, droppedHttp }`
 - `EpgProgramme { start, stop, title, desc }` — ISO UTC строки
 - `NowNext { now, next }`
 
@@ -198,6 +204,8 @@ HLS  ─→ FRAG_LOADED ─→ segment-recorder ─→ OPFS/память ─→ 
 **M3U:** стандартный расширенный M3U. Парсер толерантен: `#EXTVLCOPT`/
 `#KODIPROP` привязываются к текущему entry; entry без URL отбрасывается;
 дедуп по URL (первый выигрывает). Сортировка — `localeCompare(..., "ru")`.
+Http-URL публичных хостов отбрасываются с подсчётом в
+`PlaylistSnapshot.droppedHttp`.
 
 **EPG:** XMLTV. Матчинг канала: сначала по `tvg-id` (lowercase, ключ
 `id:...`), при отсутствии — по нормализованному имени (ключ `name:...`,
@@ -219,7 +227,7 @@ upsert в список плейлистов и активация; `?debug=1` в
 ## 🧪 Тесты и качество
 
 ```bash
-npm test           # vitest run (node env): 155 тестов
+npm test           # vitest run (node env): 277 тестов
 npm run test:watch
 npm run build      # tsc --noEmit (strict, noUncheckedIndexedAccess) + vite build
 npm run dev        # vite dev server
