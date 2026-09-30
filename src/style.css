@@ -1173,48 +1173,62 @@ html, body {
   font-size: 14px;
   line-height: 20px;
 }
-/* Уведомление о скрытых http-каналах: сверху справа, с колокольчиком.
-   Не тост: читается без спешки и закрывается крестиком, показывается
-   один раз на плейлист (src/http-notice.ts). */
-.http-notice {
-  position: fixed;
-  top: calc(var(--space-5) + env(safe-area-inset-top, 0px));
-  right: var(--space-5);
-  z-index: 110;
+/* Центр уведомлений: колокольчик в шапке + выпадающая панель (#98).
+   Как в приложениях: кнопка всегда на виду, бейдж — при непрочитанных,
+   список хранит историю, «Очистить» её стирает. */
+.notif-bell-wrap { position: relative; flex: none; display: flex; }
+.notif-bell-wrap .icon-btn { position: relative; }
+.notif-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 10px/16px var(--font-sans);
+  text-align: center;
+  pointer-events: none;
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  width: min(360px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.notif-head {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  width: min(420px, calc(100vw - 32px));
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-1);
-  box-shadow: var(--shadow-pop);
-  color: var(--text);
-  font-size: 14px;
-  line-height: 20px;
-}
-.http-notice .n-icon {
-  flex: none;
-  display: inline-flex;
-  color: var(--accent);
-}
-.http-notice .n-text { min-width: 0; }
-.http-notice .n-close {
-  flex: none;
-  margin: -2px -6px -2px 0;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px 6px 6px;
+}
+.notif-clear {
   border: 0;
-  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
+  font: 500 13px/18px var(--font-sans);
   cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
 }
-.http-notice .n-close:hover { background: var(--surface-2); color: var(--text); }
+.notif-clear:hover { background: var(--surface-2); color: var(--text); }
+.notif-list { display: flex; flex-direction: column; gap: 2px; }
+.notif-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.notif-item.unread { background: var(--accent-soft); }
+.notif-item .n-time { font-size: 11px; line-height: 14px; color: var(--muted); }
+.notif-empty { padding: var(--space-3); color: var(--muted); font-size: 14px; line-height: 20px; }
 .toast-action {
   flex: none;
   height: 32px;
