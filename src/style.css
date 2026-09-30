@@ -279,7 +279,10 @@ html, body {
   cursor: pointer;
 }
 .topbar .icon-btn:hover { background: var(--surface-3); }
-.theme-btn { margin-left: auto; }
+/* Правый угол шапки: колокольчик + тема (margin-left: auto у обёртки
+   колокольчика прибивает пару к правому краю). */
+.notif-bell-wrap { margin-left: auto; }
+.theme-btn { margin-left: 0; }
 
 .screens {
   grid-area: main;
