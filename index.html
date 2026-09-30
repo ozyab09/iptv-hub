@@ -90,6 +90,12 @@
                     <label for="setup-playlist">Ссылка на плейлист</label>
                     <div class="input"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg><input id="setup-playlist" type="url" inputmode="url" placeholder="https://…/playlist.m3u" autocomplete="off" required /></div>
                   </div>
+                  <div class="field">
+                    <label for="local-file">…или файлом с устройства</label>
+                    <button type="button" id="btn-local-file" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span>Выбрать .m3u файл</span></button>
+                    <input id="local-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/x-mpegurl" hidden />
+                    <p class="set-note muted">Файл останется на устройстве (OPFS) — никуда не отправляется.</p>
+                  </div>
                   <details class="more">
                     <summary><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg>Название и телепрограмма <span class="muted">(необязательно)</span></summary>
                     <div class="more-fields">
@@ -171,11 +177,16 @@
                 <h3 class="t-heading">Продолжить</h3>
                 <div id="continue-row" class="continue-row"></div>
               </section>
+              <section id="recordings-block" class="continue-block" hidden>
+                <h3 class="t-heading">Записанные эфиры</h3>
+                <div id="recordings-row" class="recordings-row"></div>
+              </section>
               <div class="view-head">
                 <h2 class="t-heading view-title"><span id="view-title">Каналы</span> <span id="view-count" class="view-count num"></span></h2>
                 <!-- Только в режиме просмотра на широком экране: список
                      сворачивается в колонку логотипов, плеер растёт (C) -->
-                <button id="btn-collapse-list" class="icon-btn sm list-toggle" title="Свернуть список (C)" aria-label="Свернуть список каналов" aria-expanded="true"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-panel-close"></use></svg></button>
+                  <button id="btn-collapse-list" class="icon-btn sm list-toggle" title="Свернуть список (C)" aria-label="Свернуть список каналов" aria-expanded="true"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-panel-close"></use></svg></button>
+                <button id="btn-hide-panel" class="icon-btn sm list-toggle" title="Скрыть панель целиком" aria-label="Скрыть панель навигации и список каналов"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
               </div>
               <!-- Выбор категории в режиме просмотра: сайдбар там сжат
                    в рельс, и списку чипов места не остаётся. -->
@@ -219,6 +230,7 @@
             </div>
             <button id="btn-retry" class="vbtn ghost" title="Перезапустить поток" aria-label="Перезапустить поток" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></button>
             <div class="top-actions">
+              <button id="btn-restore-panel" class="vbtn ghost btn-restore-panel" title="Показать список (C)" aria-label="Показать панель навигации и список каналов" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-panel-open"></use></svg></button>
               <button id="now-fav" class="vbtn ghost fav-star" title="В избранное" aria-label="В избранное или убрать"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
               <button id="btn-shot" class="vbtn ghost" title="Снять скриншот кадра (S)" aria-label="Скриншот кадра"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-camera"></use></svg></button>
               <button id="btn-close-player" class="vbtn ghost" title="Закрыть" aria-label="Закрыть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>

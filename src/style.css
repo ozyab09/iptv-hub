@@ -504,6 +504,27 @@ html, body {
 .continue-frame > .prog { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0; }
 .continue-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 
+/* ---- Записанные эфиры (#159): горизонтальная лента карточек ---- */
+.recordings-row {
+  display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory;
+  padding-bottom: var(--space-2);
+}
+.recording-card {
+  flex: none; width: 260px; scroll-snap-align: start;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-3);
+  cursor: pointer; color: inherit; text-align: left; font: inherit;
+}
+.recording-card:hover { border-color: var(--focus); }
+.recording-name { font-weight: 600; }
+.recording-sub { font-size: 12px; }
+.recording-act {
+  position: absolute; margin-left: var(--space-1);
+  color: var(--muted); cursor: pointer;
+}
+.recording-act:hover { color: var(--text); }
+
 
 
 
@@ -1041,23 +1062,17 @@ html, body {
   }
   .watch .player-bar > #player-stack { width: var(--frame-w); margin-block: auto; }
 
-  /* Транспортная дека — в левом углу нижней панели, НО выше ряда громкости:
-     .bottom (громкость + правая группа) — absolute во всю ширину низа, и
-     деко с bottom: 8px лежала прямо на ползунке (issue #155). Поднимаем
-     деку на высоту ряда .video-actions (44px + отступы), а правую группу
-     громкости уводим из-под неё вправо. */
+  /* Все контролы — НАД полосой хода передачи (issue #163): ряд громкости
+     и настроек поднимается над scrub-row, дека — ещё выше, своим рядом.
+     bottom деки = padding(8) + scrub-row(до 18) + gap(6) + actions(44). */
+  .video .bottom .video-actions { order: -1; }
   .video .center {
     inset: auto;
     left: var(--space-3);
-    bottom: calc(var(--space-2) + 44px);
+    bottom: calc(var(--space-2) + 68px);
     justify-content: flex-start;
     z-index: 2;
   }
-  /* Громкость — прижата вправо, под транспортной декой места нет */
-  .video .volume { margin-left: auto; order: 2; }
-  .video-actions-right { order: 3; }
-  #btn-live { order: 1; margin-right: auto; margin-left: 0; }
-  .video .btn-live { margin-left: 0; }
   .video .transport { gap: 2px; }
   .video .transport .vbtn,
   .video .transport .vbtn.big { width: 44px; height: 44px; background: transparent; }
@@ -1065,7 +1080,17 @@ html, body {
 
   /* Список сворачивается в колонку логотипов (кнопка в его шапке или C) */
   #app.watch.list-collapsed { --list-w: 64px; }
+  /* Полное скрытие (кнопка в свёрнутом списке): уходит и рельс сайдбара,
+     и панель списка — плеер занимает весь экран. Вернуть — C или кнопка
+     в углу кадра. */
+  #app.watch.list-collapsed.panel-hidden { --list-w: 0px; --rail-w: 0px; }
+  #app.watch.list-collapsed.panel-hidden { grid-template-columns: 0 0; }
+  #app.watch.list-collapsed.panel-hidden .sidebar,
+  #app.watch.list-collapsed.panel-hidden .screens { display: none; }
+  #app.watch.list-collapsed.panel-hidden { --player-w: 100vw; }
   #app.watch .list-toggle { display: inline-flex; }
+  .video .btn-restore-panel { display: inline-flex; position: absolute; top: var(--space-3); right: var(--space-3); z-index: 3; }
+  .video .btn-restore-panel[hidden] { display: none; }
   #app.watch.list-collapsed .topbar,
   #app.watch.list-collapsed .view-title,
   #app.watch.list-collapsed .cat-picker,
