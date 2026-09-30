@@ -766,15 +766,32 @@ function renderChannels(): void {
   renderVirtualWindow();
 }
 
+/** Общая плитка: исходный логотип или монограмма, в том числе после ошибки. */
+function renderChannelLogo(c: Channel): HTMLSpanElement {
+  const logo = document.createElement("span");
+  logo.className = "logo sm";
+  logo.title = c.name;
+  const monogram = c.name.trim().slice(0, 2).toUpperCase();
+  logo.textContent = monogram;
+  if (c.logo) {
+    const img = document.createElement("img");
+    img.alt = "";
+    img.loading = "lazy";
+    img.addEventListener("error", () => { logo.textContent = monogram; }, { once: true });
+    img.src = c.logo;
+    logo.textContent = "";
+    logo.append(img);
+  }
+  return logo;
+}
+
 /** Результат поиска сохраняет высоту виртуальной строки канала. */
 function renderProgrammeMatch(match: ProgrammeMatch): HTMLButtonElement {
   const { channel, programme } = match;
   const row = document.createElement("button");
   row.className = channelRowClass(lastPlayed?.url === channel.url);
   row.setAttribute("role", "listitem");
-  const logo = document.createElement("span");
-  logo.className = "logo sm";
-  setIcon(logo, "tv");
+  const logo = renderChannelLogo(channel);
   const meta = document.createElement("span");
   meta.className = "meta";
   const name = document.createElement("span");
@@ -803,22 +820,7 @@ function renderChannelCard(c: Channel): HTMLElement {
   card.setAttribute("role", "listitem");
   card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
 
-  // Плитка логотипа есть всегда: без неё строки прыгают по высоте, а с
-  // монограммой канал опознаётся и когда картинка не загрузилась.
-  const logo = document.createElement("span");
-  logo.className = "logo sm";
-  logo.title = c.name; // подсказка, когда список свёрнут до логотипов
-  logo.textContent = c.name.trim().slice(0, 2).toUpperCase();
-  if (c.logo) {
-    const img = document.createElement("img");
-    img.src = c.logo;
-    img.alt = "";
-    img.loading = "lazy";
-    img.addEventListener("error", () => img.remove());
-    logo.textContent = "";
-    logo.append(img);
-  }
-  card.append(logo);
+  card.append(renderChannelLogo(c));
 
   const meta = document.createElement("span");
   meta.className = "meta";
