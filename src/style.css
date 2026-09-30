@@ -1041,23 +1041,17 @@ html, body {
   }
   .watch .player-bar > #player-stack { width: var(--frame-w); margin-block: auto; }
 
-  /* Транспортная дека — в левом углу нижней панели, НО выше ряда громкости:
-     .bottom (громкость + правая группа) — absolute во всю ширину низа, и
-     деко с bottom: 8px лежала прямо на ползунке (issue #155). Поднимаем
-     деку на высоту ряда .video-actions (44px + отступы), а правую группу
-     громкости уводим из-под неё вправо. */
+  /* Все контролы — НАД полосой хода передачи (issue #163): ряд громкости
+     и настроек поднимается над scrub-row, дека — ещё выше, своим рядом.
+     bottom деки = padding(8) + scrub-row(до 18) + gap(6) + actions(44). */
+  .video .bottom .video-actions { order: -1; }
   .video .center {
     inset: auto;
     left: var(--space-3);
-    bottom: calc(var(--space-2) + 44px);
+    bottom: calc(var(--space-2) + 68px);
     justify-content: flex-start;
     z-index: 2;
   }
-  /* Громкость — прижата вправо, под транспортной декой места нет */
-  .video .volume { margin-left: auto; order: 2; }
-  .video-actions-right { order: 3; }
-  #btn-live { order: 1; margin-right: auto; margin-left: 0; }
-  .video .btn-live { margin-left: 0; }
   .video .transport { gap: 2px; }
   .video .transport .vbtn,
   .video .transport .vbtn.big { width: 44px; height: 44px; background: transparent; }
