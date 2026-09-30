@@ -54,6 +54,7 @@ import {
   loadPosition,
   savePosition,
 } from "./positions";
+import { firstFocus, lastFocus, moveFocus } from "./kbd-nav";
 import {
   describeShotFailure,
   screenshotFileName,
@@ -730,6 +731,7 @@ function renderChannelCard(c: Channel): HTMLElement {
   const card = document.createElement("button");
   card.className = channelRowClass(lastPlayed?.url === c.url);
   card.setAttribute("role", "listitem");
+  card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
 
   // Плитка логотипа есть всегда: без неё строки прыгают по высоте, а с
   // монограммой канал опознаётся и когда картинка не загрузилась.
@@ -1010,6 +1012,71 @@ nowFav.addEventListener("click", () => {
   if (plState.activeId) saveFavoritesFor(plState.activeId);
   refreshNowFav();
   renderChannels();
+});
+
+// ---------- Клавиатурная навигация по списку каналов (FR-8) ----------
+// ↑/↓ — перемещение, Home/End — края, Enter — включить. Работает, когда
+// фокус уже на карточке канала (карточки — кнопки) или на поиске.
+// Математика фокуса — чистый модуль kbd-nav.ts.
+function focusedChannelIndex(): number {
+  const t = document.activeElement;
+  if (!(t instanceof HTMLElement)) return -1;
+  const url = t.dataset.channelUrl;
+  if (!url) return -1;
+  return visibleChannels.findIndex((c) => c.url === url);
+}
+
+function focusChannelAt(index: number): void {
+  const url = visibleChannels[index]?.url;
+  if (!url) return;
+  const el = channelList.querySelector<HTMLElement>(`[data-channel-url="${CSS.escape(url)}"]`);
+  if (el) {
+    el.focus();
+    // Карточка вне видимого окна виртуализации? Прокручиваем к ней.
+    const top = el.offsetTop - channelList.clientHeight / 2 + el.clientHeight / 2;
+    channelList.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }
+}
+
+window.addEventListener("keydown", (e) => {
+  const t = e.target as HTMLElement | null;
+  const typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA";
+  if (typing) {
+    // Из поиска: ↓ уводит фокус в список — продолжить набор можно по «/».
+    if (e.key === "ArrowDown" && visibleChannels.length > 0) {
+      e.preventDefault();
+      focusChannelAt(firstFocus(visibleChannels.length)!);
+    }
+    return;
+  }
+  if (playerBar.hidden === false) return; // на странице плеера — свои стрелки
+  const cur = focusedChannelIndex();
+  if (cur < 0 && e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  switch (e.key) {
+    case "ArrowDown": {
+      e.preventDefault();
+      const next = cur < 0 ? firstFocus(visibleChannels.length) : moveFocus(visibleChannels.length, cur, 1);
+      if (next !== null) focusChannelAt(next);
+      break;
+    }
+    case "ArrowUp": {
+      e.preventDefault();
+      const prev = moveFocus(visibleChannels.length, cur, -1);
+      if (prev !== null) focusChannelAt(prev);
+      break;
+    }
+    case "Home":
+      e.preventDefault();
+      focusChannelAt(firstFocus(visibleChannels.length)!);
+      break;
+    case "End":
+      e.preventDefault();
+      focusChannelAt(lastFocus(visibleChannels.length)!);
+      break;
+    case "Enter":
+      // Карточка — <button>: Enter сработает сам; здесь ничего не делаем.
+      break;
+  }
 });
 
 // Горячие клавиши (когда фокус не в инпуте)
