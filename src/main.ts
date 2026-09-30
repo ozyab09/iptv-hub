@@ -149,9 +149,6 @@ const continueRow = $("continue-row");
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
 const nowShow = $("now-show");
-const nowTime = $("now-time");
-const nowTimeRange = $("now-time-range");
-const nowTimeFill = $("now-time-fill");
 const nowTimeLeft = $("now-time-left");
 const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
 const toastEl = $("toast");
@@ -644,7 +641,7 @@ function playChannel(c: Channel): void {
   setWatching(true);
   refreshNowFav();
   setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
-  playerStatus.textContent = "—";
+  playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
   const refused = player.play(c);
   if (refused) {
@@ -1646,7 +1643,7 @@ function refreshScrub(): void {
     progStart.textContent = "";
     progEnd.textContent = "";
     nowShow.textContent = "";
-    nowTime.hidden = true;
+    nowTimeLeft.textContent = "";
     return;
   }
   const startMs = Date.parse(prog.start);
@@ -1660,11 +1657,8 @@ function refreshScrub(): void {
   // Сменилась передача или канал — перестроить программу под плеером
   if (`${lastPlayed!.url}|${prog.start}` !== scheduleKey) renderSchedule();
 
-  // Под кадром — то же самое словами: что идёт и сколько осталось
+  // Название передачи — сверху кадра, «ещё N мин» — у конца полосы
   nowShow.textContent = prog.title;
-  nowTime.hidden = false;
-  nowTimeRange.textContent = `${clock(startMs)}–${clock(stopMs)}`;
-  nowTimeFill.style.width = pct;
   nowTimeLeft.textContent = timeLeft(stopMs - Date.now());
 }
 
@@ -2382,18 +2376,45 @@ async function bootstrap(): Promise<void> {
 // ---------- PWA: service worker + онлайн-статус ----------
 // SW регистрируется только в прод-сборке: в dev он кеширует статику и мешает HMR.
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  // Была ли страница уже под старым SW: при первой установке смена
+  // контроллера — не обновление, и перезагружать нечего.
+  const hadController = navigator.serviceWorker.controller !== null;
+  let reloading = false;
+
+  // Новая версия взяла страницу под контроль. Вёрстка в памяти — от прошлой
+  // сборки, а стили и скрипты с сервера — уже от новой: отсюда «смесь»
+  // старого и нового дизайна. Если ничего не играет — просто перезагружаем;
+  // если идёт эфир — не обрываем его, а предлагаем обновиться.
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloading) return;
+    const playing = !playerBar.hidden && !videoEl.paused;
+    if (!playing) {
+      reloading = true;
+      window.location.reload();
+      return;
+    }
+    showToastAction(
+      "Вышла новая версия приложения",
+      "Обновить",
+      () => {
+        reloading = true;
+        window.location.reload();
+      },
+      30_000,
+    );
+  });
+
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("./sw.js")
       .then((reg) => {
-        reg.addEventListener("updatefound", () => {
-          const nw = reg.installing;
-          nw?.addEventListener("statechange", () => {
-            if (nw.state === "installed" && navigator.serviceWorker.controller) {
-              showToast("Доступно обновление — перезагрузите страницу");
-            }
-          });
+        // Вкладку на телефоне могут не закрывать неделями: проверяем
+        // обновление, когда к ней возвращаются, и раз в час, пока открыта.
+        const check = (): void => void reg.update().catch(() => undefined);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") check();
         });
+        window.setInterval(check, 60 * 60 * 1000);
       })
       .catch(() => {
         // SW не критичен: без него приложение полностью работает

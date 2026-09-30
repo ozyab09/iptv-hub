@@ -150,8 +150,10 @@
                 <div id="cat-menu" class="quality-menu menu cat-menu" role="listbox" hidden></div>
               </div>
               <div id="epg-now" class="epg-now" hidden></div>
+              <!-- Пустое состояние — над списком: сам список тянется на всю
+                   высоту, и текст под ним уезжал за край экрана -->
+              <div id="empty-state" class="empty-state" hidden>Ничего не найдено</div>
               <div id="channel-list" class="channel-list" role="list"></div>
-              <div id="empty-state" class="muted" hidden>Ничего не найдено</div>
             </section>
       </main>
 
@@ -169,10 +171,20 @@
         <div id="video-stage" class="video">
           <video id="video" playsinline></video>
 
+          <!-- Верх кадра: что смотрим и навигация по каналам. Всё про
+               плеер — на самом плеере, под кадром остаётся только программа. -->
           <div class="top">
-            <span id="live-badge" class="live on-video" hidden>Эфир</span>
-            <span id="player-status" class="t-caption vt" title="Разрешение и скорость потока">—</span>
+            <div class="now-info">
+              <div class="now-line"><span id="live-badge" class="live on-video" hidden>Эфир</span><span id="now-title" class="now-title">—</span><span id="now-category" class="now-category"></span></div>
+              <div id="now-show" class="now-show"></div>
+            </div>
             <button id="btn-retry" class="vbtn ghost" title="Перезапустить поток" aria-label="Перезапустить поток" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></button>
+            <div class="top-actions">
+              <button id="now-fav" class="vbtn ghost fav-star" title="В избранное" aria-label="В избранное или убрать"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
+              <button id="btn-prev" class="vbtn ghost" title="Предыдущий канал (←)" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
+              <button id="btn-next" class="vbtn ghost" title="Следующий канал (→)" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
+              <button id="btn-close-player" class="vbtn ghost" title="Закрыть" aria-label="Закрыть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
+            </div>
           </div>
 
           <!-- На телефоне — крупно по центру кадра; на широком экране CSS
@@ -188,6 +200,7 @@
               <span id="prog-start" class="t-caption vt num"></span>
               <div id="scrub" class="scrub"><span id="scrub-fill"></span></div>
               <span id="prog-end" class="t-caption vt num"></span>
+              <span id="now-time-left" class="t-caption vt num time-left"></span>
             </div>
             <div class="video-actions">
               <div class="volume">
@@ -196,6 +209,7 @@
               </div>
               <button id="btn-live" class="vbtn btn-live" hidden>К эфиру</button>
               <div class="video-actions-right">
+                <span id="player-status" class="t-caption vt player-status" title="Разрешение и скорость потока"></span>
                 <button id="btn-guide" class="vbtn ghost" title="Программа передач (G)" aria-label="Программа передач"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></button>
                 <div id="quality-wrap" class="quality-wrap">
                   <button id="quality-btn" class="btn btn-sm quality-btn" title="Качество" aria-label="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
@@ -221,21 +235,6 @@
         <!-- Прогресс передачи по нижнему краю: в свёрнутом виде полосы
              перемотки не видно, а понимать «сколько осталось» надо -->
         <div id="mini-prog" class="mini-prog"><span id="mini-prog-fill"></span></div>
-
-        <!-- Под кадром — информация о том, что идёт, и соседние каналы -->
-        <div class="now-bar">
-          <button id="now-fav" class="fav-star" title="В избранное" aria-label="В избранное или убрать"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
-          <div class="now-playing">
-            <div class="now-line"><span id="now-title" class="now-title">—</span><span id="now-category" class="now-category muted"></span></div>
-            <div id="now-show" class="now-show"></div>
-            <div id="now-time" class="now-time" hidden><span id="now-time-range" class="num"></span><span class="prog"><span id="now-time-fill"></span></span><span id="now-time-left" class="num muted"></span></div>
-          </div>
-          <div class="now-actions">
-            <button id="btn-prev" class="icon-btn" title="Предыдущий канал (←)" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
-            <button id="btn-next" class="icon-btn" title="Следующий канал (→)" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
-            <button id="btn-close-player" class="icon-btn" title="Закрыть" aria-label="Закрыть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
-          </div>
-        </div>
 
         <!-- Программа рядом с плеером: прошедшая (из архива), текущая и три
              следующие. Полная — в шторке «Вся программа». -->

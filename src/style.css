@@ -66,15 +66,6 @@
 
   --font-sans: Onest, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Псевдонимы под текущую вёрстку: она ещё на именах v1. Уходят по мере
-     перевода разметки на классы дизайн-системы. */
-  --bg2: var(--surface-2);
-  --card: var(--surface-1);
-  --accent2: var(--focus);
-  --overlay: var(--scrim);
-  --bar: var(--surface-1);
-  --radius: var(--radius-md);
-
   color-scheme: dark;
 }
 
@@ -351,8 +342,6 @@ html, body {
 
   .screens { padding: 0 var(--space-5); }
   .tabbar { display: flex; min-height: var(--tabbar-h); }
-  /* Место под таб-бар и мини-плеер: иначе конец списка уходит под них */
-  .channel-list { padding-bottom: calc(var(--tabbar-h) + 84px); }
 
   /* Лента карточек: на телефоне они прокручиваются вбок, а не жмутся в сетку */
   .continue-row { display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
@@ -385,7 +374,10 @@ html, body {
   /* Взамен скрытых категорий — компактный выбор над списком */
   #app.watch #cat-picker:not([hidden]) { display: block; }
   #app.watch.list-collapsed .screens { padding: 0 var(--space-2); }
-  #app.watch.list-collapsed .channel-list { margin: 0; }
+  /* Узкая колонка логотипов прокручивается колесом и жестом, но без
+     видимой полосы: 64px не хватает, и полоса ложилась поверх плиток */
+  #app.watch.list-collapsed .channel-list { margin: 0; scrollbar-width: none; }
+  #app.watch.list-collapsed .channel-list::-webkit-scrollbar { display: none; }
 }
 
 /* ---------- screens ---------- */
@@ -411,6 +403,19 @@ html, body {
   overflow-y: auto;
   margin: 0 calc(-1 * var(--space-3));
   padding-bottom: var(--space-6);
+}
+/* Место под таб-бар и мини-плеер: иначе конец списка уходит под них.
+   Правило стоит ПОСЛЕ базового: специфичность у них одинаковая, и в
+   телефонном блоке выше его перебивал `padding-bottom: var(--space-6)`. */
+@media (max-width: 719px) {
+  .channel-list { padding-bottom: calc(var(--tabbar-h) + 84px); }
+}
+.empty-state {
+  padding: var(--space-10) var(--space-4);
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 22px;
 }
 .virtual-spacer { position: relative; width: 100%; }
 /* Высота фиксирована: её знает виртуализация (CHANNEL_ROW_HEIGHT в main.ts) */
@@ -460,25 +465,6 @@ html, body {
   display: flex;
   flex-direction: column;
 }
-/* Высота карточки детерминирована (питч виртуального списка = 56px):
-   36px контент + 20px паддинг + 2px борд. Не менять без virtual-list.ts.
-   row-gap сетки (10px) добавляется к питчу строк — см. .virtual-inner. */
-.fav-star {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 16px;
-  cursor: pointer;
-  border-radius: 8px;
-  line-height: 1;
-}
-.fav-star:hover { background: var(--bg2); color: var(--text); }
-.fav-star.active { color: var(--accent); }
-
-.fav-toggle { margin-bottom: var(--space-2); }
 
 
 /* «Продолжить»: 4 карточки на десктопе, горизонтальная лента на телефоне */
@@ -534,30 +520,22 @@ html, body {
   max-height: 260px;
   overflow-y: auto;
 }
-.quality-btn { min-width: 88px; text-align: center; cursor: pointer; }
-.quality-btn[aria-expanded="true"] { border-color: var(--focus); }
 .quality-item.active { color: var(--accent); font-weight: 600; }
+/* Кнопка-иконка дизайн-системы: 44×44, без рамки; заливка — по месту */
 .icon-btn {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 10px;
-  width: 36px; height: 36px;
-  cursor: pointer;
-  font-size: 16px;
+  width: 44px;
+  height: 44px;
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
 }
-.icon-btn:hover { border-color: var(--accent); }
-.rec-btn { color: #ff6b6b; }
-.rec-btn.recording {
-  color: #fff;
-  background: #ff3b3b;
-  border-color: #ff3b3b;
-  animation: rec-pulse 1.2s ease-in-out infinite;
-}
-@keyframes rec-pulse {
-  50% { opacity: 0.55; }
-}
+.icon-btn:hover { background: var(--surface-2); }
 
 .guide-overlay {
   position: fixed;
@@ -611,7 +589,9 @@ html, body {
   gap: 12px;
 }
 .guide-title {
-  font-weight: 700;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -878,8 +858,9 @@ html, body {
 /* ================= плеер (v2) =================
    Одна раскладка на все режимы. Кадр — #video-stage 16:9, контролы на нём
    одной панелью снизу: строка передачи, под ней слева воспроизведение,
-   справа настройки. Под кадром (.now-bar) — только что идёт и соседние
-   каналы. Режимы меняют размер и место плеера, но не состав панели. */
+   справа настройки. Сверху кадра — что идёт и соседние каналы, под
+   кадром — только программа. Режимы меняют размер и место плеера, но не
+   состав панели. */
 .player-bar {
   position: fixed;
   z-index: 50;
@@ -950,16 +931,17 @@ html, body {
    списка, на узком кнопка сворачивает страницу плеера обратно в мини. */
 #btn-expand { display: none; }
 
-/* Под кадром: что идёт сейчас и соседние каналы */
-.now-bar { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
-.now-playing { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.now-line { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; font-size: 13px; line-height: 18px; }
-.now-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.now-category { white-space: nowrap; }
+/* Верх кадра: канал, передача и навигация по каналам */
+.video .top { align-items: flex-start; padding: var(--space-4) var(--space-3) 56px var(--space-4); }
+.now-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.now-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: 13px; line-height: 18px; }
+.now-title { flex: 0 0 auto; max-width: 70%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Не хватает места — первой сжимается категория, а не название канала */
+.now-category { flex: 0 3 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: rgba(255, 255, 255, 0.75); }
 .now-category:not(:empty)::before { content: "·"; margin-right: var(--space-2); }
 .now-show {
-  font-size: 22px;
-  line-height: 28px;
+  font-size: 20px;
+  line-height: 26px;
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -967,30 +949,11 @@ html, body {
   text-overflow: ellipsis;
 }
 .now-show:empty { display: none; }
-.now-time { display: flex; align-items: center; gap: var(--space-3); max-width: 420px; font-size: 13px; line-height: 18px; }
-.now-time #now-time-range { color: var(--accent); font-weight: 500; flex: none; }
-.now-time #now-time-left { flex: none; }
-.now-time .prog { flex: 1; }
-#now-time-fill { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; }
-.now-actions { display: flex; gap: var(--space-1); flex: none; }
-.now-bar .icon-btn,
-.now-bar .fav-star {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-}
-.now-bar .icon-btn:hover,
-.now-bar .fav-star:hover { background: var(--surface-3); }
-.now-bar .fav-star { color: var(--muted); }
-.now-bar .fav-star.active { color: var(--accent); }
+.top-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.video .fav-star.active { color: #ff4fa3; }
+.time-left:not(:empty)::before { content: "·"; margin-right: var(--space-2); }
+.player-status { margin-right: var(--space-2); white-space: nowrap; }
+.player-status:empty { display: none; }
 
 .mini-prog { display: none; height: 2px; background: var(--surface-3); border-radius: var(--radius-full); }
 .mini-prog > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: var(--radius-full); }
@@ -1010,7 +973,7 @@ html, body {
     /* Кадр вписывается и по ширине колонки, и по высоте окна — под ним
        должна остаться строка «что идёт». Контролы и строка равняются по
        кадру, а не по краям колонки. */
-    --frame-w: min(100%, calc((100vh - 330px) * 16 / 9));
+    --frame-w: min(100%, calc((100vh - 250px) * 16 / 9));
   }
   .watch .player-bar > * { width: var(--frame-w); }
 
@@ -1066,27 +1029,28 @@ html, body {
   }
   .player-bar:not(.open) #video-stage { display: contents; }
   .player-bar:not(.open) video { width: 72px; height: 40px; border-radius: 8px; flex: none; }
-  .player-bar:not(.open) .top,
   .player-bar:not(.open) .bottom,
   .player-bar:not(.open) #btn-seek-back,
   .player-bar:not(.open) #btn-seek-fwd,
+  .player-bar:not(.open) #live-badge,
+  .player-bar:not(.open) #btn-retry,
   .player-bar:not(.open) #now-fav,
   .player-bar:not(.open) .now-show,
-  .player-bar:not(.open) .now-time,
   .player-bar:not(.open) #btn-prev,
   .player-bar:not(.open) #btn-next { display: none; }
-  /* Строка «превью · что идёт · пауза · закрыть»: обёртки тоже
-     растворяются, чтобы порядок задавался здесь, а не разметкой */
-  .player-bar:not(.open) .now-bar { display: contents; }
-  .player-bar:not(.open) .now-playing { order: 1; flex: 1; }
+  /* Строка «превью · что идёт · пауза · закрыть»: обёртки верха кадра
+     растворяются, чтобы порядок задавался здесь, а не разметкой. Цвет —
+     темы, а не белый: мини лежит не на видео, а на поверхности. */
+  .player-bar:not(.open) .top,
+  .player-bar:not(.open) .top-actions { display: contents; }
+  .player-bar:not(.open) .now-info { order: 1; padding: 0; color: var(--text); }
   .player-bar:not(.open) .center { order: 2; position: static; inset: auto; gap: 0; }
-  .player-bar:not(.open) .now-actions { order: 3; }
+  .player-bar:not(.open) #btn-close-player { order: 3; color: var(--text); }
   .player-bar:not(.open) #btn-pause { width: 44px; height: 44px; background: transparent; color: var(--text); }
   .player-bar:not(.open) .now-line { flex-direction: column; align-items: stretch; gap: 0; }
   .player-bar:not(.open) .now-title { font-size: 14px; }
   .player-bar:not(.open) .now-category { font-size: 12px; color: var(--muted); }
   .player-bar:not(.open) .now-category::before { content: none; }
-  .player-bar:not(.open) .now-bar .icon-btn { background: transparent; }
   .player-bar:not(.open) .mini-prog { display: block; position: absolute; left: var(--space-3); right: var(--space-3); bottom: 0; }
 
   /* Развёрнутый плеер — отдельная страница поверх всего, кадр во всю ширину */
@@ -1102,9 +1066,8 @@ html, body {
     margin: 0 calc(-1 * var(--space-5));
     border-radius: 0;
   }
-  .player-bar.open .now-bar { flex-wrap: wrap; }
-  .player-bar.open .now-actions { width: 100%; }
-  .player-bar.open #btn-close-player { margin-left: auto; }
+  /* На узком кадре название передачи в одну строку помельче */
+  .player-bar.open .now-show { font-size: 16px; line-height: 22px; }
   #btn-expand { display: inline-flex; }
 }
 @media (max-width: 719px) {
@@ -1112,6 +1075,7 @@ html, body {
   /* Точная громкость — на десктопе; на телефоне громкость у самого телефона */
   #volume-slider { display: none; }
   #btn-pip { display: none; }
+  .player-status { display: none; }
 }
 
 /* ---- нативный полный экран: только кадр ---- */
@@ -1125,8 +1089,8 @@ html, body {
 }
 #player-bar:fullscreen > * { width: 100%; }
 #player-bar:fullscreen #video-stage { height: 100%; aspect-ratio: auto; border-radius: 0; margin: 0; }
-#player-bar:fullscreen .now-bar,
-#player-bar:fullscreen .mini-prog { display: none; }
+#player-bar:fullscreen .mini-prog,
+#player-bar:fullscreen .now-schedule { display: none; }
 
 /* Шапка списка: заголовок раздела и кнопка сворачивания */
 .view-head { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
@@ -1146,60 +1110,45 @@ html, body {
 .list-toggle:hover { background: var(--surface-2); color: var(--text); }
 
 /* ---------- toast ---------- */
-.toast-action {
-  flex: none;
-  background: var(--bg2);
-  border: 1px solid var(--accent2);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 5px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-}
-.toast-action:hover { background: var(--accent2); color: #fff; }
-
 .toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-6);
+  z-index: 100;
+  transform: translateX(-50%);
+  max-width: min(480px, calc(100vw - 32px));
   display: flex;
   align-items: center;
-  gap: 12px;
-  position: fixed;
-  bottom: 84px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--card);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-pop);
   color: var(--text);
-  border-radius: var(--radius);
-  padding: 10px 18px;
-  z-index: 100;
-  max-width: calc(100vw - 32px);
+  font-size: 14px;
+  line-height: 20px;
 }
-
-@media (max-width: 720px) {
-  /* На мобиле не центрируем transform-ом (может вылезти за край), а растягиваем
-     с полями; текст + кнопка действия переносятся, не наезжая (issue #62). */
+.toast-action {
+  flex: none;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: 500 13px/1 var(--font-sans);
+  cursor: pointer;
+}
+.toast-action:hover { background: var(--surface-3); }
+@media (max-width: 719px) {
+  /* На телефоне тост во всю ширину с полями и над таб-баром с мини-плеером:
+     transform-центрирование могло вывести его за край (issue #62). */
   .toast {
-    left: 16px;
-    right: 16px;
+    left: var(--space-4);
+    right: var(--space-4);
     transform: none;
     flex-wrap: wrap;
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--tabbar-h) + 84px + env(safe-area-inset-bottom, 0px));
   }
 }
-
-/* Гайд на мобиле — bottom-sheet во всю ширину (узкая колонка по центру
-   теряла полстроки заголовков) */
-@media (max-width: 720px) {
-  .guide-overlay { padding: 0; align-items: flex-end; }
-  .guide {
-    width: 100%;
-    max-height: 92vh;
-    max-height: 92dvh;
-    border-radius: 16px 16px 0 0;
-    border-left: 0;
-    border-right: 0;
-    border-bottom: 0;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  }
-  }

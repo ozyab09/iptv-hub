@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildId, stampVersion } from "../src/sw-version";
 
 /**
  * Смоук-тесты PWA-артефактов: manifest валиден, иконки существуют,
@@ -71,5 +72,35 @@ describe("service worker", () => {
 
   it("uses versioned cache names for invalidation", () => {
     expect(sw).toMatch(/VERSION\s*=\s*"v\d+\.\d+\.\d+"/);
+  });
+});
+
+describe("обновление без смеси старого и нового", () => {
+  const sw = readFileSync(pub("sw.js"), "utf-8");
+  const mainTs = readFileSync(join(here, "..", "src", "main.ts"), "utf-8");
+
+  it("страница открывается мимо HTTP-кэша", () => {
+    expect(sw).toMatch(/networkFirstNavigation[\s\S]*cache:\s*"no-cache"/);
+  });
+
+  it("версия SW получает хэш сборки", () => {
+    const stamped = stampVersion('const VERSION = "v0.2.5";\nrest', "<html>a</html>");
+    expect(stamped).toMatch(/^const VERSION = "v0\.2\.5\+[0-9a-f]{10}";\nrest$/);
+    // другая сборка — другая версия, та же — та же
+    expect(stampVersion('const VERSION = "v0.2.5";', "<html>b</html>")).not.toBe(
+      stampVersion('const VERSION = "v0.2.5";', "<html>a</html>"),
+    );
+    expect(buildId("x")).toBe(buildId("x"));
+    // повторная простановка не копит хэши
+    expect(stampVersion(stamped, "<html>c</html>")).toMatch(/^const VERSION = "v0\.2\.5\+[0-9a-f]{10}";/);
+  });
+
+  it("без строки VERSION сборка падает, а не молча ставит старый кэш", () => {
+    expect(() => stampVersion("const X = 1;", "")).toThrow();
+  });
+
+  it("новая версия перезагружает страницу или предлагает обновиться", () => {
+    expect(mainTs).toContain('addEventListener("controllerchange"');
+    expect(mainTs).toContain("reg.update()");
   });
 });

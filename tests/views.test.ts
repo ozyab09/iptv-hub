@@ -130,8 +130,8 @@ describe("channelsForView", () => {
 
 describe("текст пустого состояния", () => {
   it("объясняет причину по разделу", () => {
-    expect(emptyMessage("favorites", false)).toBe("Пока ничего не в избранном");
-    expect(emptyMessage("recents", false)).toBe("Вы ещё ничего не смотрели");
+    expect(emptyMessage("favorites", false)).toMatch(/^Пока ничего не в избранном\. .*звёздочку/);
+    expect(emptyMessage("recents", false)).toMatch(/^Вы ещё ничего не смотрели\./);
   });
 
   it("при поиске причина в запросе, а не в разделе", () => {
