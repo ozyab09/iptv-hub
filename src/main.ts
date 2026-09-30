@@ -104,10 +104,11 @@ import {
   unreadCount,
 } from "./notifications";
 import {
+  checkSummary,
+  countProgrammes,
   diffSnapshots,
   loadInterval,
   loadLastCheck,
-  refreshNotice,
   saveInterval,
   saveLastCheck,
   shouldCheck,
@@ -2084,19 +2085,41 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const fresh = parseM3U(await resp.text());
     const diff = diffSnapshots(snapshot, fresh);
-    const httpTotal = snapshot.droppedHttp + fresh.droppedHttp;
     const httpNew = Math.max(0, fresh.droppedHttp - snapshot.droppedHttp);
     const interesting =
       diff.added > 0 || diff.removed > 0 || diff.changed > 0 || httpNew > 0;
-    if (interesting || !silentOnNoChange) {
-      pushNotification(refreshNotice(diff, httpNew > 0 ? httpNew : (httpTotal > 0 ? fresh.droppedHttp : 0)));
+
+    // Программа меняется постоянно — обновляем её при каждой проверке,
+    // а не только когда изменился сам плейлист (#104).
+    const epgUrl = item.epgUrl ?? fresh.headerTvgUrl;
+    let programmes: number | null = null;
+    if (epgUrl) {
+      try {
+        epg = await loadEpg(epgUrl);
+        programmes = countProgrammes(epg);
+      } catch {
+        // программа не критична: списки всё равно обновим, уведомим «передач нет»
+      }
     }
-    if (interesting) {
-      snapshot = fresh;
-      renderCategories();
-      renderChannels();
-      renderPlaylistSwitcher();
-      reloadEpg(item.epgUrl);
+
+    // Автоподстановка EPG в свойства плейлиста: явно заданный не трогаем (#104)
+    if (!item.epgUrl && fresh.headerTvgUrl) {
+      plState = updatePlaylist(plState, item.id, { epgUrl: fresh.headerTvgUrl });
+      savePlaylists(localStorage, plState);
+      renderPlaylistManager();
+    }
+
+    if (interesting || !silentOnNoChange) {
+      if (interesting) {
+        snapshot = fresh;
+        renderCategories();
+        renderChannels();
+        renderPlaylistSwitcher();
+        refreshNowFav();
+      }
+      pushNotification(
+        checkSummary(diff, fresh.channels.length, programmes ?? 0, programmes !== null),
+      );
     }
   } catch {
     if (!silentOnNoChange) {
@@ -2535,20 +2558,6 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
         epgNow.textContent = "Телепрограмма не загрузилась — каналы работают без неё";
       });
   }
-}
-
-/** Перечитать телепрограмму без служебной строки (после обновления списка). */
-function reloadEpg(epgUrl: string | null): void {
-  if (!snapshot) return;
-  const url = epgUrl ?? snapshot.headerTvgUrl;
-  if (!url) return;
-  loadEpg(url)
-    .then((parsed) => {
-      epg = parsed;
-      renderChannels();
-      refreshNowFav();
-    })
-    .catch(() => undefined);
 }
 
 async function bootstrap(): Promise<void> {
