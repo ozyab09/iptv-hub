@@ -95,6 +95,16 @@ import {
   shouldShowHttpNotice,
   markHttpNoticeShown,
 } from "./http-notice";
+import {
+  diffSnapshots,
+  loadInterval,
+  loadLastCheck,
+  refreshNotice,
+  saveInterval,
+  saveLastCheck,
+  shouldCheck,
+  type RefreshInterval,
+} from "./refresh";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -133,6 +143,8 @@ const plSwitchMenu = $("pl-switch-menu");
 const addForm = $<HTMLFormElement>("add-form");
 const btnAddPl = $<HTMLButtonElement>("btn-add-pl");
 const themeSeg = $("theme-seg");
+const refreshSeg = $("refresh-seg");
+const btnRefreshNow = $<HTMLButtonElement>("btn-refresh-now");
 const setupError = $("setup-error");
 const searchInput = $<HTMLInputElement>("search");
 const categoriesNav = $("categories");
@@ -387,6 +399,7 @@ function setView(view: View, persist = true): void {
     renderSettingsMode();
     if (plState.items.length > 0 && !setupError.textContent) setAddFormOpen(false);
     renderThemeSeg();
+    renderRefreshSeg();
   }
   categoriesNav.hidden = !showsCategories(view);
   catLabel.hidden = !showsCategories(view);
@@ -1958,6 +1971,82 @@ function renderThemeSeg(): void {
   }
 }
 
+// ---------- Обновление плейлиста (#94) ----------
+/** Периодичность из настроек; таймер тикает раз в минуту и сверяет её. */
+let refreshInterval: RefreshInterval = loadInterval(
+  typeof localStorage !== "undefined" ? localStorage : null,
+);
+let refreshBusy = false;
+
+function renderRefreshSeg(): void {
+  for (const b of refreshSeg.querySelectorAll<HTMLButtonElement>("[data-refresh-choice]")) {
+    const on = Number(b.dataset.refreshChoice) === refreshInterval;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", String(on));
+  }
+}
+
+refreshSeg.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-refresh-choice]");
+  if (!b) return;
+  refreshInterval = Number(b.dataset.refreshChoice) as RefreshInterval;
+  saveInterval(refreshInterval, typeof localStorage !== "undefined" ? localStorage : null);
+  renderRefreshSeg();
+  // Смена «Выключено → Час» не должна ждать полного интервала до первой проверки
+  if (refreshInterval !== 0) saveLastCheck(0, localStorage);
+});
+
+/**
+ * Обновить активный плейлист из сети. Уведомление в колокольчик — только
+ * когда есть что сказать: дельта каналов или новые скрытые http.
+ */
+async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
+  if (refreshBusy) return;
+  const item = plState.items.find((p) => p.id === plState.activeId);
+  if (!item || !snapshot) return;
+  refreshBusy = true;
+  btnRefreshNow.setAttribute("aria-busy", "true");
+  try {
+    const resp = await fetch(item.playlistUrl);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const fresh = parseM3U(await resp.text());
+    const diff = diffSnapshots(snapshot, fresh);
+    const httpTotal = snapshot.droppedHttp + fresh.droppedHttp;
+    const httpNew = Math.max(0, fresh.droppedHttp - snapshot.droppedHttp);
+    const interesting =
+      diff.added > 0 || diff.removed > 0 || diff.changed > 0 || httpNew > 0;
+    if (interesting || !silentOnNoChange) {
+      showHttpNotice(refreshNotice(diff, httpNew > 0 ? httpNew : (httpTotal > 0 ? fresh.droppedHttp : 0)));
+    }
+    if (interesting) {
+      snapshot = fresh;
+      renderCategories();
+      renderChannels();
+      renderPlaylistSwitcher();
+      reloadEpg(item.epgUrl);
+    }
+  } catch {
+    if (!silentOnNoChange) {
+      showToast("Проверить плейлист не удалось — нет сети или источник недоступен");
+    }
+  } finally {
+    refreshBusy = false;
+    btnRefreshNow.removeAttribute("aria-busy");
+    saveLastCheck(Date.now(), typeof localStorage !== "undefined" ? localStorage : null);
+  }
+}
+
+btnRefreshNow.addEventListener("click", () => void refreshPlaylist(false));
+
+// Тик раз в минуту: пора ли плановая проверка по выбранному интервалу.
+setInterval(() => {
+  if (refreshInterval === 0) return;
+  const storage = typeof localStorage !== "undefined" ? localStorage : null;
+  if (shouldCheck(Date.now(), loadLastCheck(storage), refreshInterval)) {
+    void refreshPlaylist(true);
+  }
+}, 60_000);
+
 function systemPrefersDark(): boolean | null {
   return typeof window.matchMedia === "function"
     ? window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -2373,6 +2462,20 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
         epgNow.textContent = "Телепрограмма не загрузилась — каналы работают без неё";
       });
   }
+}
+
+/** Перечитать телепрограмму без служебной строки (после обновления списка). */
+function reloadEpg(epgUrl: string | null): void {
+  if (!snapshot) return;
+  const url = epgUrl ?? snapshot.headerTvgUrl;
+  if (!url) return;
+  loadEpg(url)
+    .then((parsed) => {
+      epg = parsed;
+      renderChannels();
+      refreshNowFav();
+    })
+    .catch(() => undefined);
 }
 
 async function bootstrap(): Promise<void> {
