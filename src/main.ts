@@ -115,6 +115,7 @@ import {
   shouldCheck,
   type RefreshInterval,
 } from "./refresh";
+import { LatestGuard } from "./latest";
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -2052,6 +2053,8 @@ let refreshInterval: RefreshInterval = loadInterval(
   typeof localStorage !== "undefined" ? localStorage : null,
 );
 let refreshBusy = false;
+// Гард от гонки загрузок EPG (#112): сменили плейлист — старый ответ игнорируется.
+const epgGuard = new LatestGuard();
 
 function renderRefreshSeg(): void {
   for (const b of refreshSeg.querySelectorAll<HTMLButtonElement>("[data-refresh-choice]")) {
@@ -2091,13 +2094,18 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
       diff.added > 0 || diff.removed > 0 || diff.changed > 0 || httpNew > 0;
 
     // Программа меняется постоянно — обновляем её при каждой проверке,
-    // а не только когда изменился сам плейлист (#104).
+    // а не только когда изменился сам плейлист (#104). Гард (#112): если
+    // во время проверки переключили плейлист, её EPG не применяется.
     const epgUrl = item.epgUrl ?? fresh.headerTvgUrl;
     let programmes: number | null = null;
     if (epgUrl) {
+      const epgLoad = epgGuard.begin();
       try {
-        epg = await loadEpg(epgUrl);
-        programmes = countProgrammes(epg);
+        const parsed = await loadEpg(epgUrl);
+        if (epgLoad.isCurrent()) {
+          epg = parsed;
+          programmes = countProgrammes(epg);
+        }
       } catch {
         // программа не критична: списки всё равно обновим, уведомим «передач нет»
       }
@@ -2583,14 +2591,19 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   if (finalEpgUrl) {
     epgNow.hidden = false;
     epgNow.textContent = "Загружаем телепрограмму…";
+    // Гард от гонки (#112): пока грузится EPG, можно успеть сменить плейлист —
+    // поздний ответ старой загрузки не должен затирать данные нового.
+    const epgLoad = epgGuard.begin();
     loadEpg(finalEpgUrl)
       .then((parsed) => {
+        if (!epgLoad.isCurrent()) return;
         epg = parsed;
         renderChannels();
         refreshNowFav();
         epgNow.hidden = true;
       })
       .catch(() => {
+        if (!epgLoad.isCurrent()) return;
         epgNow.textContent = "Телепрограмма не загрузилась — каналы работают без неё";
       });
   }
