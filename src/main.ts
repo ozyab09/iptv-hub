@@ -45,6 +45,7 @@ import {
 import { parseM3U } from "./m3u";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
+import { DEFAULT_PLAYER_SETTINGS, PLAYER_SETTINGS_KEY, parsePlayerSettings, sanitizePlayerSettings } from "./player-settings";
 import {
   computeWindow,
   spacerHeight,
@@ -342,6 +343,44 @@ const CHANNEL_COLUMNS = 1;
 
 /** Недавно просмотренные (url → имя берём из snapshot при рендере). */
 let recents: string[] = [];
+let playerSettings = parsePlayerSettings(null);
+try {
+  playerSettings = parsePlayerSettings(localStorage.getItem(PLAYER_SETTINGS_KEY));
+} catch { /* приватный режим: используем дефолты */ }
+const playerSettingsForm = $<HTMLFormElement>("player-settings-form");
+const playerBuffer = $<HTMLInputElement>("player-buffer");
+const playerLowLatency = $<HTMLInputElement>("player-low-latency");
+const playerDiagnosticsTimeout = $<HTMLInputElement>("player-diagnostics-timeout");
+const playerSettingsStatus = $("player-settings-status");
+function renderPlayerSettings(): void {
+  playerBuffer.value = String(playerSettings.maxBufferLength);
+  playerLowLatency.checked = playerSettings.lowLatencyMode;
+  playerDiagnosticsTimeout.value = String(playerSettings.diagnosticsTimeoutMs / 1000);
+}
+function persistPlayerSettings(): void {
+  renderPlayerSettings();
+  try {
+    localStorage.setItem(PLAYER_SETTINGS_KEY, JSON.stringify(playerSettings));
+    playerSettingsStatus.textContent = "Сохранено. Применится к следующему запуску канала.";
+  } catch {
+    playerSettingsStatus.textContent = "Применится к следующему запуску канала. Браузер не разрешил сохранить настройки между сеансами.";
+  }
+}
+renderPlayerSettings();
+playerSettingsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!playerSettingsForm.reportValidity()) return;
+  playerSettings = sanitizePlayerSettings({
+    maxBufferLength: playerBuffer.valueAsNumber,
+    lowLatencyMode: playerLowLatency.checked,
+    diagnosticsTimeoutMs: playerDiagnosticsTimeout.valueAsNumber * 1000,
+  });
+  persistPlayerSettings();
+});
+$("player-settings-reset").addEventListener("click", () => {
+  playerSettings = { ...DEFAULT_PLAYER_SETTINGS };
+  persistPlayerSettings();
+});
 // Диагностика потока (#116): один раз на канал при фатальной ошибке.
 let diagnosticsFor: string | null = null;
 async function diagnoseStreamFailure(): Promise<void> {
@@ -349,7 +388,7 @@ async function diagnoseStreamFailure(): Promise<void> {
   if (!url || diagnosticsFor === url) return;
   diagnosticsFor = url;
   try {
-    const r = await probeStream(url, (u, init) => fetch(u, init));
+    const r = await probeStream(url, (u, init) => fetch(u, init), player.diagnosticsTimeoutMs);
     const verdict = probeVerdict(r);
     const detail =
       r.kind === "blocked" ? corsChecklist() : r.kind === "http" ? httpChecklist(r.status) : "";
@@ -372,6 +411,7 @@ const player = new Player(
     btnRetry.hidden = false; // фатальная ошибка — показываем retry
     void diagnoseStreamFailure();
   },
+  () => playerSettings,
 );
 
 // Меню качества/дорожек — DOM-слой вынесен в quality-menu.ts (issue #123)

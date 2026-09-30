@@ -128,6 +128,32 @@
                   </div>
                 </section>
 
+                <section class="set-group player-settings-group">
+                  <h2 class="set-label t-overline">Плеер</h2>
+                  <form id="player-settings-form">
+                    <div class="group">
+                      <div class="item">
+                        <label for="player-buffer">Буфер HLS, секунды</label>
+                        <div class="input"><input id="player-buffer" type="number" min="5" max="600" step="1" required /></div>
+                      </div>
+                      <div class="item">
+                        <label for="player-low-latency">Низкая задержка HLS</label>
+                        <input id="player-low-latency" type="checkbox" />
+                      </div>
+                      <div class="item">
+                        <label for="player-diagnostics-timeout">Таймаут диагностики, секунды</label>
+                        <div class="input"><input id="player-diagnostics-timeout" type="number" min="1" max="60" step="1" required /></div>
+                      </div>
+                      <div class="item">
+                        <button type="submit" class="btn">Сохранить</button>
+                        <button id="player-settings-reset" type="button" class="btn">По умолчанию</button>
+                      </div>
+                    </div>
+                  </form>
+                  <p class="set-note muted">Применяются к следующему запуску канала. Буфер: 5–600 с, диагностика: 1–60 с. Больший буфер требует больше памяти; доступная пауза зависит от потока. Низкая задержка работает с поддерживающими её HLS-потоками.</p>
+                  <p id="player-settings-status" class="set-note muted" role="status"></p>
+                </section>
+
                 <section class="set-group refresh-group">
                   <h2 class="set-label t-overline">Обновление плейлиста</h2>
                   <div class="group">

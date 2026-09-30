@@ -776,6 +776,11 @@ html, body {
 }
 .group button.item:hover { background: var(--surface-2); }
 .item-label { flex: 1; font-weight: 500; }
+.player-settings-group .item { flex-wrap: wrap; }
+.player-settings-group label { flex: 1; min-width: 160px; }
+.player-settings-group .input { width: 88px; flex: 0 0 88px; }
+.player-settings-group input[type="number"] { width: 100%; min-width: 0; font-size: 16px; }
+.first-run .player-settings-group { display: none; }
 .add-pl { color: var(--accent) !important; }
 .add-pl[aria-expanded="true"] { background: var(--surface-2); }
 
