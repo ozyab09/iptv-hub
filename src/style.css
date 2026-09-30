@@ -855,6 +855,9 @@ html, body {
   .settings-inner { padding-top: var(--space-2); }
   .first-run .settings-inner { padding-top: var(--space-6); }
   .theme-group .item { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  /* На телефоне четыре интервала в ряд тесны — так же, как у темы */
+  .refresh-group .item { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  .refresh-group .seg { flex-wrap: wrap; }
   /* < 16px → iOS Safari увеличивает страницу при фокусе */
   .add-form .input input,
   .pl-edit .input input { font-size: 16px; }

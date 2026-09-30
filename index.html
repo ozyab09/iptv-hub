@@ -109,6 +109,25 @@
                   </div>
                 </section>
 
+                <section class="set-group refresh-group">
+                  <h2 class="set-label t-overline">Обновление плейлиста</h2>
+                  <div class="group">
+                    <div class="item">
+                      <span class="item-label">Проверять</span>
+                      <div id="refresh-seg" class="seg" role="radiogroup" aria-label="Периодичность проверки плейлиста">
+                        <button type="button" role="radio" data-refresh-choice="0">Выключено</button>
+                        <button type="button" role="radio" data-refresh-choice="60">Час</button>
+                        <button type="button" role="radio" data-refresh-choice="360">6 часов</button>
+                        <button type="button" role="radio" data-refresh-choice="1440">Сутки</button>
+                      </div>
+                    </div>
+                    <div class="item">
+                      <button id="btn-refresh-now" type="button" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg><span>Проверить сейчас</span></button>
+                    </div>
+                  </div>
+                  <p class="set-note muted">Список перечитывается из сети по расписанию; о результатах сообщит колокольчик.</p>
+                </section>
+
                 <section class="set-group backup-group">
                   <h2 class="set-label t-overline">Резервная копия</h2>
                   <div class="group">
