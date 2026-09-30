@@ -7,6 +7,8 @@
  * Избранное живёт по ключу `iptv-hub.favorites.v1:<id>` (см. favorites).
  */
 
+import { LEGACY_FAVORITES_KEY } from "./favorites";
+
 export interface Playlist {
   /** Стабильный id (timestamp при создании). */
   id: string;
@@ -16,6 +18,9 @@ export interface Playlist {
   /** EPG необязателен. */
   epgUrl: string | null;
 }
+
+/** Легаси-ключ глобального избранного (до мультиплейлистов). */
+export { LEGACY_FAVORITES_KEY };
 
 export interface PlaylistsState {
   items: Playlist[];
@@ -47,7 +52,10 @@ function isHttpUrl(v: unknown): v is string {
 export function migrateLegacy(storage: KV): void {
   if (!storage) return;
   try {
-    if (storage.getItem(PLAYLISTS_KEY)) return; // уже мигрировано/создано
+    if (storage.getItem(PLAYLISTS_KEY)) {
+      migrateLegacyFavorites(storage);
+      return; // уже мигрировано/создано
+    }
     const raw = storage.getItem(LEGACY_CONFIG_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw) as { playlistUrl?: unknown; epgUrl?: unknown };
@@ -60,9 +68,32 @@ export function migrateLegacy(storage: KV): void {
     };
     storage.setItem(PLAYLISTS_KEY, JSON.stringify([pl]));
     storage.setItem(ACTIVE_KEY, pl.id);
+    migrateLegacyFavorites(storage);
   } catch {
     // битые данные — начинаем с пустого списка
   }
+}
+
+/**
+ * Разовая миграция легаси-избранного: глобальный `iptv-hub.favorites.v1`
+ * → `iptv-hub.favorites.v1:<id>` первого плейлиста. Выполняется только если
+ * список уже есть, у первого плейлиста ещё нет своего избранного, а легаси-ключ
+ * непуст; сам легаси-ключ не удаляется (обратная совместимость). Идемпотентна:
+ * после первого переноса условие «своего избранного нет» перестаёт выполняться.
+ */
+function migrateLegacyFavorites(storage: KV): void {
+  if (!storage) return;
+  const items = sanitize(JSON.parse(storage.getItem(PLAYLISTS_KEY) ?? "[]"));
+  const first = items[0];
+  if (!first) return;
+  if (storage.getItem(favoritesKey(first.id))) return; // своё уже есть
+  const raw = storage.getItem(LEGACY_FAVORITES_KEY);
+  if (!raw) return;
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) return;
+  const urls = parsed.filter((x): x is string => typeof x === "string" && x.length > 0);
+  if (urls.length === 0) return;
+  storage.setItem(favoritesKey(first.id), JSON.stringify(urls));
 }
 
 function sanitize(raw: unknown): Playlist[] {

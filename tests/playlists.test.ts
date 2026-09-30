@@ -10,6 +10,7 @@ import {
   favoritesKey,
   PLAYLISTS_KEY,
   LEGACY_CONFIG_KEY,
+  LEGACY_FAVORITES_KEY,
   type PlaylistsState,
 } from "../src/playlists";
 
@@ -57,6 +58,70 @@ describe("loadPlaylists / migrateLegacy", () => {
     const s = store();
     s.setItem(LEGACY_CONFIG_KEY, "{oops");
     expect(loadPlaylists(s as Storage).items).toEqual([]);
+  });
+
+  it("migrates legacy global favorites to the first playlist (#111)", () => {
+    const s = store();
+    s.setItem(
+      LEGACY_CONFIG_KEY,
+      JSON.stringify({ playlistUrl: "https://a/pl.m3u", epgUrl: null }),
+    );
+    s.setItem(
+      LEGACY_FAVORITES_KEY,
+      JSON.stringify(["https://a/s1", "https://a/s2"]),
+    );
+    const st = loadPlaylists(s as Storage);
+    const first = st.items[0]!;
+    expect(JSON.parse(s.getItem(favoritesKey(first.id)) ?? "[]")).toEqual([
+      "https://a/s1",
+      "https://a/s2",
+    ]);
+    // легаси-ключ не удаляется (обратная совместимость)
+    expect(s.getItem(LEGACY_FAVORITES_KEY)).not.toBeNull();
+  });
+
+  it("migrates legacy favorites when the list already exists", () => {
+    const s = store();
+    s.setItem(
+      PLAYLISTS_KEY,
+      JSON.stringify([{ id: "x", name: "N", playlistUrl: "https://x/pl.m3u", epgUrl: null }]),
+    );
+    s.setItem(LEGACY_FAVORITES_KEY, JSON.stringify(["https://x/s1", 42, null]));
+    loadPlaylists(s as Storage);
+    expect(JSON.parse(s.getItem(favoritesKey("x")) ?? "[]")).toEqual(["https://x/s1"]);
+  });
+
+  it("never overwrites existing per-playlist favorites (idempotent)", () => {
+    const s = store();
+    s.setItem(
+      PLAYLISTS_KEY,
+      JSON.stringify([{ id: "x", name: "N", playlistUrl: "https://x/pl.m3u", epgUrl: null }]),
+    );
+    s.setItem(favoritesKey("x"), JSON.stringify(["https://mine/s1"]));
+    s.setItem(LEGACY_FAVORITES_KEY, JSON.stringify(["https://legacy/s1"]));
+    loadPlaylists(s as Storage);
+    loadPlaylists(s as Storage); // повторный вызов тоже ничего не меняет
+    expect(JSON.parse(s.getItem(favoritesKey("x")) ?? "[]")).toEqual(["https://mine/s1"]);
+  });
+
+  it("ignores empty or malformed legacy favorites", () => {
+    const s = store();
+    s.setItem(
+      PLAYLISTS_KEY,
+      JSON.stringify([{ id: "x", name: "N", playlistUrl: "https://x/pl.m3u", epgUrl: null }]),
+    );
+    s.setItem(LEGACY_FAVORITES_KEY, JSON.stringify(["", 42]));
+    loadPlaylists(s as Storage);
+    expect(s.getItem(favoritesKey("x"))).toBeNull();
+
+    const s2 = store();
+    s2.setItem(
+      PLAYLISTS_KEY,
+      JSON.stringify([{ id: "y", name: "N", playlistUrl: "https://y/pl.m3u", epgUrl: null }]),
+    );
+    s2.setItem(LEGACY_FAVORITES_KEY, "not json");
+    expect(() => loadPlaylists(s2 as Storage)).not.toThrow();
+    expect(s2.getItem(favoritesKey("y"))).toBeNull();
   });
 });
 
