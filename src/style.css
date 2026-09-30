@@ -1173,6 +1173,62 @@ html, body {
   font-size: 14px;
   line-height: 20px;
 }
+/* Центр уведомлений: колокольчик в шапке + выпадающая панель (#98).
+   Как в приложениях: кнопка всегда на виду, бейдж — при непрочитанных,
+   список хранит историю, «Очистить» её стирает. */
+.notif-bell-wrap { position: relative; flex: none; display: flex; }
+.notif-bell-wrap .icon-btn { position: relative; }
+.notif-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 10px/16px var(--font-sans);
+  text-align: center;
+  pointer-events: none;
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  width: min(360px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px 6px 6px;
+}
+.notif-clear {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 13px/18px var(--font-sans);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.notif-clear:hover { background: var(--surface-2); color: var(--text); }
+.notif-list { display: flex; flex-direction: column; gap: 2px; }
+.notif-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.notif-item.unread { background: var(--accent-soft); }
+.notif-item .n-time { font-size: 11px; line-height: 14px; color: var(--muted); }
+.notif-empty { padding: var(--space-3); color: var(--muted); font-size: 14px; line-height: 20px; }
 .toast-action {
   flex: none;
   height: 32px;
