@@ -214,7 +214,7 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
         // Локальный плейлист: чистим и содержимое в OPFS (FR-10)
         if (p.playlistUrl.startsWith("local:")) {
           const fs = localFs();
-          if (fs) void fs.then((f) => removeLocalPlaylist(f, p.playlistUrl.slice("local:".length)));
+          if (fs) void fs.then((f) => removeLocalPlaylist(f, p.id));
         }
         state = removePlaylist(state, p.id);
         savePlaylists(storage, state);

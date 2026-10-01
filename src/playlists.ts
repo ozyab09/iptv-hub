@@ -103,11 +103,14 @@ function sanitize(raw: unknown): Playlist[] {
     if (!item || typeof item !== "object") continue;
     const p = item as Record<string, unknown>;
     if (typeof p.id !== "string" || typeof p.name !== "string") continue;
-    if (!isHttpUrl(p.playlistUrl)) continue;
+    const local = typeof p.playlistUrl === "string" && /^local:[a-zA-Z0-9_-]+$/.test(p.playlistUrl)
+      && /^[a-zA-Z0-9_-]+$/.test(p.id);
+    if (!local && !isHttpUrl(p.playlistUrl)) continue;
     out.push({
       id: p.id,
       name: p.name,
-      playlistUrl: p.playlistUrl,
+      // Старый импорт сохранял файл по id, но в URL писал отдельный timestamp.
+      playlistUrl: local ? `local:${p.id}` : p.playlistUrl as string,
       epgUrl: isHttpUrl(p.epgUrl) ? p.epgUrl : null,
     });
   }
@@ -157,6 +160,13 @@ export function addPlaylist(
   const pl: Playlist = { id: newId(), name: name.trim() || "Плейлист", playlistUrl, epgUrl };
   const items = [...state.items, pl];
   return { items, activeId: state.activeId ?? pl.id };
+}
+
+/** Локальный источник и его файл используют один стабильный id. */
+export function addLocalPlaylist(state: PlaylistsState, name: string): PlaylistsState {
+  const id = newId();
+  const pl: Playlist = { id, name: name.trim() || "Плейлист", playlistUrl: `local:${id}`, epgUrl: null };
+  return { items: [...state.items, pl], activeId: state.activeId ?? id };
 }
 
 /** Переименовать / обновить ссылки. Неизвестный id — состояние без изменений. */
