@@ -301,6 +301,35 @@ push в `main` — то же + деплой `dist/` в GitHub Pages (artifact +
 `actions/deploy-pages@v5`). Required check — `build`. Pages включить руками:
 Settings → Pages → Source: **GitHub Actions**.
 
+## Android TWA и выпуск APK (#160, #205)
+
+Android-код уже смержен через PR #167; повторно мержить старую ветку не нужно.
+`android/app` — один Gradle-модуль: Java 17, Gradle 8.7, AGP 8.6.1, SDK 35.
+`MainActivity` наследует стандартный TWA `LauncherActivity`, без WebView-моста.
+CI `.github/workflows/ci.yml` собирает unsigned APK и проверяет подпись
+временным ключом на PR. `release` запускается через `workflow_dispatch` или
+тег `v*`, после зелёных `build`, `visual`, `android`.
+Для trusted fullscreen Asset Links должен быть опубликован в корне origin:
+`https://ozyab09.github.io/.well-known/assetlinks.json`; проектный подпуть
+`/iptv-hub/` недостаточен. Этот workflow не меняет root Pages-репозиторий;
+без отдельной публикации браузер может показывать панель Custom Tab.
+
+Релиз: assembleRelease → zipalign → apksigner → verify → генерация Asset Links
+из DER-сертификата (`android/scripts/gen-assetlinks.mjs`) → version.json →
+metadata в `gh-pages` → Pages artifact и GitHub Release с APK. Pages использует
+GitHub Actions; обычный main-деплой восстанавливает metadata из `gh-pages`,
+чтобы не стереть отпечаток. Секреты: `ANDROID_KEYSTORE_B64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+Keystore не коммитить и сохранять между релизами.
+
+Версии: package.json и android/version.properties versionName синхронны;
+versionCode — возрастающее целое; public/version.json содержит оба значения.
+Тег должен совпадать с package.json. При release VERSION SW штампуется SHA;
+для обычных изменений shell остаётся обязательный ручной bump.
+APK обновляется вручную через GitHub Releases; нативная автоустановка и
+автообновление не реализованы. Проверка на физическом устройстве обязательна
+перед заявлением о работоспособности playback; CI проверяет сборку и подпись.
+
 ## 🎨 Дизайн-система
 
 Код реализует **IPTV Hub v2** — систему из артефакта Design System. Правила,

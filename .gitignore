@@ -7,3 +7,9 @@ test-results/
 playwright-report/
 
 agent.name
+android/app/build/
+android/app/.gradle/
+android/app/local.properties
+*.jks
+*.keystore
+*.apk

@@ -3,7 +3,9 @@ name: CI + Pages
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,6 +27,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Restore published Android metadata
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          if git fetch origin gh-pages; then
+            git show FETCH_HEAD:version.json > public/version.json
+            git show FETCH_HEAD:.well-known/assetlinks.json > public/.well-known/assetlinks.json
+          fi
       - run: npm run build
       - uses: actions/upload-pages-artifact@v5
         with:
@@ -50,9 +59,126 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - run: node android/scripts/release-metadata.mjs
+      - run: gradle -p android/app clean assembleRelease --no-daemon
+      - name: Verify signing and Asset Links with a temporary key
+        run: |
+          node android/scripts/test-assetlinks.mjs
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/zipalign" -p -f 4 android/app/build/outputs/apk/release/*-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" sign --ks "$RUNNER_TEMP/test-signing.jks" --ks-key-alias test --ks-pass pass:test-password --key-pass pass:test-password --out "$RUNNER_TEMP/test.apk" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" verify --verbose "$RUNNER_TEMP/test.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-unsigned
+          path: android/app/build/outputs/apk/release/*-unsigned.apk
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    needs: [build, visual, android]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager 'build-tools;35.0.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-unsigned
+          path: unsigned
+      - name: Sign and verify APK
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64" && test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEYSTORE_PASSWORD" && test -n "$ANDROID_KEY_PASSWORD"
+          keystore="$RUNNER_TEMP/android-release.jks"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/zipalign" -p -f 4 unsigned/*-unsigned.apk aligned.apk
+          "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD --out iptv-hub.apk aligned.apk
+          "$tools/apksigner" verify --verbose iptv-hub.apk
+          node android/scripts/gen-assetlinks.mjs --keystore "$keystore" --alias "$ANDROID_KEY_ALIAS" --output public/.well-known/assetlinks.json
+      - name: Prepare release metadata
+        run: node android/scripts/release-metadata.mjs
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-signed
+          path: iptv-hub.apk
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p 'require("./package.json").version')"
+          gh release view "$tag" || gh release create "$tag" --target "$GITHUB_SHA" --title "IPTV Hub $tag" --generate-notes
+          gh release upload "$tag" iptv-hub.apk --clobber
+
+      - name: Save Android metadata for future Pages builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init "$RUNNER_TEMP/android-metadata"
+          cd "$RUNNER_TEMP/android-metadata"
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          gh auth setup-git
+          if git fetch origin gh-pages; then
+            git checkout -b gh-pages FETCH_HEAD
+          else
+            git checkout -b gh-pages
+          fi
+          mkdir -p .well-known
+          cp "$GITHUB_WORKSPACE/public/version.json" version.json
+          cp "$GITHUB_WORKSPACE/public/.well-known/assetlinks.json" .well-known/assetlinks.json
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add version.json .well-known/assetlinks.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: publish Android release metadata'
+            git push origin HEAD:gh-pages
+          fi
+
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: build
+    if: always() && needs.build.result == 'success' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || needs.release.result == 'success')
+    needs: [build, release]
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
