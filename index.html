@@ -92,9 +92,9 @@
                   </div>
                   <div class="field">
                     <label for="local-file" data-i18n="playlist.local">…или файлом с устройства</label>
-                    <button type="button" id="btn-local-file" class="item"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span data-i18n="playlist.chooseFile">Выбрать .m3u файл</span></button>
+                    <button type="button" id="btn-local-file" class="btn btn-outline btn-block local-file-btn" aria-describedby="local-file-note"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span data-i18n="playlist.chooseFile">Выбрать .m3u файл</span></button>
                     <input id="local-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/x-mpegurl" hidden />
-                    <p class="set-note muted" data-i18n="playlist.localNote">Файл останется на устройстве (OPFS) — никуда не отправляется.</p>
+                    <p id="local-file-note" class="set-note muted" data-i18n="playlist.localNote">Файл останется на устройстве (OPFS) — никуда не отправляется.</p>
                   </div>
                   <details class="more">
                     <summary><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg><span data-i18n="playlist.more">Название и телепрограмма </span><span class="muted" data-i18n="playlist.optional">(необязательно)</span></summary>
