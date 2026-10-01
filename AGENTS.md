@@ -301,6 +301,10 @@ Android-код уже смержен через PR #167; повторно мер
 CI `.github/workflows/ci.yml` собирает unsigned APK и проверяет подпись
 временным ключом на PR. `release` запускается через `workflow_dispatch` или
 тег `v*`, после зелёных `build`, `visual`, `android`.
+Для trusted fullscreen Asset Links должен быть опубликован в корне origin:
+`https://ozyab09.github.io/.well-known/assetlinks.json`; проектный подпуть
+`/iptv-hub/` недостаточен. Этот workflow не меняет root Pages-репозиторий;
+без отдельной публикации браузер может показывать панель Custom Tab.
 
 Релиз: assembleRelease → zipalign → apksigner → verify → генерация Asset Links
 из DER-сертификата (`android/scripts/gen-assetlinks.mjs`) → version.json →

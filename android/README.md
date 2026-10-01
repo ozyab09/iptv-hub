@@ -51,6 +51,14 @@ The `gh-pages` branch is a metadata store, not a separate deployment source.
 
 ## Install and verify
 
+Asset Links must also be served at the origin root:
+`https://ozyab09.github.io/.well-known/assetlinks.json` (HTTP 200, JSON).
+The project Pages path `/iptv-hub/.well-known/assetlinks.json` is insufficient
+for browser verification. Copy the generated file to the root Pages site
+(`ozyab09.github.io` repository), or deploy the app on a custom origin where
+you control this root URL. This workflow does not modify another repository.
+See the [Chrome integration guide](https://developer.chrome.com/docs/android/trusted-web-activity/integration-guide).
+
 Download the signed APK from GitHub Releases and allow installation from the
 chosen download app, or use `adb install -r iptv-hub.apk`. Check fullscreen TWA
 and media playback on a real device. Updates are downloaded manually from
