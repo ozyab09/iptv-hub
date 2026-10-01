@@ -134,6 +134,23 @@ jobs:
           node android/scripts/gen-assetlinks.mjs --keystore "$keystore" --alias "$ANDROID_KEY_ALIAS" --output public/.well-known/assetlinks.json
       - name: Prepare release metadata
         run: node android/scripts/release-metadata.mjs
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-signed
+          path: iptv-hub.apk
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p 'require("./package.json").version')"
+          gh release view "$tag" || gh release create "$tag" --target "$GITHUB_SHA" --title "IPTV Hub $tag" --generate-notes
+          gh release upload "$tag" iptv-hub.apk --clobber
+
       - name: Save Android metadata for future Pages builds
         env:
           GH_TOKEN: ${{ github.token }}
@@ -158,22 +175,6 @@ jobs:
             git commit -m 'chore: publish Android release metadata'
             git push origin HEAD:gh-pages
           fi
-      - run: npm ci
-      - run: npm run build
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android-signed
-          path: iptv-hub.apk
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="v$(node -p 'require("./package.json").version')"
-          gh release view "$tag" || gh release create "$tag" --target "$GITHUB_SHA" --title "IPTV Hub $tag" --generate-notes
-          gh release upload "$tag" iptv-hub.apk --clobber
 
   deploy:
     if: always() && needs.build.result == 'success' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || needs.release.result == 'success')
