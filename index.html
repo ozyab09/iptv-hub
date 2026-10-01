@@ -189,6 +189,17 @@
                   <p class="set-note muted" data-i18n="channel.note">Вернёт исходные имена и покажет скрытые каналы. Избранное сохраняется.</p>
                 </section>
 
+                <section class="set-group">
+                  <h2 class="set-label t-overline" data-i18n="pin.settings">Родительский PIN</h2>
+                  <label for="pin-group" data-i18n="pin.group">Группа каналов</label>
+                  <select id="pin-group" class="input"></select>
+                  <div class="channel-editor-actions">
+                    <button id="pin-set" class="btn" data-i18n="pin.set">Установить PIN</button>
+                    <button id="pin-remove" class="btn" data-i18n="pin.remove">Снять PIN</button>
+                  </div>
+                  <p class="set-note muted" data-i18n="pin.note">PIN запрашивается при входе в группу и запуске каждого её канала. Забытый PIN можно удалить только очисткой всех данных сайта в браузере.</p>
+                </section>
+
                 <section class="set-group backup-group">
                   <h2 class="set-label t-overline" data-i18n="settings.backup">Резервная копия</h2>
                   <div class="group">
@@ -386,6 +397,22 @@
           <p class="set-note muted" data-i18n="channel.linkNote">Скрытый канал остаётся доступен по ссылке с ?ch=.</p>
           <div class="channel-editor-actions">
             <button id="channel-editor-cancel" type="button" class="btn" data-i18n="channel.cancel">Отмена</button>
+            <button type="submit" class="btn" data-i18n="channel.save">Сохранить</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="pin-dialog" class="channel-editor" aria-labelledby="pin-dialog-title">
+        <form>
+          <h2 id="pin-dialog-title" class="t-heading"></h2>
+          <p data-pin-group class="muted"></p>
+          <label for="parental-pin" data-i18n="pin.label">PIN (4–8 цифр)</label>
+          <input id="parental-pin" name="pin" class="input" type="password" inputmode="numeric" autocomplete="off" minlength="4" maxlength="8" pattern="[0-9]{4,8}" required />
+          <label><span data-i18n="pin.confirm">Повторите PIN</span>
+            <input name="confirmation" class="input" type="password" inputmode="numeric" autocomplete="off" minlength="4" maxlength="8" pattern="[0-9]{4,8}" />
+          </label>
+          <p role="alert" class="set-note"></p>
+          <div class="channel-editor-actions">
+            <button data-pin-cancel type="button" class="btn" data-i18n="channel.cancel">Отмена</button>
             <button type="submit" class="btn" data-i18n="channel.save">Сохранить</button>
           </div>
         </form>
