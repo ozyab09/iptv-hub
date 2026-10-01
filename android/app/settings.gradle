@@ -15,4 +15,3 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "iptv-hub-twa"
-include ":app"

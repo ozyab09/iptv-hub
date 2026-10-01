@@ -42,8 +42,9 @@
   закрывает оверлеи** (overlays в history), **Wake Lock** на время просмотра,
   **sleep-таймер** (30/60/90 мин / конец передачи), **скриншот кадра в PNG**,
   экранный лог по `?debug=1`; колокольчик уведомлений с историей
-- **Android**: TWA-обёртка (Bubblewrap) с автопубликацией APK через GitLab CI,
-  версия приложения из `public/version.json`
+- **Android**: TWA LauncherActivity; сборка и подпись APK через GitHub Actions
+  (`.github/workflows/ci.yml`), ручное обновление через GitHub Releases.
+  Метаданные версии — `public/version.json`; выпуск требует keystore secrets.
 - **Инфраструктура**: юнит-тесты без DOM и сети (39 файлов, счётчик в CI),
   CI (Node 22, пин ubuntu-24.04) с required check `build` **и job `visual`** —
   Playwright/chromium smoke-проверки вёрстки (мобильный портрет/пейзаж,
@@ -259,9 +260,17 @@ per-плейлист, тесты на apply-логику.
 
 ## Практика выпуска
 
-- VERSION в `public/sw.js` штампуется хэшем сборки автоматически; версия
-  пакета синхронна с доками — тест `tests/version.test.ts` следит за
-  расхождением (CI). `public/version.json` питает автообновление TWA.
+- Для изменения shell вручную увеличивать VERSION в `public/sw.js`;
+  Android-release штампует VERSION хэшем коммита. Версия пакета синхронна
+  с доками — тест `tests/version.test.ts` следит за расхождением.
+- GitHub Actions: workflow_dispatch или refs/tags/v* → Java 17 / Gradle 8.7 /
+  SDK 35 → assembleRelease → zipalign + apksigner + verify → version.json /
+  assetlinks.json → metadata в gh-pages → Pages artifact + GitHub Release.
+  Pages остаётся в режиме Actions; main-деплои восстанавливают metadata,
+  чтобы не терять сертификат подписи. Подробности — android/README.md.
+- package.json и android/version.properties versionName должны совпадать;
+  versionCode — возрастающее целое. public/version.json генерируется перед
+  выпуском. Автоустановка APK не реализована, обновление — вручную.
 - Каждое изменение — через issue → ветку → PR → зелёный `build` (+ `visual`)
   → merge.
 - Перед merge: `npm test` + `npm run build` локально зелёные.

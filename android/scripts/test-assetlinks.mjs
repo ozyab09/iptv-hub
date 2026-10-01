@@ -1,0 +1,14 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+const key = join(process.env.RUNNER_TEMP ?? tmpdir(), "test-signing.jks");
+execFileSync("keytool", ["-genkeypair", "-alias", "test", "-keyalg", "RSA", "-keysize", "2048", "-validity", "1", "-dname", "CN=IPTV Hub CI", "-keystore", key, "-storepass", "test-password", "-keypass", "test-password"], { stdio: "pipe" });
+const output = join(process.env.RUNNER_TEMP ?? tmpdir(), "test-assetlinks.json");
+execFileSync(process.execPath, ["android/scripts/gen-assetlinks.mjs", "--keystore", key, "--alias", "test", "--output", output], { env: { ...process.env, ANDROID_KEYSTORE_PASSWORD: "test-password" }, stdio: "pipe" });
+const cert = execFileSync("keytool", ["-exportcert", "-alias", "test", "-keystore", key, "-storepass", "test-password"], { stdio: ["ignore", "pipe", "pipe"] });
+const fingerprint = createHash("sha256").update(cert).digest("hex").toUpperCase().match(/.{2}/g).join(":");
+assert.deepEqual(JSON.parse(readFileSync(output, "utf8")), [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: "com.izzy.twa", sha256_cert_fingerprints: [fingerprint] } }]);
+console.log("Asset Links match the exported signing certificate");
