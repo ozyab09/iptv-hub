@@ -137,6 +137,8 @@ import { createQualityMenu } from "./quality-menu";
 import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
 import { applyChannelOverrides, channelOverridesKey, parseChannelOverrides, serializeChannelOverrides, setChannelOverride, type ChannelOverrides } from "./channel-overrides";
+import { createPinHash, parentalPinsKey, parseParentalPins, serializeParentalPins, verifyPin, type ParentalPins } from "./parental-pin";
+import { createPinDialog } from "./parental-pin-ui";
 import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
 import {
   shouldShowHttpNotice,
@@ -569,6 +571,7 @@ $("language-seg").addEventListener("click", (event) => {
   currentLanguage = button.dataset.language as Language;
   try { localStorage.setItem(LANGUAGE_KEY, currentLanguage); } catch { /* приватный режим */ }
   applyLanguage();
+  renderPinSettings();
 });
 
 // ---------- UI helpers ----------
@@ -742,6 +745,7 @@ function setView(view: View, persist = true): void {
     if (plState.items.length > 0 && !setupError.textContent) setAddFormOpen(false);
     renderThemeSeg();
     renderRefreshSeg();
+    renderPinSettings();
   }
   renderRecordings();
   categoriesNav.hidden = !showsCategories(view);
@@ -758,6 +762,79 @@ function setView(view: View, persist = true): void {
 }
 
 // ---------- Рендер категорий ----------
+let parentalPins: ParentalPins = new Map();
+let playRequest = 0;
+const pinDialog = createPinDialog($<HTMLDialogElement>("pin-dialog"), (key) => tr(key));
+const pinGroup = $<HTMLSelectElement>("pin-group");
+const pinSet = $<HTMLButtonElement>("pin-set");
+const pinRemove = $<HTMLButtonElement>("pin-remove");
+
+function renderPinSettings(): void {
+  const previous = pinGroup.value;
+  pinGroup.replaceChildren(...(snapshot?.categories ?? []).map((group) => {
+    const option = document.createElement("option");
+    option.value = group;
+    option.textContent = parentalPins.has(group) ? `${group} · ${tr("pin.protected")}` : group;
+    return option;
+  }));
+  if ([...pinGroup.options].some((option) => option.value === previous)) pinGroup.value = previous;
+  pinSet.disabled = pinGroup.options.length === 0 || parentalPins.has(pinGroup.value);
+  pinRemove.disabled = !parentalPins.has(pinGroup.value);
+}
+pinGroup.addEventListener("change", renderPinSettings);
+
+async function authorizeGroup(group: string | null): Promise<boolean> {
+  const record = group === null ? undefined : parentalPins.get(group);
+  if (!record) { pinDialog.cancel(); return true; }
+  return pinDialog.ask(group!, false, (pin) => verifyPin(pin, record));
+}
+
+pinSet.addEventListener("click", async () => {
+  const id = plState.activeId;
+  const group = pinGroup.value;
+  if (!id || pinSet.disabled) return;
+  const saved = await pinDialog.ask(group, true, async (pin, isCurrent) => {
+    const record = await createPinHash(pin);
+    if (!isCurrent() || plState.activeId !== id) return false;
+    const next = new Map(parentalPins).set(group, record);
+    localStorage.setItem(parentalPinsKey(id), serializeParentalPins(next));
+    parentalPins = next;
+    return true;
+  });
+  if (!saved || plState.activeId !== id) return;
+  // Уже открытый канал не должен продолжать играть после установки защиты.
+  if (multiViewUi.isOpen || lastPlayed?.group === group) btnClosePlayer.click();
+  if (activeCategory === group) activeCategory = null;
+  renderPinSettings();
+  renderCategories();
+  renderChannels();
+});
+pinRemove.addEventListener("click", async () => {
+  const id = plState.activeId;
+  const group = pinGroup.value;
+  const record = parentalPins.get(group);
+  if (!id || !record) return;
+  const removed = await pinDialog.ask(group, false, async (pin, isCurrent) => {
+    if (!await verifyPin(pin, record) || !isCurrent() || plState.activeId !== id) return false;
+    const next = new Map(parentalPins);
+    next.delete(group);
+    localStorage.setItem(parentalPinsKey(id), serializeParentalPins(next));
+    parentalPins = next;
+    return true;
+  });
+  if (removed) { renderPinSettings(); renderCategories(); }
+});
+
+async function selectCategory(value: string | null): Promise<void> {
+  const id = plState.activeId;
+  if (!await authorizeGroup(value) || plState.activeId !== id) return;
+  activeCategory = value;
+  catMenu.hidden = true;
+  btnCategories.setAttribute("aria-expanded", "false");
+  renderCategories();
+  renderChannels();
+}
+
 const channelEditor = $<HTMLDialogElement>("channel-editor");
 channelEditor.addEventListener("keydown", (event) => event.stopPropagation());
 const channelAlias = $<HTMLInputElement>("channel-alias");
@@ -822,11 +899,8 @@ function renderCategories(): void {
     n.textContent = String(count);
     b.append(n);
     b.className = chipClass(activeCategory === value);
-    b.addEventListener("click", () => {
-      activeCategory = value;
-      renderCategories();
-      renderChannels();
-    });
+    if (value !== null && parentalPins.has(value)) b.title = tr("pin.protected");
+    b.addEventListener("click", () => { void selectCategory(value); });
     return b;
   };
   const entries: Array<[string, string | null, number]> = [
@@ -856,13 +930,8 @@ function renderCategories(): void {
     total.className = "count";
     total.textContent = `(${count})`;
     item.append(name, total);
-    item.addEventListener("click", () => {
-      activeCategory = value;
-      catMenu.hidden = true;
-      btnCategories.setAttribute("aria-expanded", "false");
-      renderCategories();
-      renderChannels();
-    });
+    if (value !== null && parentalPins.has(value)) item.title = tr("pin.protected");
+    item.addEventListener("click", () => { void selectCategory(value); });
     catMenu.append(item);
   }
   const current = entries.find(([, v]) => v === activeCategory);
@@ -1005,10 +1074,10 @@ function renderProgrammeMatch(match: ProgrammeMatch): HTMLButtonElement {
   meta.append(name, time);
   row.append(logo, meta);
   row.title = `${name.textContent} · ${time.textContent}`;
-  row.addEventListener("click", () => {
+  row.addEventListener("click", async () => {
     const archive = programmeArchiveUrl(match);
-    playChannel(channel, archive ?? undefined);
-    if (!archive && Date.parse(programme.start) > Date.now()) {
+    const played = await playChannel(channel, archive ?? undefined);
+    if (played && !archive && Date.parse(programme.start) > Date.now()) {
       showToast("Передача ещё не началась — включён эфир канала");
     }
   });
@@ -1140,8 +1209,11 @@ function renderChannelCard(c: Channel): HTMLElement {
 }
 
 // ---------- Плеер ----------
-function playChannel(c: Channel, archiveUrl?: string): void {
+async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
+  const request = ++playRequest;
+  const id = plState.activeId;
   c = applyChannelOverrides([snapshot?.channels.find((original) => original.url === c.url) ?? c], channelOverrides, true)[0]!;
+  if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
   if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
   if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined)) {
@@ -1163,7 +1235,7 @@ function playChannel(c: Channel, archiveUrl?: string): void {
   }
   if (multiViewUi.isOpen) {
     multiViewUi.play(c);
-    return;
+    return true;
   }
   nowTitle.textContent = archiveUrl ? `${c.name} · архив` : c.name;
   nowTitle.title = archiveUrl ?? c.url; // ссылка на поток текущего канала
@@ -1178,11 +1250,12 @@ function playChannel(c: Channel, archiveUrl?: string): void {
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl } : c);
   if (refused) {
     showToast(refused);
-    return;
+    return false;
   }
   // уровни/дорожки приходят асинхронно после парсинга манифеста
   qualityMenuUi.refreshQualityUi();
   renderChannels(false); // подсветка активного без сброса позиции
+  return true;
 }
 
 /** Переключить на соседний канал в текущем видимом списке (с зацикливанием). */
@@ -1197,6 +1270,8 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
+  playRequest++;
+  pinDialog.cancel();
   closeMultiView(false);
   if (isRecordingNow()) {
     stopRecordingNow(); // закрытие плеера — тоже сохраняем записанное
@@ -2336,10 +2411,9 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLBut
 
   if (watchable) {
     row.title = isLive ? "Смотреть сейчас" : "Смотреть из архива (catchup)";
-    row.addEventListener("click", () => {
+    row.addEventListener("click", async () => {
       if (isLive) {
-        playChannel(c);
-        onPlayed();
+        if (await playChannel(c)) onPlayed();
         return;
       }
       const url = buildCatchupUrl(cu, p, now);
@@ -2347,17 +2421,7 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLBut
         showToast(tr("error.noArchive"));
         return;
       }
-      nowTitle.textContent = `${c.name} · архив`;
-      closeMultiView(false);
-      nowTitle.title = url;
-      playerBar.hidden = false;
-      setWatching(true);
-      const refusedCatchup = player.play({ ...c, url });
-      if (refusedCatchup) {
-        showToast(refusedCatchup);
-        return;
-      }
-      onPlayed();
+      if (await playChannel(c, url)) onPlayed();
     });
   } else if (state === "past") {
     row.title =
@@ -3005,6 +3069,15 @@ function activatePlaylist(id: string): void {
 // storage-событие приходит ТОЛЬКО в табы, которые не писали ключ сами —
 // эха нет. Политика last-write-wins: состояние просто перечитывается.
 window.addEventListener("storage", (e) => {
+  if (plState.activeId && (e.key === null || e.key === parentalPinsKey(plState.activeId))) {
+    parentalPins = parseParentalPins(localStorage.getItem(parentalPinsKey(plState.activeId)));
+    // Изменение защиты в другой вкладке отменяет ранее разрешённый просмотр.
+    btnClosePlayer.click();
+    activeCategory = null;
+    renderPinSettings();
+    renderCategories();
+    renderChannels();
+  }
   const d = classifyStorageChange(e.key);
   if (d.ignore) return;
   if (d.playlists) {
@@ -3239,6 +3312,12 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  playRequest++;
+  pinDialog.cancel();
+  activeCategory = null;
+  try {
+    parentalPins = parseParentalPins(plState.activeId ? localStorage.getItem(parentalPinsKey(plState.activeId)) : null);
+  } catch { parentalPins = new Map(); }
   channelEditor.close();
   try {
     channelOverrides = parseChannelOverrides(plState.activeId ? localStorage.getItem(channelOverridesKey(plState.activeId)) : null);
@@ -3250,6 +3329,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   setWatching(false);
   lastPlayed = null;
   snapshot = null;
+  renderPinSettings();
   epg = null;
   showPlayer();
   epgNow.hidden = false;
@@ -3266,6 +3346,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
 
   renderCategories();
   renderChannels();
+  renderPinSettings();
   renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
   // Скрытые http-каналы — не потеря каналов при загрузке, а фильтр.
   // Извещаем уведомлением с колокольчиком сверху справа, ровно один раз
