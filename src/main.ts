@@ -138,6 +138,7 @@ import {
   type DayWindow,
 } from "./catchup";
 import { createQualityMenu } from "./quality-menu";
+import { createMultiViewUi } from "./multi-view-ui";
 import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
 import {
   shouldShowHttpNotice,
@@ -439,6 +440,63 @@ const qualityMenuUi = createQualityMenu({
   createButton: () => document.createElement("button"),
 });
 
+const multiViewUi = createMultiViewUi({
+  panel: $("multi-view"),
+  language: () => currentLanguage,
+  settings: () => playerSettings,
+  toast: showToast,
+  select: (channel) => {
+    lastPlayed = channel;
+    renderChannels(false);
+  },
+  playback: (playing) => {
+    wakeLockState = playing
+      ? wakeLockPlay(wakeLockState, wakeLockHooks, document.visibilityState === "visible")
+      : wakeLockStop(wakeLockState);
+  },
+  exit: () => closeMultiView(true),
+});
+
+function closeMultiView(resume: boolean): void {
+  if (!multiViewUi.isOpen) return;
+  const volume = multiViewUi.volume;
+  const selected = multiViewUi.close();
+  player.setVolume(volume);
+  volumeSlider.value = String(volume * 100);
+  refreshMuteIcon();
+  $("player-stack").hidden = false;
+  if (resume && selected) playChannel(selected);
+  else { playerBar.hidden = true; setWatching(false); }
+}
+
+$("btn-multi-view").addEventListener("click", () => {
+  if (isCompact()) { showToast(tr("multi.mobile")); return; }
+  if (!lastPlayed) { showToast(tr("multi.pickFirst")); return; }
+  stopIfRecording();
+  saveCurrentPosition();
+  const volume = player.getVolume();
+  player.stop();
+  if (!qualityMenu.hidden) closeOverlay("quality");
+  audioMenu.hidden = true;
+  subtitleMenu.hidden = true;
+  multiViewUi.start(lastPlayed, volume);
+  $("player-stack").hidden = true;
+});
+$("multi-exit").addEventListener("click", () => closeMultiView(true));
+$("multi-close").addEventListener("click", () => btnClosePlayer.click());
+$("multi-list").addEventListener("click", () => {
+  setPanelHidden(false);
+  setListCollapsed(false);
+  if (!showsChannelList(activeView)) setView("channels");
+});
+window.addEventListener("resize", () => {
+  if (multiViewUi.isOpen && isCompact()) {
+    closeMultiView(true);
+    showToast(tr("multi.mobile"));
+  }
+});
+window.addEventListener("pagehide", () => closeMultiView(false));
+
 function setSystemText(el: HTMLElement, message: string): void {
   el.dataset.systemMessage = message;
   el.textContent = translateMessage(message, currentLanguage);
@@ -480,6 +538,7 @@ function applyLanguage(): void {
   renderSettingsMode();
   renderNav();
   notifBellUi.render();
+  if (multiViewUi.isOpen) multiViewUi.render();
 }
 
 $("language-seg").addEventListener("click", (event) => {
@@ -996,6 +1055,7 @@ function renderChannelCard(c: Channel): HTMLElement {
 
 // ---------- Плеер ----------
 function playChannel(c: Channel, archiveUrl?: string): void {
+  if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
   if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined)) {
     stopRecordingNow();
@@ -1013,6 +1073,10 @@ function playChannel(c: Channel, archiveUrl?: string): void {
     } catch { /* приватный режим */ }
     // Раздел «Недавние» показывает этот список — обновляем, если он открыт.
     if (activeView === "recents") renderChannels(false);
+  }
+  if (multiViewUi.isOpen) {
+    multiViewUi.play(c);
+    return;
   }
   nowTitle.textContent = archiveUrl ? `${c.name} · архив` : c.name;
   nowTitle.title = archiveUrl ?? c.url; // ссылка на поток текущего канала
@@ -1046,6 +1110,7 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
+  closeMultiView(false);
   if (isRecordingNow()) {
     stopRecordingNow(); // закрытие плеера — тоже сохраняем записанное
     showToast("Запись остановлена: плеер закрыт");
@@ -1223,6 +1288,7 @@ window.addEventListener("keydown", (e) => {
   }
 
   if (playerBar.hidden || typing) return;
+  if (multiViewUi.isOpen && multiViewUi.handleKey(e)) return;
   switch (e.key) {
     case " ":
       e.preventDefault();
@@ -1693,6 +1759,7 @@ function renderRecordings(): void {
 
 /** Проиграть сохранённый файл в плеере (#159). */
 function playRecording(file: File, r: RecordingMeta): void {
+  closeMultiView(false);
   stopIfRecording();
   lastPlayed = null; // позиция записи не должна сохраняться под URL прошлого канала
   const refused = player.playRecording(file, r.ext, r.durationSec);
@@ -2024,16 +2091,17 @@ function startRecording(): void {
 // честно сообщаем об ограничении. Логика имён/ошибок — src/screenshot.ts.
 function takeScreenshot(): void {
   if (!lastPlayed) return;
-  if (!videoEl.videoWidth) {
+  const frame = multiViewUi.activeVideo ?? videoEl;
+  if (!frame.videoWidth) {
     showToast(describeShotFailure("empty"));
     return;
   }
   const canvas = document.createElement("canvas");
-  canvas.width = videoEl.videoWidth;
-  canvas.height = videoEl.videoHeight;
+  canvas.width = frame.videoWidth;
+  canvas.height = frame.videoHeight;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  ctx.drawImage(videoEl, 0, 0);
+  ctx.drawImage(frame, 0, 0);
   const fail = (reason: ShotFailure): void => showToast(describeShotFailure(reason));
   canvas.toBlob(
     (blob) => {
@@ -2193,6 +2261,7 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLBut
         return;
       }
       nowTitle.textContent = `${c.name} · архив`;
+      closeMultiView(false);
       nowTitle.title = url;
       playerBar.hidden = false;
       setWatching(true);
@@ -2281,6 +2350,11 @@ function sleepRender(): void {
 
 function sleepApplyFired(): void {
   if (!sleepState.fired) return;
+  if (multiViewUi.isOpen) {
+    closeMultiView(false);
+    playerBar.hidden = true;
+    setWatching(false);
+  }
   if (!videoEl.paused) videoEl.pause();
   videoStage.classList.add("sleep-dim");
   showToast("Sleep-таймер: воспроизведение остановлено");
@@ -3298,6 +3372,7 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  closeMultiView(false);
   stopIfRecording();
   player.stop();
   playerBar.hidden = true;
