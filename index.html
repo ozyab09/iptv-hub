@@ -272,6 +272,7 @@
             </div>
             <button id="btn-retry" class="vbtn ghost" title="Перезапустить поток" aria-label="Перезапустить поток" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></button>
             <div class="top-actions">
+              <button id="btn-multi-view" class="vbtn ghost" title="Мульти-вью 2×2" aria-label="Мульти-вью 2×2" data-i18n-title="multi.enter" data-i18n-aria-label="multi.enter"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-grid"></use></svg></button>
               <button id="now-fav" class="vbtn ghost fav-star" title="В избранное" aria-label="В избранное или убрать"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
               <button id="btn-shot" class="vbtn ghost" title="Снять скриншот кадра (S)" aria-label="Скриншот кадра"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-camera"></use></svg></button>
               <button id="btn-close-player" class="vbtn ghost" title="Закрыть" aria-label="Закрыть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
@@ -353,6 +354,21 @@
           <div id="sched-list" class="sched-list"></div>
         </section>
         </div>
+        <section id="multi-view" class="multi-view" hidden aria-label="Мульти-вью 2×2" data-i18n-aria-label="multi.enter">
+          <div class="multi-head">
+            <h3 class="t-heading">2×2</h3>
+            <button id="multi-list" class="btn btn-sm" data-i18n="nav.channels">Каналы</button>
+            <button id="multi-exit" class="btn btn-sm" data-i18n="multi.exit">Один канал</button>
+            <button id="multi-close" class="icon-btn" aria-label="Закрыть плеер" data-i18n-aria-label="multi.close"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
+          </div>
+          <p class="multi-note t-caption muted" data-i18n="multi.hint">Выберите окно, затем канал из списка. Звук — у выбранного окна.</p>
+          <div class="multi-grid"></div>
+          <div class="multi-controls">
+            <button id="multi-pause" class="icon-btn" aria-label="Пауза / продолжить" data-i18n-aria-label="multi.pause"></button>
+            <button id="multi-mute" class="icon-btn" aria-label="Звук вкл/выкл" data-i18n-aria-label="multi.mute"></button>
+            <input id="multi-volume" type="range" min="0" max="100" value="100" aria-label="Громкость" data-i18n-aria-label="multi.volume" />
+          </div>
+        </section>
       </div>
       <!-- Модалка программы передач -->
       <div id="guide-overlay" class="guide-overlay" hidden>

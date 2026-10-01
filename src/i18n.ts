@@ -2,6 +2,18 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "multi.enter": "Мульти-вью 2×2",
+  "multi.exit": "Один канал",
+  "multi.close": "Закрыть плеер",
+  "multi.hint": "Выберите окно, затем канал из списка. Звук — у выбранного окна. Несколько потоков увеличивают расход трафика и батареи.",
+  "multi.empty": "Выберите канал",
+  "multi.audio": "Звук",
+  "multi.retry": "Повторить",
+  "multi.pause": "Пауза / продолжить",
+  "multi.mute": "Звук вкл/выкл",
+  "multi.volume": "Громкость",
+  "multi.mobile": "Мульти-вью доступно только на широком экране (от 1024 пикселей)",
+  "multi.pickFirst": "Сначала включите канал из списка",
   "playlist.addOpen": "Добавить и открыть",
   "playlist.default": "Плейлист",
   "error.unknown": "ошибка",
@@ -143,6 +155,18 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "multi.enter": "Multi-view 2×2",
+  "multi.exit": "Single channel",
+  "multi.close": "Close player",
+  "multi.hint": "Select a tile, then a channel from the list. Only the selected tile has sound. Multiple streams use more bandwidth and battery.",
+  "multi.empty": "Select a channel",
+  "multi.audio": "Sound",
+  "multi.retry": "Retry",
+  "multi.pause": "Pause / resume",
+  "multi.mute": "Mute / unmute",
+  "multi.volume": "Volume",
+  "multi.mobile": "Multi-view requires a wide screen (at least 1024 pixels)",
+  "multi.pickFirst": "Play a channel from the list first",
   "playlist.addOpen": "Add and open",
   "playlist.default": "Playlist",
   "error.unknown": "error",
