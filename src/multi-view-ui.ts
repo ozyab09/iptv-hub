@@ -126,6 +126,10 @@ export function createMultiViewUi(opts: Options) {
       return channel;
     },
     render,
+    updateNames(nameFor: (channel: Channel) => string): void {
+      for (const channel of model.channels) if (channel) channel.name = nameFor(channel);
+      render();
+    },
     handleKey(event: KeyboardEvent): boolean {
       // Space/Enter на кнопке окна должны активировать кнопку обычным способом.
       if ((event.target as HTMLElement | null)?.closest(".multi-select") && [" ", "Enter"].includes(event.key)) return true;

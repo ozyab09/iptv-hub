@@ -139,6 +139,7 @@ import {
 } from "./catchup";
 import { createQualityMenu } from "./quality-menu";
 import { createMultiViewUi } from "./multi-view-ui";
+import { applyChannelOverrides, channelOverridesKey, parseChannelOverrides, serializeChannelOverrides, setChannelOverride, type ChannelOverrides } from "./channel-overrides";
 import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
 import {
   shouldShowHttpNotice,
@@ -324,6 +325,7 @@ const btnTheme = $<HTMLButtonElement>("btn-theme");
 
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
+let channelOverrides: ChannelOverrides = new Map();
 let epg: Map<string, import("./types").EpgProgramme[]> | null = null;
 let activeCategory: string | null = null;
 let plState: PlaylistsState = loadPlaylists(
@@ -736,8 +738,61 @@ function setView(view: View, persist = true): void {
 }
 
 // ---------- Рендер категорий ----------
+const channelEditor = $<HTMLDialogElement>("channel-editor");
+channelEditor.addEventListener("keydown", (event) => event.stopPropagation());
+const channelAlias = $<HTMLInputElement>("channel-alias");
+const channelHidden = $<HTMLInputElement>("channel-hidden");
+let editedChannelUrl: string | null = null;
+
+function openChannelEditor(channel: Channel): void {
+  if (!snapshot) return;
+  editedChannelUrl = channel.url;
+  const original = snapshot?.channels.find((c) => c.url === channel.url);
+  $("channel-original").textContent = original?.name ?? channel.name;
+  channelAlias.value = channelOverrides.get(channel.url)?.alias ?? "";
+  channelHidden.checked = channelOverrides.get(channel.url)?.hidden ?? false;
+  channelEditor.showModal();
+  channelAlias.focus();
+}
+
+function refreshChannelOverrides(): void {
+  if (!snapshot) return;
+  const nameFor = (channel: Channel): string => {
+    const original = snapshot!.channels.find((c) => c.url === channel.url) ?? channel;
+    return applyChannelOverrides([original], channelOverrides, true)[0]!.name;
+  };
+  if (lastPlayed) {
+    lastPlayed.name = nameFor(lastPlayed);
+    nowTitle.textContent = lastPlayed.name;
+    refreshNowFav();
+  }
+  multiViewUi.updateNames(nameFor);
+  renderCategories();
+  renderChannels(false);
+  renderPlaylistSwitcher();
+}
+
+$("channel-editor-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!editedChannelUrl || !plState.activeId) return;
+  channelOverrides = setChannelOverride(channelOverrides, editedChannelUrl, channelAlias.value, channelHidden.checked);
+  try { localStorage.setItem(channelOverridesKey(plState.activeId), serializeChannelOverrides(channelOverrides)); }
+  catch { /* без персистентности сохраняем изменения в текущей сессии */ }
+  channelEditor.close();
+  refreshChannelOverrides();
+});
+$("channel-editor-cancel").addEventListener("click", () => channelEditor.close());
+$("channel-overrides-reset").addEventListener("click", () => {
+  if (!plState.activeId) { showToast(tr("backup.openFirst")); return; }
+  channelOverrides = new Map();
+  try { localStorage.removeItem(channelOverridesKey(plState.activeId)); } catch { /* текущая сессия */ }
+  refreshChannelOverrides();
+  showToast(tr("channel.resetDone"));
+});
+
 function renderCategories(): void {
   if (!snapshot) return;
+  const channels = applyChannelOverrides(snapshot.channels, channelOverrides);
   categoriesNav.textContent = "";
   const mk = (label: string, value: string | null, count: number) => {
     const b = document.createElement("button");
@@ -755,10 +810,10 @@ function renderCategories(): void {
     return b;
   };
   const entries: Array<[string, string | null, number]> = [
-    ["Все", null, snapshot.channels.length],
+    ["Все", null, channels.length],
     ...snapshot.categories.map(
       (g) =>
-        [g, g, snapshot!.channels.filter((c) => c.group === g).length] as [
+        [g, g, channels.filter((c) => c.group === g).length] as [
           string,
           string,
           number,
@@ -865,7 +920,7 @@ window.addEventListener("resize", () => {
 function renderChannels(resetScroll = true): void {
   if (!snapshot) return;
   const q = searchInput.value.trim().toLowerCase();
-  const inView = channelsForView(activeView, snapshot.channels, favorites, recents);
+  const inView = channelsForView(activeView, applyChannelOverrides(snapshot.channels, channelOverrides), favorites, recents);
   const list = inView.filter((c) => {
     if (activeCategory && c.group !== activeCategory) return false;
     if (!q) return true;
@@ -1011,7 +1066,18 @@ function renderChannelCard(c: Channel): HTMLElement {
     renderCategories();
     renderChannels();
   });
-  card.append(star);
+  const actions = document.createElement("span");
+  actions.className = "channel-actions";
+  const edit = document.createElement("button");
+  edit.className = "icon-btn";
+  edit.dataset.channelEdit = "";
+  edit.title = tr("channel.edit");
+  edit.setAttribute("aria-label", edit.title);
+  setIcon(edit, "edit");
+  edit.addEventListener("click", (event) => { event.stopPropagation(); openChannelEditor(c); });
+  actions.append(star, edit);
+  card.append(actions);
+  card.addEventListener("contextmenu", (event) => { event.preventDefault(); openChannelEditor(c); });
 
   // Мини-превью: текстовый тост «сейчас в эфире» (issue #118). Никаких
   // <video> — десяток одновременных декодеров убил бы мобильную батарею.
@@ -1055,6 +1121,7 @@ function renderChannelCard(c: Channel): HTMLElement {
 
 // ---------- Плеер ----------
 function playChannel(c: Channel, archiveUrl?: string): void {
+  c = applyChannelOverrides([snapshot?.channels.find((original) => original.url === c.url) ?? c], channelOverrides, true)[0]!;
   if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
   if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined)) {
@@ -1101,7 +1168,7 @@ function playChannel(c: Channel, archiveUrl?: string): void {
 /** Переключить на соседний канал в текущем видимом списке (с зацикливанием). */
 function playNeighbor(step: 1 | -1): void {
   if (visibleChannels.length === 0) return;
-  const cur = visibleChannels.findIndex((c) => c === lastPlayed);
+  const cur = visibleChannels.findIndex((c) => c.url === lastPlayed?.url);
   const from = cur >= 0 ? cur : step === 1 ? -1 : 0;
   const idx = neighborIndex(from, visibleChannels.length, step);
   if (idx !== null) playChannel(visibleChannels[idx]!);
@@ -2477,7 +2544,7 @@ function renderContinue(): void {
     activeCategory === null &&
     snapshot !== null;
   const items = show
-    ? channelsForView("recents", snapshot!.channels, favorites, recents).slice(0, 4)
+    ? channelsForView("recents", applyChannelOverrides(snapshot!.channels, channelOverrides), favorites, recents).slice(0, 4)
     : [];
   continueBlock.hidden = items.length === 0;
   continueRow.textContent = "";
@@ -3207,7 +3274,7 @@ function renderPlaylistSwitcher(): void {
   plSwitchName.textContent = active.name;
   // Видимый текст — название, а имя кнопки для скринридера — её действие
   plSwitchBtn.setAttribute("aria-label", tr("playlist.switchNamed", { name: active.name }));
-  plSwitchCount.textContent = snapshot ? channelsWord(snapshot.channels.length) : "";
+  plSwitchCount.textContent = snapshot ? channelsWord(applyChannelOverrides(snapshot.channels, channelOverrides).length) : "";
   plSwitchMenu.textContent = "";
   for (const p of plState.items) {
     const b = document.createElement("button");
@@ -3372,6 +3439,10 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  channelEditor.close();
+  try {
+    channelOverrides = parseChannelOverrides(plState.activeId ? localStorage.getItem(channelOverridesKey(plState.activeId)) : null);
+  } catch { channelOverrides = new Map(); }
   closeMultiView(false);
   stopIfRecording();
   player.stop();

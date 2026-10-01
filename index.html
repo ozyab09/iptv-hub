@@ -183,6 +183,12 @@
                   <p class="set-note muted" data-i18n="settings.refreshNote">Список перечитывается из сети по расписанию; о результатах сообщит колокольчик.</p>
                 </section>
 
+                <section class="set-group">
+                  <h2 class="set-label t-overline" data-i18n="channel.settings">Имена и скрытие каналов</h2>
+                  <button id="channel-overrides-reset" class="btn" data-i18n="channel.reset">Сбросить для текущего плейлиста</button>
+                  <p class="set-note muted" data-i18n="channel.note">Вернёт исходные имена и покажет скрытые каналы. Избранное сохраняется.</p>
+                </section>
+
                 <section class="set-group backup-group">
                   <h2 class="set-label t-overline" data-i18n="settings.backup">Резервная копия</h2>
                   <div class="group">
@@ -370,6 +376,20 @@
           </div>
         </section>
       </div>
+      <dialog id="channel-editor" class="channel-editor" aria-labelledby="channel-editor-title">
+        <form id="channel-editor-form">
+          <h2 id="channel-editor-title" class="t-heading" data-i18n="channel.edit">Изменить канал</h2>
+          <p id="channel-original" class="muted"></p>
+          <label for="channel-alias" data-i18n="channel.alias">Имя канала (пустое — исходное)</label>
+          <input id="channel-alias" class="input" type="text" maxlength="120" />
+          <label class="channel-hidden-label"><input id="channel-hidden" type="checkbox" /><span data-i18n="channel.hide">Скрыть из списков и поиска</span></label>
+          <p class="set-note muted" data-i18n="channel.linkNote">Скрытый канал остаётся доступен по ссылке с ?ch=.</p>
+          <div class="channel-editor-actions">
+            <button id="channel-editor-cancel" type="button" class="btn" data-i18n="channel.cancel">Отмена</button>
+            <button type="submit" class="btn" data-i18n="channel.save">Сохранить</button>
+          </div>
+        </form>
+      </dialog>
       <!-- Модалка программы передач -->
       <div id="guide-overlay" class="guide-overlay" hidden>
         <div class="guide" role="dialog" aria-modal="true" aria-label="Программа передач">
