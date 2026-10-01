@@ -148,7 +148,10 @@
                       </div>
                       <div class="item">
                         <label for="player-low-latency" data-i18n="settings.latency">Низкая задержка HLS</label>
-                        <input id="player-low-latency" type="checkbox" />
+                        <span class="player-switch">
+                          <input id="player-low-latency" type="checkbox" />
+                          <span class="player-switch-track" aria-hidden="true"></span>
+                        </span>
                       </div>
                       <div class="item">
                         <label for="player-diagnostics-timeout" data-i18n="settings.timeout">Таймаут диагностики, секунды</label>
