@@ -1,7 +1,7 @@
 import { isValidPin } from "./parental-pin";
 
 /** Один модальный запрос; отмена и смена плейлиста не разрешают действие. */
-export function createPinDialog(dialog: HTMLDialogElement, translate: (key: "pin.new" | "pin.enter" | "pin.invalid" | "pin.mismatch" | "pin.wrong" | "pin.failed") => string) {
+export function createPinDialog(dialog: HTMLDialogElement, translate: (key: "pin.new" | "pin.enter" | "pin.invalid" | "pin.mismatch" | "pin.wrong" | "pin.failed" | "pin.set" | "pin.continue") => string) {
   const form = dialog.querySelector("form")!;
   const title = dialog.querySelector<HTMLElement>("h2")!;
   const groupLabel = dialog.querySelector<HTMLElement>("[data-pin-group]")!;
@@ -45,6 +45,7 @@ export function createPinDialog(dialog: HTMLDialogElement, translate: (key: "pin
     ask(group: string, creating: boolean, check: (pin: string, isCurrent: () => boolean) => Promise<boolean>): Promise<boolean> {
       finish(false);
       title.textContent = translate(creating ? "pin.new" : "pin.enter");
+      submit.textContent = translate(creating ? "pin.set" : "pin.continue");
       groupLabel.textContent = group;
       confirmLabel.hidden = !creating;
       confirmation.required = creating;
