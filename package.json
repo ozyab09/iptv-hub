@@ -1,0 +1,26 @@
+{
+  "name": "iptv-hub",
+  "version": "0.2.5",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted web player for IPTV playlists (M3U) with EPG, PWA, deployable to GitHub Pages",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:visual": "playwright test",
+    "icons": "node scripts/gen-icons.mjs"
+  },
+  "dependencies": {
+    "hls.js": "^1.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^26.6.3",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,1328 @@
+@import "./components.css";
+
+/* Дизайн-система IPTV Hub v2. Значения — из tokens.json системы,
+   менять их здесь руками нельзя: правь систему и переноси сюда целиком.
+   Тема dark идёт первой — она по умолчанию. */
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("./fonts/onest-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("./fonts/onest-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+:root {
+  /* поверхности: глубина из четырёх ступеней, не из теней */
+  --bg: #0c0d10;
+  --surface-1: #15161a;
+  --surface-2: #1d1e23;
+  --surface-3: #27282e;
+  --border: #2c2d33;
+  /* текст */
+  --text: #f2f2f4;
+  --muted: #9c9da6;
+  /* единственный акцент: играет / выбрано / эфир / избранное */
+  --accent: #ff4fa3;
+  --accent-soft: rgba(255, 79, 163, 0.14);
+  --on-accent: #0c0d10;
+  /* служебные цвета */
+  --focus: #5b93ff;
+  --danger: #ff6363;
+  --warning: #f5b041;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --video: #060709;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  /* сетка 4px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+
+  /* Высота таб-бара: от неё считаются отступ страницы и посадка мини-плеера */
+  --tabbar-h: 64px;
+
+  --font-sans: Onest, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f6f6f8;
+  --surface-1: #ffffff;
+  --surface-2: #eeeef1;
+  --surface-3: #e3e3e8;
+  --border: #dcdce2;
+  --text: #111216;
+  --muted: #5b5c65;
+  --accent: #d0176f;
+  --accent-soft: rgba(208, 23, 111, 0.10);
+  --on-accent: #ffffff;
+  --focus: #2f6ce0;
+  --danger: #c62828;
+  --warning: #8a5200;
+  --scrim: rgba(17, 18, 22, 0.4);
+  --shadow-pop: 0 12px 32px rgba(17, 18, 22, 0.14);
+  color-scheme: light;
+}
+
+/* Иконки: параметры штриха заданы здесь, фигуры — в src/icons.ts */
+.i {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.2em;
+}
+.i-sm { width: 16px; height: 16px; }
+.i-lg { width: 24px; height: 24px; }
+.i-fill { fill: currentColor; stroke: none; }
+
+/* Плашка «Эфир»: точка + капслок, единственный акцентный элемент в строке */
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 15px/22px var(--font-sans);
+  min-height: 100%;
+}
+
+/* ================= каркас (v2) =================
+   Приложение живёт в высоту окна: слева панель (бренд, разделы, категории),
+   сверху шапка (плейлист, поиск, тема), под ней экран раздела. Список
+   каналов прокручивается сам — его виртуализации нужен свой контейнер. */
+#app {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "side top" "side main";
+  height: 100vh;
+  height: 100dvh;
+}
+.sidebar {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 0;
+  padding: var(--space-5) var(--space-4);
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--space-2);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.brand-mark .i { width: 18px; height: 18px; stroke-width: 2.2; }
+.side-nav { display: flex; flex-direction: column; gap: 2px; }
+.side-label { padding: 0 var(--space-3); margin-bottom: calc(-1 * var(--space-3)); color: var(--muted); }
+/* Категории на широком экране — список с количеством, не чипы */
+.categories { display: flex; flex-direction: column; gap: 2px; }
+.categories .chip {
+  width: 100%;
+  justify-content: space-between;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  padding: 0 var(--space-3);
+}
+.categories .chip:hover { background: var(--surface-2); color: var(--text); }
+.categories .chip.on { background: var(--surface-2); color: var(--text); }
+.categories .chip .count { font-size: 12px; }
+.tabbar { display: none; }
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-5) var(--space-10) var(--space-4);
+}
+.pl-switch { position: relative; flex: none; min-width: 0; }
+.pl-switch-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  max-width: 360px;
+  margin-left: calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.pl-switch-btn:hover { background: var(--surface-2); }
+.pl-switch-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.pl-switch-count { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.pl-switch-btn .i { align-self: center; color: var(--muted); flex: none; }
+.pl-switch-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 70; min-width: 240px; }
+.search-wrap {
+  flex: 1;
+  min-width: 0;
+  max-width: 560px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  cursor: text;
+}
+.search-wrap:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(91, 147, 255, 0.18); }
+.search-wrap > .i { color: var(--muted); flex: none; }
+#search {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+#search::placeholder { color: var(--muted); }
+.search-wrap .kbd { flex: none; }
+.search-wrap:focus-within .kbd { display: none; }
+.topbar .icon-btn {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.topbar .icon-btn:hover { background: var(--surface-3); }
+/* Правый угол шапки: колокольчик + тема (margin-left: auto у обёртки
+   колокольчика прибивает пару к правому краю). */
+.notif-bell-wrap { margin-left: auto; }
+.theme-btn { margin-left: 0; }
+
+.screens {
+  grid-area: main;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--space-10);
+}
+#player-screen:not([hidden]) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#setup-screen:not([hidden]) { flex: 1; min-height: 0; overflow-y: auto; }
+.view-head { margin: var(--space-2) 0 var(--space-3); }
+.view-count { margin-left: var(--space-1); color: var(--muted); font-size: 13px; font-weight: 500; }
+
+/* ---- телефон: шапка, чипы категорий, список, таб-бар ---- */
+@media (max-width: 719px) {
+  #app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: "top" "side" "main";
+  }
+  .topbar {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    padding: max(var(--space-4), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-3);
+  }
+  .pl-switch { flex: 1; }
+  .pl-switch-name { font-size: 22px; line-height: 28px; }
+  .search-wrap { order: 3; flex: 1 1 100%; max-width: none; }
+  /* < 16px → iOS Safari увеличивает страницу при фокусе */
+  #search { font-size: 16px; }
+  .search-wrap .kbd { display: none; }
+
+  .sidebar {
+    gap: 0;
+    padding: 0 0 var(--space-3);
+    background: transparent;
+    border: 0;
+    overflow: visible;
+  }
+  .brand,
+  .side-nav,
+  .side-label { display: none; }
+  .categories {
+    flex-direction: row;
+    gap: var(--space-2);
+    padding: 0 var(--space-5);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .categories::-webkit-scrollbar { display: none; }
+  .categories .chip {
+    width: auto;
+    border-radius: var(--radius-full);
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 0 14px;
+  }
+  .categories .chip.on { background: var(--text); color: var(--bg); }
+
+  .screens { padding: 0 var(--space-5); }
+  .tabbar { display: flex; min-height: var(--tabbar-h); }
+
+  /* Лента карточек: на телефоне они прокручиваются вбок, а не жмутся в сетку */
+  .continue-row { display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .continue-card { flex: none; width: 156px; scroll-snap-align: start; }
+}
+
+/* ---- просмотр на широком экране: панель → рельс, шапка — над списком ---- */
+@media (min-width: 1024px) {
+  #app.watch {
+    /* Рельс 72, список 368, плеер забирает всё остальное. Наоборот не
+       годится: список из коротких строк растянулся бы на полэкрана. */
+    --rail-w: 72px;
+    --list-w: 368px;
+    --player-w: calc(100vw - var(--rail-w) - var(--list-w));
+    grid-template-columns: var(--rail-w) var(--list-w);
+  }
+  .watch .sidebar { align-items: center; gap: var(--space-2); padding: var(--space-5) 0; }
+  .watch .brand { padding: 0; margin-bottom: var(--space-4); }
+  .watch .brand-name,
+  .watch .side-label,
+  .watch .categories { display: none; }
+  .watch .side-item { width: 44px; justify-content: center; padding: 0; }
+  .watch .side-item > span { display: none; }
+  .watch .topbar { flex-wrap: wrap; gap: var(--space-3); padding: var(--space-5) var(--space-5) var(--space-3); }
+  .watch .pl-switch { flex: 1; }
+  .watch .search-wrap { order: 3; flex: 1 1 100%; height: 40px; }
+  .watch .theme-btn { display: none; }
+  .watch .screens { padding: 0 var(--space-5); }
+  .watch .continue-block { display: none; }
+  /* Взамен скрытых категорий — компактный выбор над списком */
+  #app.watch #cat-picker:not([hidden]) { display: block; }
+  #app.watch.list-collapsed .screens { padding: 0 var(--space-2); }
+  /* Узкая колонка логотипов прокручивается колесом и жестом, но без
+     видимой полосы: 64px не хватает, и полоса ложилась поверх плиток */
+  #app.watch.list-collapsed .channel-list { margin: 0; scrollbar-width: none; }
+  #app.watch.list-collapsed .channel-list::-webkit-scrollbar { display: none; }
+}
+
+/* ---------- screens ---------- */
+/* Атрибут hidden обязан побеждать любой display из классов (иначе
+   .guide-overlay{display:flex} показывает пустую модалку при загрузке). */
+[hidden] { display: none !important; }
+
+.screen[hidden] { display: none; }
+
+
+/* ---------- channels ---------- */
+.epg-now {
+  padding: 10px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.channel-list {
+  /* Виртуализация: контейнер прокручивается сам, внутри спейсер высотой
+     строки × число каналов, строки ставятся через translateY (virtual-list) */
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 calc(-1 * var(--space-3));
+  padding-bottom: var(--space-6);
+}
+/* Место под таб-бар и мини-плеер: иначе конец списка уходит под них.
+   Правило стоит ПОСЛЕ базового: специфичность у них одинаковая, и в
+   телефонном блоке выше его перебивал `padding-bottom: var(--space-6)`. */
+@media (max-width: 719px) {
+  .channel-list { padding-bottom: calc(var(--tabbar-h) + 84px); }
+}
+.empty-state {
+  padding: var(--space-10) var(--space-4);
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 22px;
+}
+.virtual-spacer { position: relative; width: 100%; }
+/* Высота фиксирована: её знает виртуализация (CHANNEL_ROW_HEIGHT в main.ts) */
+.row.channel-card {
+  height: 72px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.row.channel-card:hover { background: var(--surface-2); }
+.row.channel-card.on { background: var(--accent-soft); }
+.row .meta { gap: 2px; }
+.row .row-now { font-size: 13px; line-height: 18px; }
+.row .row-now .num { margin-right: 6px; }
+.row .meta .prog { max-width: 360px; margin-top: 3px; }
+.row.on .row-now { color: var(--accent); }
+/* В списке полоски спокойные: розовым — только у того, что играет. Иначе
+   двадцать розовых линий подряд спорили бы с отметкой «сейчас смотрите». */
+.row .meta .prog > span { background: var(--muted); }
+.row.on .meta .prog > span { background: var(--accent); }
+.row-next { display: none; font-size: 13px; line-height: 18px; }
+/* На широком экране строка — таблица: канал и что идёт, что дальше, звезда */
+@media (min-width: 1024px) {
+  #app:not(.watch) .row.channel-card {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1.4fr) minmax(0, 1fr) 44px;
+    gap: var(--space-4);
+  }
+  #app:not(.watch) .row-next { display: block; }
+}
+.row .star {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: var(--space-2);
+  display: inline-flex;
+}
+.virtual-inner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+
+/* «Продолжить»: 4 карточки на десктопе, горизонтальная лента на телефоне */
+.continue-block { margin: var(--space-2) 0 var(--space-4); flex: none; }
+.continue-block > h3 { margin: 0 0 var(--space-3); }
+.continue-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+.continue-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.continue-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+  background: var(--video);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.continue-frame > img { max-width: 60%; max-height: 60%; object-fit: contain; }
+.continue-mark { font-size: 44px; font-weight: 700; letter-spacing: -0.04em; color: rgba(255, 255, 255, 0.16); }
+.continue-frame:has(img) .continue-mark { display: none; }
+.continue-frame > .live { position: absolute; left: var(--space-2); top: var(--space-2); }
+.continue-frame > .prog { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0; }
+.continue-meta { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+
+/* ---- Записанные эфиры (#159): горизонтальная лента карточек ---- */
+.recordings-row {
+  display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory;
+  padding-bottom: var(--space-2);
+}
+.recording-card {
+  flex: none; width: 260px; scroll-snap-align: start;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-3);
+  cursor: pointer; color: inherit; text-align: left; font: inherit;
+}
+.recording-card:hover { border-color: var(--focus); }
+.recording-name { font-weight: 600; }
+.recording-sub { font-size: 12px; }
+.recording-act {
+  position: absolute; margin-left: var(--space-1);
+  color: var(--muted); cursor: pointer;
+}
+.recording-act:hover { color: var(--text); }
+
+/* Экран раздела «Записи»: вертикальный список карточек. */
+.recordings-list {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  overflow-y: auto; min-height: 0;
+}
+.recordings-list .recording-card { width: 100%; }
+
+
+
+
+
+/* Кнопка качества + выпадающее меню в палитре сайта */
+.quality-wrap { position: relative; }
+.cat-picker { position: relative; display: none; margin-bottom: var(--space-3); }
+/* Только позиционирование: вид меню задаёт .menu дизайн-системы.
+   #cat-menu несёт оба класса (.quality-menu .cat-menu): специфичность
+   одинаковая, поэтому ПОРЯДОК решает — .cat-menu обязан стоять после,
+   иначе bottom из .quality-menu уцелеет, и меню со связкой top+bottom
+   схлопнется в нулевую высоту (#84). */
+.quality-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 190px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+/* Раскрывается вниз: над ним заголовок раздела, а не край окна.
+   bottom: auto обязателен — сбрасывает нижнюю привязку .quality-menu. */
+.cat-menu { top: calc(100% + 6px); bottom: auto; }
+.quality-item.active { color: var(--accent); font-weight: 600; }
+/* Кнопка-иконка дизайн-системы: 44×44, без рамки; заливка — по месту */
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--surface-2); }
+
+.guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.guide {
+  width: min(640px, 100%);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  gap: var(--space-3);
+}
+/* Ручка нужна только шторке — на десктопе это обычный диалог */
+.grabber { display: none; }
+
+/* На телефоне программа — шторка снизу, как требует дизайн-система:
+   до неё дотягивается большой палец, а модалка по центру — нет. */
+@media (max-width: 719px) {
+  .guide-overlay { align-items: flex-end; padding: 0; }
+  .guide {
+    width: 100%;
+    max-height: 80vh;
+    max-height: 80dvh;
+    border: 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  }
+  .grabber {
+    display: block;
+    width: 40px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background: var(--surface-3);
+    margin: 0 auto var(--space-1);
+  }
+}
+.guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.guide-title {
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-days {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.guide-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 120px;
+}
+/* Строки программы — это <button>: без сброса браузер рисует им свой
+   серый фон и рамку поверх .prog-row из дизайн-системы. */
+.guide-list .prog-row,
+.sched-list .prog-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.guide-list .prog-row:hover,
+.sched-list .prog-row:hover { background: var(--surface-2); }
+.guide-list .prog-row.now,
+.sched-list .prog-row.now { background: var(--accent-soft); }
+.guide-list .prog-row:disabled,
+.sched-list .prog-row:disabled { cursor: default; }
+.guide-list .prog-row:disabled:hover,
+.sched-list .prog-row:disabled:hover { background: transparent; }
+.guide-list .prog-row .time,
+.sched-list .prog-row .time { width: auto; min-width: 96px; }
+.prog-body { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.prog-body .title { font-size: 15px; line-height: 22px; }
+.prog-arch { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 12px; line-height: 16px; color: var(--muted); }
+.prog-row:not(:disabled):hover .prog-arch { color: var(--text); }
+
+/* Программа под плеером */
+.now-schedule { display: flex; flex-direction: column; gap: var(--space-2); }
+.sched-head { display: flex; align-items: center; justify-content: space-between; }
+.sched-head h3 { margin: 0; }
+.sched-all {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 13px/18px var(--font-sans);
+  padding: var(--space-2);
+  margin-right: calc(-1 * var(--space-2));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.sched-all:hover { color: var(--text); background: var(--surface-2); }
+.sched-list { display: flex; flex-direction: column; gap: 2px; }
+.sched-list .prog-row { padding: var(--space-3) var(--space-2); }
+@media (max-width: 1023px) {
+  .player-bar:not(.open) .now-schedule { display: none; }
+}
+/* На широком экране — пять плиток в ряд под кадром */
+@media (min-width: 1024px) {
+  .sched-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2); }
+  .sched-list .prog-row {
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+  }
+  .sched-list .prog-row .time { min-width: 0; font-size: 12px; line-height: 16px; }
+  .sched-list .prog-body .title {
+    font-size: 13px;
+    line-height: 18px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .sched-list .prog-row:disabled:hover { background: var(--surface-1); }
+  .sched-list .prog-row.now { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+}
+.prog-row.dim { opacity: 0.45; cursor: default; }
+.prog-row.dim:hover { background: transparent; }
+
+/* ---------- настройки и первый запуск ---------- */
+.settings-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-6) 0 var(--space-10);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.settings-title { margin: 0; }
+.onboard { display: none; flex-direction: column; gap: var(--space-3); }
+.onboard h1 { margin: var(--space-3) 0 0; }
+.onboard p { margin: 0; font-size: 16px; line-height: 24px; }
+.onboard-mark {
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.onboard-mark .i { width: 30px; height: 30px; stroke-width: 2; }
+
+/* Первый запуск: ничего, кроме приветствия, поля со ссылкой и восстановления */
+.first-run .settings-inner { max-width: 520px; padding-top: 10vh; }
+.first-run .onboard { display: flex; }
+.first-run .settings-title,
+.first-run .pl-group,
+.first-run .theme-group,
+.first-run #btn-export,
+.first-run .backup-group .set-label,
+.first-run .set-note { display: none; }
+.first-run .backup-group .group { background: transparent; }
+.first-run #btn-import { justify-content: center; min-height: 44px; color: var(--muted); }
+
+.add-form[hidden] + .privacy { display: none; }
+/* Первый запуск: разделов, поиска и таб-бара ещё нет — только тема */
+.no-playlist .sidebar,
+.no-playlist .search-wrap,
+.no-playlist .pl-switch,
+.no-playlist .tabbar { display: none !important; }
+.no-playlist#app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "main"; grid-template-rows: auto minmax(0, 1fr); }
+.set-group { display: flex; flex-direction: column; gap: var(--space-2); }
+.set-label { margin: 0 var(--space-1); color: var(--muted); }
+.set-note { margin: var(--space-1) var(--space-1) 0; font-size: 12px; line-height: 16px; }
+.group button.item {
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
+  color: var(--text);
+  font: 500 15px/22px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.group button.item:hover { background: var(--surface-2); }
+.item-label { flex: 1; font-weight: 500; }
+.add-pl { color: var(--accent) !important; }
+.add-pl[aria-expanded="true"] { background: var(--surface-2); }
+
+/* Плейлисты: строка — выбор (радио), справа изменить и удалить */
+.pl-list { display: contents; }
+.pl-row { gap: var(--space-2); padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.pl-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.radio {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pl-row.active .radio { border-color: var(--accent); }
+.pl-row.active .radio::after { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--accent); }
+.pl-text { min-width: 0; display: flex; flex-direction: column; }
+.pl-name { font-weight: 500; }
+.pl-url { font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-act {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pl-act:hover { background: var(--surface-2); color: var(--text); }
+.pl-del:hover { color: var(--danger); }
+.pl-row.editing { display: block; padding: var(--space-4); }
+.pl-edit { display: flex; flex-direction: column; gap: var(--space-3); }
+.field-label { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--muted); }
+.pl-edit-actions { display: flex; gap: var(--space-2); }
+
+/* Форма добавления: одно поле, остальное — под «необязательно» */
+.add-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.add-form .input input,
+.pl-edit .input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+.add-form .input input::placeholder { color: var(--muted); }
+.more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+}
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary .i { transition: transform 0.15s ease; }
+.more[open] > summary .i { transform: rotate(90deg); }
+.more-fields { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-4); }
+.add-form .btn-primary { height: 52px; font-size: 16px; }
+.privacy { display: flex; align-items: flex-start; gap: var(--space-2); margin: calc(-1 * var(--space-2)) var(--space-1) 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+.privacy .i { flex: none; }
+.error { margin: 0; color: var(--danger); font-size: 13px; line-height: 18px; }
+.muted { color: var(--muted); }
+.hint { color: var(--muted); font-size: 13px; }
+.hint summary { cursor: pointer; }
+.hint ul { margin: 8px 0 0; padding-left: 18px; }
+
+/* Сегментный переключатель (тема) */
+.seg { display: flex; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-2); }
+.seg button {
+  flex: 1;
+  height: 34px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font: 500 13px/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.seg button.on { background: var(--surface-1); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+@media (max-width: 719px) {
+  .settings-inner { padding-top: var(--space-2); }
+  .first-run .settings-inner { padding-top: var(--space-6); }
+  .theme-group .item { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  /* На телефоне четыре интервала в ряд тесны — так же, как у темы */
+  .refresh-group .item { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  .refresh-group .seg { flex-wrap: wrap; }
+  /* < 16px → iOS Safari увеличивает страницу при фокусе */
+  .add-form .input input,
+  .pl-edit .input input { font-size: 16px; }
+}
+
+/* ================= плеер (v2) =================
+   Одна раскладка на все режимы. Кадр — #video-stage 16:9, контролы на нём
+   одной панелью снизу: строка передачи, под ней слева воспроизведение,
+   справа настройки. Сверху кадра — что идёт и соседние каналы, под
+   кадром — только программа. Режимы меняют размер и место плеера, но не
+   состав панели. */
+.player-bar {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+#video-stage { width: 100%; aspect-ratio: 16 / 9; flex: none; }
+/* Группа «кадр + прогресс + программа» — единственный центрируемый ребёнок
+   плеера: воздух делится вокруг группы, а не между детьми по отдельности,
+   иначе программа отрывается от кадра (#86). В мини-плеере растворяется
+   (display: contents), чтобы прежняя раскладка строки не менялась. */
+#player-stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.player-bar video {
+  /* Канал открывают, чтобы смотреть: видео видно сразу, без лишнего действия */
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--video);
+  cursor: pointer;
+}
+.live.on-video {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+}
+.live.on-video::before { background: #ff4fa3; }
+
+/* Сверху небольшой отступ: транспортная дека перенесена в свой ряд (#89) */
+.video .bottom { gap: 6px; padding: var(--space-2) var(--space-3); }
+.scrub-row { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-1); }
+.scrub-row .scrub { flex: 1; }
+.scrub-row .num:empty { display: none; }
+/* При нехватке ширины flex сжимал всё, кроме инпута: у range сильный
+   min-content, и ползунок наезжал на правую группу (#93). min-width: 0
+   разрешает ему сжиматься, clamp держит разумный минимум. */
+.video-actions { display: flex; align-items: center; gap: 2px; min-height: 44px; min-width: 0; }
+.video .volume { display: flex; align-items: center; gap: var(--space-1); min-width: 0; flex: 0 1 auto; }
+/* Сжимаемый ползунок: без flex-shrink при узком мини-плеере он наезжал
+   на правую группу (issue #155); clamp держит разумный минимум. */
+#volume-slider { width: clamp(36px, 7vw, 72px); min-width: 0; flex: 0 1 auto; accent-color: #fff; }
+.video-actions-right { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; min-width: 0; }
+/* Статус — единственное, что в деке может уступать место: длинная строка
+   разрешения/скорости выталкивала правую группу на ползунок (issue #155). */
+.video .player-status { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* «К эфиру» — зовёт к действию, поэтому это единственная подписанная кнопка */
+.video .btn-live {
+  width: auto;
+  height: 30px;
+  padding: 0 10px;
+  margin-left: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.18);
+  font: 600 12px/1 var(--font-sans);
+}
+.video .quality-btn {
+  height: 36px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #fff;
+  font: 600 13px/1 var(--font-sans);
+  cursor: pointer;
+}
+.video .quality-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.video .quality-btn:disabled { opacity: 0.6; cursor: default; }
+.video .rec-btn { color: #ff6363; }
+.video .rec-btn.recording {
+  color: #fff;
+  background: #ff3b3b;
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rec-pulse { 50% { opacity: 0.55; } }
+/* Меню качества и дорожек раскрываются вверх и влево: у правого края кадра
+   left:0 увело бы их за границу, а кадр обрезает всё, что за ним. */
+.video .quality-menu { left: auto; right: 0; color: var(--text); }
+/* Театр больше не нужен: на широком экране место плееру даёт сворачивание
+   списка, на узком кнопка сворачивает страницу плеера обратно в мини. */
+#btn-expand { display: none; }
+
+/* Транспортная дека: все кнопки воспроизведения в одном ряду —
+   «как на магнитофоне» (#89): ◀◀ · ◀ · ▶/⏸ · ▶ · ▶▶ · ⏺.
+   Пауза крупнее остальных, запись краснеет при записи. */
+.video .transport { display: inline-flex; align-items: center; gap: var(--space-3); }
+.video .transport .vbtn.big { width: 64px; height: 64px; }
+/* Sleep-таймер: бейдж с остатком на кнопке, меню — белым по чёрному
+   (контролы на видео всегда светлые на тёмном, в любой теме). */
+.sleep-badge {
+  position: absolute; top: 2px; right: 2px;
+  font-size: 9px; line-height: 1; padding: 2px 4px; border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.18); color: #fff; pointer-events: none;
+}
+.sleep-menu {
+  position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; min-width: 200px;
+  background: rgba(0, 0, 0, 0.92); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-md); padding: var(--space-2); gap: 2px; z-index: 5;
+}
+.sleep-menu[hidden] { display: none; }
+.sleep-menu button {
+  text-align: left; padding: var(--space-2) var(--space-3); border: 0;
+  background: transparent; color: #fff; border-radius: var(--radius-xs);
+  font: inherit; cursor: pointer;
+}
+.sleep-menu button:hover { background: rgba(255, 255, 255, 0.12); }
+.sleep-menu button.on { background: rgba(255, 255, 255, 0.22); }
+/* Затемнение кадра после срабатывания таймера. */
+.video .stage.sleep-dim::after {
+  content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.78);
+}
+.stage { position: relative; }
+/* Верх кадра: канал, передача и навигация по каналам.
+   Нижний отступ небольшой: транспорт переехал в деку (#89). */
+.video .top { align-items: flex-start; padding: var(--space-4) var(--space-3) var(--space-3); }
+.now-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.now-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: 13px; line-height: 18px; }
+.now-title { flex: 0 0 auto; max-width: 70%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Не хватает места — первой сжимается категория, а не название канала */
+.now-category { flex: 0 3 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: rgba(255, 255, 255, 0.75); }
+.now-category:not(:empty)::before { content: "·"; margin-right: var(--space-2); }
+.now-show {
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.now-show:empty { display: none; }
+.top-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.video .fav-star.active { color: #ff4fa3; }
+.time-left:not(:empty)::before { content: "·"; margin-right: var(--space-2); }
+.player-status { margin-right: var(--space-2); white-space: nowrap; }
+.player-status:empty { display: none; }
+
+.mini-prog { display: none; height: 2px; background: var(--surface-3); border-radius: var(--radius-full); }
+.mini-prog > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: var(--radius-full); }
+
+/* ---- широкий экран: плеер колонкой справа, список слева ---- */
+@media (min-width: 1024px) {
+  .watch .player-bar {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--player-w);
+    padding: var(--space-6);
+    border-left: 1px solid var(--border);
+    background: var(--bg);
+    align-items: center;
+    overflow-y: auto;
+    /* Кадр вписывается и по ширине колонки, и по высоте окна — под ним
+       должна остаться строка «что идёт». Контролы и строка равняются по
+       кадру, а не по краям колонки. */
+    --frame-w: min(100%, calc((100vh - 250px) * 16 / 9));
+    /* Кадр по вертикали — посередине колонки, а не у верхней кромки.
+       Центрируется группа #player-stack (кадр + прогресс + программа):
+       авто-отступы на каждом ребёнке делили место поровну между ними,
+       и программа отрывалась от кадра (#86). Центрировать сам прокручиваемый
+       контейнер нельзя: при переполнении центральная часть становится
+       недостижимой прокруткой — margin-механизм лишён этого дефекта. */
+    margin: auto 0;
+  }
+  .watch .player-bar > #player-stack { width: var(--frame-w); margin-block: auto; }
+
+  /* Все контролы — НАД полосой хода передачи (issue #163): ряд громкости
+     и настроек поднимается над scrub-row, дека — ещё выше, своим рядом.
+     bottom деки = padding(8) + scrub-row(до 18) + gap(6) + actions(44). */
+  .video .bottom .video-actions { order: -1; }
+  .video .center {
+    inset: auto;
+    left: var(--space-3);
+    bottom: calc(var(--space-2) + 68px);
+    justify-content: flex-start;
+    z-index: 2;
+  }
+  .video .transport { gap: 2px; }
+  .video .transport .vbtn,
+  .video .transport .vbtn.big { width: 44px; height: 44px; background: transparent; }
+  .video .transport .vbtn:hover { background: rgba(255, 255, 255, 0.12); }
+
+  /* Список сворачивается в колонку логотипов (кнопка в его шапке или C) */
+  #app.watch.list-collapsed { --list-w: 64px; }
+  /* Полное скрытие (кнопка в свёрнутом списке): уходит и рельс сайдбара,
+     и панель списка — плеер занимает весь экран. Вернуть — C или кнопка
+     в углу кадра. */
+  #app.watch.list-collapsed.panel-hidden { --list-w: 0px; --rail-w: 0px; }
+  #app.watch.list-collapsed.panel-hidden { grid-template-columns: 0 0; }
+  #app.watch.list-collapsed.panel-hidden .sidebar,
+  #app.watch.list-collapsed.panel-hidden .screens { display: none; }
+  #app.watch.list-collapsed.panel-hidden { --player-w: 100vw; }
+  #app.watch .list-toggle { display: inline-flex; }
+  .video .btn-restore-panel { display: inline-flex; position: absolute; top: var(--space-3); right: var(--space-3); z-index: 3; }
+  .video .btn-restore-panel[hidden] { display: none; }
+  #app.watch.list-collapsed .topbar,
+  #app.watch.list-collapsed .view-title,
+  #app.watch.list-collapsed .cat-picker,
+  #app.watch.list-collapsed .epg-now,
+  #app.watch.list-collapsed .continue-block,
+  #app.watch.list-collapsed .row .meta,
+  #app.watch.list-collapsed .row .star { display: none !important; }
+  #app.watch.list-collapsed .view-head { justify-content: center; padding-top: var(--space-4); }
+  #app.watch.list-collapsed .row { justify-content: center; padding-left: 0; padding-right: 0; }
+  #app.watch.list-collapsed .row.on .logo { box-shadow: 0 0 0 2px var(--accent); }
+}
+
+/* ---- узкий экран: мини-плеер и страница плеера ---- */
+@media (max-width: 1023px) {
+  /* Мини: превью, что идёт, пауза, закрыть. Сцена «растворяется»
+     (display: contents), чтобы её видео и кнопка паузы встали в одну
+     строку с текстом; пауза та же, что на кадре, — иконка не рассинхронится. */
+  .player-bar:not(.open) {
+    left: var(--space-2);
+    right: var(--space-2);
+    bottom: var(--space-4);
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-pop);
+    cursor: pointer;
+  }
+  .player-bar:not(.open) #video-stage { display: contents; }
+  .player-bar:not(.open) #player-stack { display: contents; }
+  .player-bar:not(.open) video { width: 72px; height: 40px; border-radius: 8px; flex: none; }
+  .player-bar:not(.open) .bottom,
+  .player-bar:not(.open) #btn-seek-back,
+  .player-bar:not(.open) #btn-seek-fwd,
+  .player-bar:not(.open) #btn-prev,
+  .player-bar:not(.open) #btn-next,
+  .player-bar:not(.open) #btn-rec,
+  .player-bar:not(.open) #live-badge,
+  .player-bar:not(.open) #btn-retry,
+  .player-bar:not(.open) #now-fav,
+  .player-bar:not(.open) .now-show { display: none; }
+  /* Строка «превью · что идёт · пауза · закрыть»: обёртки верха кадра
+     растворяются, чтобы порядок задавался здесь, а не разметкой. Цвет —
+     темы, а не белый: мини лежит не на видео, а на поверхности. */
+  .player-bar:not(.open) .top,
+  .player-bar:not(.open) .top-actions { display: contents; }
+  .player-bar:not(.open) .now-info { order: 1; padding: 0; color: var(--text); }
+  .player-bar:not(.open) .center { order: 2; position: static; inset: auto; gap: 0; }
+  .player-bar:not(.open) #btn-close-player { order: 3; color: var(--text); }
+  .player-bar:not(.open) #btn-pause { width: 44px; height: 44px; background: transparent; color: var(--text); }
+  .player-bar:not(.open) .now-line { flex-direction: column; align-items: stretch; gap: 0; }
+  .player-bar:not(.open) .now-title { font-size: 14px; }
+  .player-bar:not(.open) .now-category { font-size: 12px; color: var(--muted); }
+  .player-bar:not(.open) .now-category::before { content: none; }
+  .player-bar:not(.open) .mini-prog { display: block; position: absolute; left: var(--space-3); right: var(--space-3); bottom: 0; }
+
+  /* Развёрнутый плеер — отдельная страница поверх всего, кадр во всю ширину */
+  .player-bar.open {
+    inset: 0;
+    z-index: 60;
+    padding: max(var(--space-4), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-5);
+    background: var(--bg);
+    overflow-y: auto;
+  }
+  /* Кадр посередине страницы, а не у верхней кромки. Центрируется группа
+     #player-stack (см. комментарий в wide-блоке): авто-отступы на каждом
+     ребёнке делили воздух поровну и отрывали программу от кадра (#86).
+     Центрируют дети, не сам прокручиваемый контейнер: justify-content:
+     center при переполнении делает верх недостижимым прокруткой. */
+  .player-bar.open > #player-stack { margin-block: auto; }
+  .player-bar.open #video-stage {
+    width: calc(100% + 2 * var(--space-5));
+    /* margin-inline, не шорткат: отрицательные поля кадра живут рядом с
+       центрирующими блок-полями группы #player-stack (#82, #86) */
+    margin-inline: calc(-1 * var(--space-5));
+    border-radius: 0;
+  }
+
+  /* Меню качества/дорожек открывается вверх от кнопки и на телефоне не
+     влезает в невысокий кадр: overflow: hidden резал его (#87). На
+     странице плеера кадр без скруглений, и скрытие ему не нужно —
+     разрешаем меню выходить наружу кадра. */
+  .player-bar.open #video-stage { overflow: visible; }
+  /* На узком кадре название передачи в одну строку помельче */
+  .player-bar.open .now-show { font-size: 16px; line-height: 22px; }
+  #btn-expand { display: inline-flex; }
+}
+@media (max-width: 719px) {
+  .player-bar:not(.open) { bottom: calc(var(--tabbar-h) + var(--space-2)); }
+  /* Точная громкость — на десктопе; на телефоне громкость у самого телефона */
+  #volume-slider { display: none; }
+  #btn-pip { display: none; }
+  .player-status { display: none; }
+}
+
+/* ---- нативный полный экран: только кадр ---- */
+#player-bar:fullscreen {
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: #000;
+  justify-content: center;
+}
+#player-bar:fullscreen > * { width: 100%; }
+#player-bar:fullscreen #player-stack { height: 100%; }
+#player-bar:fullscreen #video-stage { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; margin: 0; }
+#player-bar:fullscreen .mini-prog,
+#player-bar:fullscreen .now-schedule { display: none; }
+
+/* Шапка списка: заголовок раздела и кнопка сворачивания */
+.view-head { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.view-head .view-title { margin: 0; flex: 1; min-width: 0; }
+.list-toggle {
+  display: none;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.list-toggle:hover { background: var(--surface-2); color: var(--text); }
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-6);
+  z-index: 100;
+  transform: translateX(-50%);
+  max-width: min(480px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+}
+/* Центр уведомлений: колокольчик в шапке + выпадающая панель (#98).
+   Как в приложениях: кнопка всегда на виду, бейдж — при непрочитанных,
+   список хранит историю, «Очистить» её стирает. */
+.notif-bell-wrap { position: relative; flex: none; display: flex; }
+.notif-bell-wrap .icon-btn { position: relative; }
+.notif-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 10px/16px var(--font-sans);
+  text-align: center;
+  pointer-events: none;
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  width: min(360px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px 6px 6px;
+}
+.notif-clear {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 13px/18px var(--font-sans);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.notif-clear:hover { background: var(--surface-2); color: var(--text); }
+.notif-list { display: flex; flex-direction: column; gap: 2px; }
+.notif-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.notif-item.unread { background: var(--accent-soft); }
+.notif-item .n-time { font-size: 11px; line-height: 14px; color: var(--muted); }
+.notif-empty { padding: var(--space-3); color: var(--muted); font-size: 14px; line-height: 20px; }
+.toast-action {
+  flex: none;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: 500 13px/1 var(--font-sans);
+  cursor: pointer;
+}
+.toast-action:hover { background: var(--surface-3); }
+@media (max-width: 719px) {
+  /* На телефоне тост во всю ширину с полями и над таб-баром с мини-плеером:
+     transform-центрирование могло вывести его за край (issue #62). */
+  .toast {
+    left: var(--space-4);
+    right: var(--space-4);
+    transform: none;
+    flex-wrap: wrap;
+    bottom: calc(var(--tabbar-h) + 84px + env(safe-area-inset-bottom, 0px));
+  }
+}

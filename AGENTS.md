@@ -1,0 +1,428 @@
+# AGENTS.md
+
+> Полная техническая документация проекта для разработчиков и ИИ-агентов.
+> README.md — для пользователей. Если README и AGENTS.md расходятся — правилен AGENTS.md.
+
+---
+
+## 🎯 Что это
+
+**IPTV Hub** — self-hosted статический веб-плеер IPTV (M3U + EPG) без бэкенда.
+Разворачивается на GitHub Pages; плейлисты и телепрограмму браузер тянет напрямую
+из S3-совместимого хранилища (Yandex Object Storage), конфигурация — через
+GET-параметры, менеджер плейлистов (localStorage) или экспорт/импорт JSON.
+
+**Родительский проект:** `../iptv` (или https://github.com/ozyab09/iptv) —
+Go-пайплайн, который ежедневно фильтрует M3U/EPG и загружает их в S3. IPTV Hub —
+его клиент. Контракты данных: стандартный M3U (с `#EXTINF` атрибутами
+`tvg-id`, `tvg-logo`, `group-title`, `tvg-rec`/`catchup`) и XMLTV EPG
+(`.xml` или `.xml.gz`).
+
+**Текущий статус:** v0.2.5 — мультиплейлисты, плеер (hls.js + нативный, quality,
+аудио/субтитры, retry, mixed-content-апгрейд), скрытие http-каналов, EPG +
+catchup-архив, запись эфира (HLS — сегментами, остальное — перекодированием),
+PWA. Версия пакета (`package.json`) синхронна с этим статусом и бампится при
+релизах — тест `tests/version.test.ts` следит за расхождением.
+
+---
+
+## 🧭 Ожидания от проекта (прочти перед любыми изменениями)
+
+### Архитектурные принципы (не нарушать)
+
+1. **Zero backend.** Никакого серверного кода, никаких серверных прокси,
+   никаких серверных секретов. Всё — статика. Если задача требует бэкенда —
+   сначала обсуди, не ломает ли это модель развёртывания.
+2. **Privacy-first.** Ссылки пользователя живут в его localStorage. Никакой
+   аналитики, телеметрии, сторонних скриптов. Единственные разрешённые
+   runtime-зависимости — то, что бандлится (сейчас только `hls.js`).
+3. **Чистые модули.** Логика без DOM/fetch (`m3u.ts`, `epg.ts`, `config.ts`,
+   `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
+   `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
+   `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
+   `refresh.ts`) — полностью покрыта тестами.
+   UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
+4. **Не расширять зависимости.** Новый runtime-пакет = взвешенное решение.
+   DASH, если понадобится, добавлять через отдельный адаптер в `player.ts`
+   (например dash.js), а не заменой архитектуры.
+
+### Функциональные ожидания (что должно работать в любом PR)
+
+- Разбор M3U: атрибуты `tvg-id`/`tvg-logo`/`group-title` (+ `tvg-rec`/
+  `catchup-*` в `catchup.ts`), дедуп по URL, сортировка по алфавиту, дроп
+  entries без URL, `#EXTM3U` `tvg-url`/`url-tvg`.
+- Http-каналы на публичных хостах скрываются при разборе (mixed content на
+  https-странице неразрешим): `isPlayableStreamUrl` в `m3u.ts`, счётчик
+  `droppedHttp` в снапшоте, тост после загрузки. Исключение — localhost,
+  `*.local` и RFC1918 (`isPrivateHost` в `config.ts`, тот же предикат, что
+  в `httpToHttps` у плеера) — домашние IPTV-серверы остаются в списке.
+- Нормализация имён (`normalizeName`): нижний регистр, без эмодзи, без
+  quality-маркеров, без региональных суффиксов. Используется и поиском,
+  и матчингом EPG — изменил её, обнови тесты **обоих** потребителей.
+- EPG: `.xml` и `.gzip` (magic bytes `1f 8b`, `DecompressionStream`),
+  индексация по `id:<tvg-id>` и `name:<display-name>`, now/next по локальному
+  времени. EPG может отсутствовать — UI обязан работать и без него.
+- Поиск передач (`programme-search.ts`): подстрока названия без учёта регистра,
+  только каналы текущего раздела и категории активного плейлиста. Результат
+  содержит канал, передачу, дату и время; доступное прошедшее открывается
+  через catchup, остальные результаты включают эфир. Без EPG остаётся поиск
+  каналов. Общий список результатов виртуализирован.
+- Плейлисты: несколько источников (`playlists.v1`), активный — `active-playlist.v1`;
+  `?p=`/`?e=` делает **upsert** в список и активирует; избранные и «недавние» —
+  per-плейлист; экспорт/импорт — versioned JSON (`backup.ts`). Не-http(s) URL
+  отклоняются (защита от `javascript:`-инъекций). EPG необязателен.
+- Плеер: HLS через hls.js при `Hls.isSupported()`, нативный `<video>` иначе
+  (Safari/iOS). Прогрессивные mp4 работают. DASH — нет (это осознанно).
+  Fatal network error — до 3 автоповторов, потом retry-кнопка; фатальная
+  причина называется словами (mixed content → авто-апгрейд на https-порт,
+  HTTP-статус, CORS-подозрение).
+- Запись эфира: HLS — сегментами без перекодирования (`segment-recorder.ts`
+  → OPFS/память, потолок 1 ГБ); нативное/mp4 — перекодированием через
+  `MediaRecorder` (`recorder.ts`), где захват не работает — канвас+WebAudio.
+
+### Известные ограничения (не считать багами)
+
+- **CORS самих медиа-потоков.** Браузер может не дать играть потоки с чужих
+  CDN без CORS-заголовков (в Chrome — fetch/MSE; в Safari — обычно ок,
+  т.к. нативный playback). Это ограничение платформы, чинится только
+  прокси, который по принципам проекта запрещён. В UI есть toast об ошибке.
+- **Mixed content.** Сайт живёт на https — http-потоки браузер блокирует.
+  Плеер сам пробует https-порт 443 (кроме localhost/RFC1918/`.local`); если
+  у провайдера TLS нет, канал не заиграет — это ограничение браузера,
+  см. README «Смешанный контент».
+- **Медиа не работает в оффлайне.** SW кеширует shell + плейлист/EPG, но не
+  сегменты потоков — живой ТВ в оффлайне не существует. Список каналов и
+  программа в оффлайне видны, воспроизведение — нет. Это осознанно.
+- **SW только в прод-сборке.** Регистрация обёрнута в `import.meta.env.PROD`,
+  чтобы не ломать dev-сервер и HMR. Проверять оффлайн-режим — только на
+  `npm run preview` или в деплое, не в `npm run dev`.
+- **Манифест — только относительные пути (`./`).** Сайт живёт на
+  `https://<user>.github.io/iptv-hub/` (подпуть!), абсолютные `/...` сломают
+  установку PWA и иконки. Это касается и `start_url`, и `scope`, и `sw.js`.
+- **EPG в память.** EPG грузится целиком в память (стриминг только на этапе
+  скачивания). Для гигантских файлов (>200MB распакованных) на слабых
+  устройствах возможен рост памяти — приемлемо, ROADMAP имеет пункт про
+  индексированный доступ.
+- **Матчинг EPG по имени** — точный lowercase. fuzzy (Levenshtein, как в
+  родительском `iptv`) не реализован осознанно; tvg-id надёжнее.
+- **Пробинг каналов** («жив ли поток») не делается — это задача родительского
+  пайплайна `iptv` (`PROBE_SOURCES=true`), а не клиента.
+- **Перекодирующая запись** требует видимой вкладки (rAF) и не работает на
+  Firefox для Android (энкодер падает, канвас отдаёт черноту — приложение
+  распознаёт и останавливает запись с явным сообщением, см. #58/#60).
+
+### Что считать-done для любого изменения
+
+1. `npm run build` проходит (typecheck strict + vite build, 0 ошибок).
+2. `npm test` зелёный; новая логика покрыта тестами.
+3. Не добавлено runtime-зависимостей без обсуждения (`@types/node` в dev —
+   исключение: типы для node-тестов, в бандл не попадает).
+4. README (пользовательский) и этот файл обновлены, если менялся контракт.
+   **README — всегда**: к каждой фиче/баг-фиксу, меняющему поведение
+   интерфейса или данные, добавляется описание изменения в README.md
+   (раздел в «Возможностях» или отдельный раздел) — пользователь читает
+   README, а не issues. Это не опция и не только для «смены контракта»:
+   фича без описания в README считается незавершённой.
+5. Если менялся кэшируемый shell (index.html, иконки, манифест, src/*) — bump
+   `VERSION` в `public/sw.js`, иначе клиенты останутся на старом кэше.
+
+---
+
+## 🏗 Архитектура
+
+```
+iptv-hub/
+├── index.html              # разметка: 2 экрана + player bar + гайд + toast
+├── public/                 # копируется в dist/ как есть
+│   ├── manifest.webmanifest  # PWA-манифест (ОБЯЗАТЕЛЬНО относительные пути ./)
+│   ├── sw.js                 # service worker: shell cache-first, данные network-first
+│   └── icons/                # генерируются: npm run icons (scripts/gen-icons.mjs)
+├── scripts/gen-icons.mjs   # PNG-генератор без зависимостей (node:zlib, ручной PNG)
+├── src/
+│   ├── main.ts             # UI-слой: экраны, менеджер плейлистов, плеер-бар, boot, SW
+│   ├── playlists.ts        # список плейлистов: upsert ?p=, активный, миграция legacy
+│   ├── favorites.ts        # избранное per-плейлист (Set URL)
+│   ├── backup.ts           # экспорт/импорт versioned JSON + «недавние каналы»
+│   ├── config.ts           # isMixedContent + resolveConfig (legacy-ключ, для миграции)
+│   ├── m3u.ts              # парсер M3U: Channel, категории, normalizeName
+│   ├── epg.ts              # загрузка (стрим+gzip) и разбор XMLTV, now/next
+│   ├── catchup.ts          # архив: tvg-rec/catchup-source, {utc}/{lutc}, окна дней
+│   ├── player.ts           # Player: hls.js / нативный, quality, retry, https-апгрейд
+│   ├── quality.ts          # лейблы уровней/дорожек, формат статуса
+│   ├── recorder.ts         # запись перекодированием: mime, имя файла, жизненный цикл
+│   ├── segment-recorder.ts # запись HLS сегментами: контейнер, потолок, init-сегмент
+│   ├── recording-sink.ts   # куда писать: OPFS на диск, откат — память
+│   ├── debug-log.ts        # экранный лог по ?debug=1 (на телефоне консоли нет)
+│   ├── theme.ts            # тёмная/светлая тема (system default, без FOUC)
+│   ├── virtual-list.ts     # математика окна виртуализации (строки × колонки)
+│   ├── views.ts            # разделы приложения и отбор каналов
+│   ├── ui-classes.ts       # выбор классов дизайн-системы по состоянию
+│   ├── icons.ts            # набор линейных иконок 24×24 + спрайт
+│   ├── scrub.ts            # ход передачи и отставание от эфира
+│   ├── gestures.ts         # свайпы и двойной тап на кадре
+│   ├── components.css      # КОПИЯ bundle.css дизайн-системы (править в системе)
+│   ├── types.ts            # Channel, PlaylistSnapshot, EpgProgramme, NowNext
+│   └── style.css           # токены v2 + раскладка, mobile-first, safe-area
+├── tests/                  # vitest: 20 файлов, node env, без DOM и сети
+├── .github/workflows/ci.yml  # PR: build+test; push main: + deploy Pages
+├── vite.config.ts          # vitest config (environment: node)
+└── AGENTS.md               # этот файл
+```
+
+**Поток данных:**
+
+```
+URL ?p=&e= ─┐
+localStorage ┴→ upsertByUrl (playlists) ─→ активный плейлист ─→ fetch playlist
+                                                       └→ parseM3U ─→ UI (категории/поиск)
+                                                                └→ (tvg-url fallback)
+                                   loadEpg ─→ parseEpg ─→ getNowNext ─→ бейджи в списке
+Клик по каналу ─→ Player.play() ─→ mixed? ─→ httpToHttps ─→ hls.js | <video>.src
+Гайд ─→ programmesInDay ─→ catchup? ─→ buildCatchupUrl ─→ Player.play(url архива)
+```
+
+### Запись эфира
+
+Два пути, выбор по наличию hls-инстанса:
+
+```
+HLS  ─→ FRAG_LOADED ─→ segment-recorder ─→ OPFS/память ─→ .ts | .mp4
+иное ─→ captureStream(<video>) | канвас+WebAudio ─→ MediaRecorder ─→ .webm
+```
+
+Сегментный путь ничего не перекодирует: складывает то, что hls.js уже скачал.
+Он и основной — перекодирование осталось для нативного воспроизведения и
+прямых mp4, где сегментов нет.
+
+Про перекодирование важно помнить (выяснено в #58/#60):
+
+- mime обязан соответствовать **фактическому** составу дорожек: если объявить
+  `opus` без аудиодорожки, Firefox зависает намертво, а `isTypeSupported`
+  рассинхрон не показывает;
+- после `stop()` источник трогать нельзя — Gecko досылает последний чанк и
+  событие `stop` примерно через 16 мс, снос в этом окне съедает и то, и другое;
+- на Firefox для Android перекодирование невозможно в принципе: захват
+  элемента роняет энкодер, канвас отдаёт черноту.
+
+### Ключевые типы (`src/types.ts`)
+
+- `Channel { name, normalizedName, url, tvgId, logo, group, quality, catchupDays, catchupSource }`
+- `PlaylistSnapshot { channels, categories, headerTvgUrl, droppedHttp }`
+- `EpgProgramme { start, stop, title, desc }` — ISO UTC строки
+- `NowNext { now, next }`
+
+### Контракты данных
+
+**M3U:** стандартный расширенный M3U. Парсер толерантен: `#EXTVLCOPT`/
+`#KODIPROP` привязываются к текущему entry; entry без URL отбрасывается;
+дедуп по URL (первый выигрывает). Сортировка — `localeCompare(..., "ru")`.
+Http-URL публичных хостов отбрасываются с подсчётом в
+`PlaylistSnapshot.droppedHttp`.
+
+**EPG:** XMLTV. Матчинг канала: сначала по `tvg-id` (lowercase, ключ
+`id:...`), при отсутствии — по нормализованному имени (ключ `name:...`,
+дисплей-неймы из `<channel><display-name>`). Даты — `YYYYMMDDHHMMSS ±HHMM`.
+
+**Плейлисты (localStorage):**
+
+- `iptv-hub.playlists.v1` — массив `{ id, name, playlistUrl, epgUrl }`;
+- `iptv-hub.active-playlist.v1` — id активного;
+- `iptv-hub.favorites.v1:<id>` — URL избранного плейлиста;
+- `iptv-hub.recents.v1:<id>` — до 10 недавно просмотренных;
+- `iptv-hub.theme.v1` — тема; legacy `iptv-hub.config.v1` мигрируется лениво.
+
+**Конфиг-ссылка:** `?p=<playlistUrl>&e=<epgUrl>` (об encodeURIComponent) —
+upsert в список плейлистов и активация; `?debug=1` включает экранный лог.
+
+---
+
+## 🧪 Тесты и качество
+
+```bash
+npm test           # vitest run (node env): 413 тестов
+npm run test:watch
+npm run build      # tsc --noEmit (strict, noUncheckedIndexedAccess) + vite build
+npm run dev        # vite dev server
+npm run preview    # предпросмотр dist/
+```
+
+- Чистые модули (весь список — в «Архитектурных принципах») обязаны оставаться
+  без DOM/fetch внутри — это делает их тестируемыми в node без jsdom.
+- Тесты не должны зависеть от сети.
+
+## Android: TWA #160
+
+GitHub issue #160 (закрыт в PR#167): **Android-приложение (TWA/Bubblewrap)**
+на кодовой базе PWA + автопубликация APK через GitLab CI.
+
+### Контракт
+
+- TWA поверх статического PWA (без переписывания клиента): `public/manifest.webmanifest`
+  (id `./`, scope `./`, `start_url "./"`, `display standalone`, иконки 192/512 + maskable)
+  открывается в `com.izzy.twa` (Gradle 8.7, compileSdk 35, minSdk 24, targetSdk 35).
+- `AndroidManifest.xml`: SHELL ACTIVITY (шаблон TWA), intent-filter для
+  `https://ozyab09.github.io/iptv-hub/`, `taskAffinity "."`, singleTask, fullscreen.
+- `android/app/src/main/assets/bridge.js` — JS↔Java мост (только если web-страница
+  запрашивает Java-методы, в проекте не активен).
+- `android/app/src/main/java/com/izzy/twa/MainActivity.java` — TWA-активити + launcher.
+- `AndroidManifest.xml` (app): `namespace com.izzy.twa`, `applicationId
+  com.izzy.twa`, `vectorDrawables.useSupportLibrary = true`.
+- `public/.well-known/assetlinks.json` — Digital Asset Links (placeholder с
+  `REPLACE_WITH_SHA256_OF_APK_SIGNING_CERTIFICATE`);
+  CI генерирует актуальный SHA-256 из keystore и пушит в `gh-pages`.
+- `public/version.json` — `{versionCode, versionName}` для клиентского
+  `UpdateCheck` (сравнивает `versionCode` с `BuildConfig.VERSION_NAME`, предлагает
+  `ACTION_VIEW` APK / показывает меню обновления). Синхронизируется с
+  `android/version.properties`, `package.json` и CI-версией.
+- `android/gradle.properties` — `org.gradle.jvmargs`, AGP/Kotlin флаги.
+- `android/app/gradle/wrapper/gradle-wrapper.properties` — Gradle 8.7 bin.
+- `android/app/proguard-rules.pro` — правила для minify (TWA-обёртка + BuildConfig).
+- `android/app/src/main/res/` — иконка, layout, strings, themes, `file_paths.xml`.
+- `android/scripts/gen-assetlinks.mjs` — генерация `assetlinks.json` из keystore
+  (без зависимости от stdin, через `keytool -exportcert` + Node SHA-256).
+- `android/scripts/setup-android.mjs` — post-init для Bubblewrap: копирует
+  `manifest.webmanifest` в `app/src/main/assets/twa-manifest.json`, пишет
+  `assetlinks-temp.json`, `version.json`, обновляет `.gitignore`.
+- `android/gitlab-ci.yml` — пайплайн по тегу `v*`: JDK/Android SDK, `assembleRelease`,
+  подпись keystore (`ANDROID_KEYSTORE_B64` и колл-беки), APK → Artifact + Package Registry,
+  `version.json` → Pages, `assetlinks.json` → `gh-pages`.
+- `android/README.md` — инструкции по локальной сборке, подписи, assetlinks,
+  автообновлению, CI.
+- Ветка: `feat/160-android-twa` → PR #167 → merge в `main`.
+- При миграции `version.properties` синхронизировать с `package.json`.
+
+### Проверка
+
+- `android/app`: `./gradlew compileDebugAndroidTestJavaWithJavac` — сборка на
+  CI-образе без keystore.
+- Android 10+: `adb install -r app-release.apk` + `adb shell dumpsys window | grep
+  -E "DisplayWidth|DisplayHeight"` — fullscreen TWA без адресной строки.
+- `adb shell am start -W -n com.izzy.twa/.MainActivity` — запуск TWA.
+
+## 🔄 CI/CD
+
+Workflow `ci.yml` (Node 22, actions v5): PR — `npm test` + `npm run build`;
+push в `main` — то же + деплой `dist/` в GitHub Pages (artifact +
+`actions/deploy-pages@v5`). Required check — `build`. Pages включить руками:
+Settings → Pages → Source: **GitHub Actions**.
+
+### Версии и релизы
+
+- `package.json` — `version` (текущий: `0.2.5`), `private: true`.
+- `android/version.properties` — `versionName` (синхронизируется с
+  `package.json`) и `versionCode` (начиная с релиза 1000).
+- `public/version.json` — `{versionCode, versionName}` для клиентского
+  автообновления в TWA (`UpdateCheck` в `MainActivity`).
+- Релизный тэг `v*` → GitLab CI: `VERSION_CODE` (1000 + patch) и
+  `VERSION_NAME` = tag, публикация APK + `version.json` на Pages.
+- `VERSION` в `public/sw.js` бампится при сборке (PR#78), иначе клиенты
+  останутся на старом кэше.
+
+## 🎨 Дизайн-система
+
+Код реализует **IPTV Hub v2** — систему из артефакта Design System. Правила,
+которые легко нарушить не заметив:
+
+- `src/components.css` — **копия** `project/components/bundle.css` системы.
+  Правится система, потом файл переносится целиком. Тест следит, чтобы там
+  не появились хексы (кроме контролов на видео, см. ниже).
+- **Один акцент.** Розовый значит «играет / выбрано / эфир / избранное».
+  Выбранный чип инвертируется, а не розовеет; цвет в бейдже качества есть
+  только у 4K. Правила живут в `src/ui-classes.ts` и покрыты тестами.
+- **Контролы на видео всегда белые на чёрном**, в любой теме — единственное
+  место с литеральными цветами. Возьми там `--text`, и в светлой теме
+  кнопки растворятся в тёмном кадре.
+- **Эмодзи запрещены**: они разные в каждой ОС и не красятся темой. Тест
+  проверяет строковые литералы целиком, а не построчно.
+- `@import` компонентов обязан быть **первой строкой** `style.css`: иначе
+  браузер молча его отбрасывает и стили не применяются при зелёных тестах.
+
+- **Только токены v2.** Псевдонимов v1 (`--bg2`, `--card`, `--accent2`,
+  `--overlay`, `--bar`, `--radius`) больше нет: поверхности — `--surface-1…3`,
+  фокус — `--focus`, скругления — `--radius-xs…full`.
+- **Каркас.** `#app` — сетка высотой в окно: слева `.sidebar`, сверху
+  `.topbar` (плейлист — он же переключатель, поиск, тема), под ней экран.
+  Список каналов прокручивается сам — виртуализации нужен свой контейнер.
+- **Плеер.** Всё про плеер — на самом кадре: сверху канал, передача,
+  звезда, соседние каналы и закрытие; снизу панель воспроизведения. Под
+  кадром только программа (`#now-schedule`).
+  Строку передачи строит одна функция `programmeRow()` — и для шторки, и
+  для блока под плеером. На широком экране список рядом с плеером
+  сворачивается (кнопка или C), выбор помнится.
+
+Числа, продублированные в CSS и в коде, связаны тестами: `CHANNEL_ROW_HEIGHT`
+с высотой строки, `COMPACT_BREAKPOINT` (1023: ниже — мини-плеер и страница
+плеера) с медиазапросом. Разойдутся — поедет виртуализация или мини-плеер.
+
+## 💻 Conventions
+
+- TypeScript strict, типы без `any`; DOM-доступ через `$()`-хелпер c throw.
+- Комментарии на русском, идентификаторы на английском (как в кодовой базе
+  автора).
+- Conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `chore:`,
+  `refactor:`.
+
+### Процесс изменений (branch protection включён — push в `main` запрещён)
+
+1. **Issue** для каждой правки/фичи/бага (`gh issue create`) — даже для
+   мелочей; в теле — зачем, что сделать, acceptance-критерий.
+   **ДО начала работы, не после** — это первое действие по каждой новой
+   задаче, в т.ч. когда задач несколько и они пришли подряд. Если PR уже
+   смержен, а issue остался открытым (нет «Closes #N» в описании) — закрыть
+   вручную с комментарием-описанием решения.
+2. **Ветка** от актуального `main`: `docs/<slug>`, `feat/<slug>`, `fix/<slug>`
+   (в идеале — с номером issue: `fix/12-player-retry`).
+3. **PR** в `main` с `Closes #<issue>` в описании. CI обязан прогнать
+   `build` (vitest + typecheck + vite build) — check `build` обязателен
+   к зелёному статусу (ruleset `main-protection`).
+4. **Merge** после зелёного CI (любой из методов: merge/squash/rebase).
+   Деплой на Pages происходит автоматически при обновлении `main`.
+5. Прямой push, force-push и удаление `main` отклоняются GitHub-ом
+   (`push declined due to repository rule violations`) — это не ошибка
+   окружения, обходить защиту не нужно.
+
+### Post-task follow-up
+
+После задачи спросить пользователя про (a) issue, (b) ветку, (c) PR —
+не коммитить/пушить в `main` напрямую, это заблокировано protection-ом.
+
+### Параллельная работа нескольких агентов
+
+Над проектом одновременно могут работать несколько агентов. Правила:
+
+1. **Свежий `main` перед каждой задачей.** Перед созданием ветки всегда
+   `git checkout main && git pull` — иначе конфликты при merge.
+2. **Не брать чужие issue.** Перед началом задачи проверить
+   `gh issue list --state open`: если задача уже заведена и/или взята —
+   не дублировать её и не создавать параллельную ветку.
+3. **Метки «взято» и «в работе».** Взяв issue, сразу ставить ДВЕ метки:
+   - `agent:mac` (или своя `agent:<имя>`) — кто взял; та же метка
+     ставится и на PR этой работы;
+   - `in-progress` — задача сейчас в работе; снимается после merge
+     (issue закроется через `Closes #N` автоматически).
+   Метки создаются по мере необходимости
+   (`gh label create <имя> --color … --force`).
+4. **Issue до работы.** Каждой правке — свой issue ДО начала работы
+   (см. «Процесс изменений» выше); если подходящего нет — создать,
+   проверить, что его нет в списке открытых.
+5. **Ветка на задачу.** `feat|fix|docs/<slug>` от свежего `main`,
+   в идеале с номером issue; PR с `Closes #N`.
+6. **Порядок взятия задач.** Агенты пишут задачи в issues, а затем берут
+   из списка **первую сверху задачу без метки `agent:*` и без
+   `in-progress`**. Взял — навесил обе метки. Закончил (PR смержен) —
+   берёшь следующую так же. Так оба агента работают из одного списка
+   без договорённостей «кто что берёт».
+
+## 🗺 Дорожная карта
+
+Актуальный план с приоритетами P1–P3 — в **ROADMAP.md** (не дублируем здесь).
+
+## 🔮 Как подхватить проект другому агенту
+
+1. Прочти этот файл целиком, потом README.md и ROADMAP.md.
+2. `npm ci && npm test && npm run build` — всё должно быть зелёным до твоих правок.
+3. Не ломай три инварианта: zero backend, privacy-first, чистые модули.
+4. Ограничения из раздела «Известные ограничения» — не баги, тикеты на них
+   заводить не нужно.
+5. Пайплайн родительского проекта лежит в `../iptv` — его AGENTS.md описывает
+   форматы `playlist.m3u` и `epg.xml-filtered.gz` детальнее.
