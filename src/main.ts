@@ -1074,10 +1074,10 @@ function renderProgrammeMatch(match: ProgrammeMatch): HTMLButtonElement {
   meta.append(name, time);
   row.append(logo, meta);
   row.title = `${name.textContent} · ${time.textContent}`;
-  row.addEventListener("click", () => {
+  row.addEventListener("click", async () => {
     const archive = programmeArchiveUrl(match);
-    playChannel(channel, archive ?? undefined);
-    if (!archive && Date.parse(programme.start) > Date.now()) {
+    const played = await playChannel(channel, archive ?? undefined);
+    if (played && !archive && Date.parse(programme.start) > Date.now()) {
       showToast("Передача ещё не началась — включён эфир канала");
     }
   });
