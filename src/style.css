@@ -448,7 +448,7 @@ html, body {
 @media (min-width: 1024px) {
   #app:not(.watch) .row.channel-card {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1.4fr) minmax(0, 1fr) 44px;
+    grid-template-columns: 36px minmax(0, 1.4fr) minmax(0, 1fr) 80px;
     gap: var(--space-4);
   }
   #app:not(.watch) .row-next { display: block; }
@@ -460,6 +460,25 @@ html, body {
   padding: var(--space-2);
   display: inline-flex;
 }
+.channel-actions { display: flex; align-items: center; flex: none; }
+.channel-actions .icon-btn { width: 36px; height: 36px; }
+.channel-editor {
+  width: min(440px, calc(100% - 32px));
+  box-sizing: border-box;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+.channel-editor::backdrop { background: color-mix(in srgb, var(--text) 40%, transparent); }
+.channel-editor form { display: flex; flex-direction: column; gap: var(--space-3); }
+.channel-editor h2, .channel-editor p { margin: 0; overflow-wrap: anywhere; }
+.channel-hidden-label { display: flex; align-items: center; gap: var(--space-2); }
+.channel-hidden-label input { accent-color: var(--accent); }
+.channel-editor-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .virtual-inner {
   position: absolute;
   left: 0;
@@ -1186,7 +1205,8 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   #app.watch.channel-view.list-collapsed .epg-now,
   #app.watch.channel-view.list-collapsed .continue-block,
   #app.watch.channel-view.list-collapsed .row .meta,
-  #app.watch.channel-view.list-collapsed .row .star { display: none !important; }
+  #app.watch.channel-view.list-collapsed .row .star,
+  #app.watch.channel-view.list-collapsed .row .channel-actions { display: none !important; }
   #app.watch.channel-view.list-collapsed .view-head { flex-direction: column; justify-content: center; padding-top: var(--space-4); }
   #app.watch.channel-view.list-collapsed .row { justify-content: center; padding-left: 0; padding-right: 0; }
   #app.watch.channel-view.list-collapsed .row.on .logo { box-shadow: 0 0 0 2px var(--accent); }

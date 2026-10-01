@@ -2,6 +2,16 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "channel.edit": "Изменить канал",
+  "channel.alias": "Имя канала (пустое — исходное)",
+  "channel.hide": "Скрыть из списков и поиска",
+  "channel.save": "Сохранить",
+  "channel.cancel": "Отмена",
+  "channel.settings": "Имена и скрытие каналов",
+  "channel.reset": "Сбросить для текущего плейлиста",
+  "channel.resetDone": "Имена и скрытие каналов сброшены",
+  "channel.note": "Вернёт исходные имена и покажет скрытые каналы. Избранное сохраняется.",
+  "channel.linkNote": "Скрытый канал остаётся доступен по ссылке с ?ch=.",
   "multi.enter": "Мульти-вью 2×2",
   "multi.exit": "Один канал",
   "multi.close": "Закрыть плеер",
@@ -155,6 +165,16 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "channel.edit": "Edit channel",
+  "channel.alias": "Channel name (empty restores the original)",
+  "channel.hide": "Hide from lists and search",
+  "channel.save": "Save",
+  "channel.cancel": "Cancel",
+  "channel.settings": "Channel names and visibility",
+  "channel.reset": "Reset for the current playlist",
+  "channel.resetDone": "Channel names and visibility reset",
+  "channel.note": "Restores original names and shows hidden channels. Favorites are kept.",
+  "channel.linkNote": "Hidden channels remain available through links with ?ch=.",
   "multi.enter": "Multi-view 2×2",
   "multi.exit": "Single channel",
   "multi.close": "Close player",
