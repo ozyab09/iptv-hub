@@ -40,7 +40,7 @@ PWA. Версия пакета (`package.json`) синхронна с этим �
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts` —
@@ -187,6 +187,7 @@ iptv-hub/
 │   ├── catchup.ts          # архив: tvg-rec/catchup-source, {utc}/{lutc}, окна дней
 │   ├── player.ts           # Player: hls.js / нативный, quality, retry, https-апгрейд
 │   ├── playlist-ui.ts      # UI менеджера плейлистов: setup-список + переключатель
+│   ├── playlist-transport.ts # транспорт плейлистов: OPFS-адаптер, loadPlaylist, диагностика сбоев
 │   ├── quality.ts          # лейблы уровней/дорожек, формат статуса
 │   ├── recorder.ts         # запись перекодированием: mime, имя файла, жизненный цикл
 │   ├── segment-recorder.ts # запись HLS сегментами: контейнер, потолок, init-сегмент

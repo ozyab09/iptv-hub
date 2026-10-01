@@ -42,6 +42,7 @@ import {
   toggleFavorite,
 } from "./favorites";
 import { parseM3U } from "./m3u";
+import { createOpfsFs, createTransport, type Transport } from "./playlist-transport";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
 import { DEFAULT_PLAYER_SETTINGS, PLAYER_SETTINGS_KEY, parsePlayerSettings, sanitizePlayerSettings } from "./player-settings";
@@ -71,10 +72,8 @@ import {
 import { firstFocus, lastFocus, moveFocus } from "./kbd-nav";
 import {
   defaultLocalName,
-  loadLocalPlaylist,
   looksLikeM3U,
   saveLocalPlaylist,
-  type LocalFs,
 } from "./local-playlist";
 import {
   describeShotFailure,
@@ -379,6 +378,15 @@ const playlistUi = createPlaylistUi({
   showPlayer,
   activatePlaylist,
   renderSettingsMode,
+});
+
+// ---------- Транспорт загрузки плейлистов — playlist-transport.ts (issue #123) ----------
+// Тоже создаётся до первого топ-уровневого кода ниже по модулю (см. комментарий
+// про TDZ выше), но его deps инлайн-функции — краш невозможен по построению.
+const playlistOpfsFs = createOpfsFs(typeof navigator !== "undefined" ? navigator.storage : null);
+const playlistTransport: Transport = createTransport({
+  fs: playlistOpfsFs,
+  language: () => currentLanguage,
 });
 const playerBuffer = $<HTMLInputElement>("player-buffer");
 const playerLowLatency = $<HTMLInputElement>("player-low-latency");
@@ -3183,49 +3191,9 @@ addForm.addEventListener("submit", (e) => {
 
 // ---------- Локальный плейлист из файла (FR-10) ----------
 // Содержимое .m3u хранится в OPFS; Playlist.playlistUrl = "local:<id>" —
-// маркер, который loadPlaylist перехватывает и читает из OPFS. Файл
+// маркер, который транспорт перехватывает и читает из OPFS. Файл
 // не покинет устройство. Где OPFS нет — кнопка честно сообщит.
-// LocalFs создаётся лениво (без top-level await — таргет сборки его не даёт):
-// каталог OPFS запрашивается при первом обращении.
-let localFsPromise: Promise<LocalFs> | null = null;
-function getLocalFs(): Promise<LocalFs> | null {
-  if (
-    typeof navigator === "undefined" ||
-    !navigator.storage ||
-    !("getDirectory" in navigator.storage)
-  ) {
-    return null;
-  }
-  if (!localFsPromise) {
-    localFsPromise = navigator.storage.getDirectory().then(
-      (dir): LocalFs => ({
-        read: async (key) => {
-          try {
-            const h = await dir.getFileHandle(key);
-            const f = await h.getFile();
-            return await f.text();
-          } catch {
-            return null;
-          }
-        },
-        write: async (key, content) => {
-          const h = await dir.getFileHandle(key, { create: true });
-          const w = await h.createWritable();
-          await w.write(content);
-          await w.close();
-        },
-        remove: async (key) => {
-          try {
-            await dir.removeEntry(key);
-          } catch {
-            /* файла уже нет */
-          }
-        },
-      }),
-    );
-  }
-  return localFsPromise;
-}
+const getLocalFs = playlistOpfsFs;
 // Удаление локального плейлиста в playlist-ui.ts чистит и содержимое в OPFS.
 playlistUi.setLocalFsProvider(getLocalFs);
 
@@ -3259,34 +3227,14 @@ localFile.addEventListener("change", async () => {
   activatePlaylist(id);
 });
 
-async function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
-  // Локальный источник: маркер local:<id> — читаем содержимое из OPFS.
-  if (url.startsWith("local:")) {
-    const fs = getLocalFs();
-    if (!fs) throw new Error(tr("error.localOpfs"));
-    const m3u = await loadLocalPlaylist(await fs, url.slice("local:".length));
-    if (m3u === null) throw new Error(tr("error.localMissing"));
-    return parseM3U(m3u);
-  }
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(tr("error.httpPlaylist", { status: resp.status }));
-  if (!/^application\/(x-mpegurl|vnd\.apple\.mpegurl|octet-stream)/.test(
-        resp.headers.get("content-type") ?? "")) {
-    // не фейлимся: некоторые бакеты отдают text/plain
-  }
-  return parseM3U(await resp.text());
+/** Загрузить плейлист через транспорт (OPFS для local:, fetch для http). */
+function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
+  return playlistTransport.loadPlaylist(url);
 }
 
-// ---------- Boot ----------
-/**
- * Подсказка по причине сетевого сбоя: смешанный контент или CORS.
- * NetworkError браузера не различает — перечисляем оба сценария с чек-листом.
- */
+/** Подсказка по причине сетевого сбоя (смешанный контент или CORS). */
 function describeFetchFailure(url: string, reason?: string): string {
-  // Точная причина от плеера главнее: она знает, что уже предпринято
-  // (например, попытку https-порта), и не должна подменяться общим текстом.
-  if (reason) return reason;
-  return tr(isMixedContent(window.location.href, url) ? "error.mixedHint" : "error.corsHint");
+  return playlistTransport.describeFailure(url, reason);
 }
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
