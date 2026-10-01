@@ -4,7 +4,6 @@ import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
 import {
   channelsForView,
-  channelsWord,
   emptyMessage,
   groupDigits,
   parseView,
@@ -30,7 +29,6 @@ import {
   activePlaylist,
   addPlaylist,
   loadPlaylists,
-  removePlaylist,
   savePlaylists,
   updatePlaylist,
   upsertByUrl,
@@ -75,7 +73,6 @@ import {
   defaultLocalName,
   loadLocalPlaylist,
   looksLikeM3U,
-  removeLocalPlaylist,
   saveLocalPlaylist,
   type LocalFs,
 } from "./local-playlist";
@@ -138,6 +135,7 @@ import {
   type DayWindow,
 } from "./catchup";
 import { createQualityMenu } from "./quality-menu";
+import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
 import { applyChannelOverrides, channelOverridesKey, parseChannelOverrides, serializeChannelOverrides, setChannelOverride, type ChannelOverrides } from "./channel-overrides";
 import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
@@ -196,14 +194,20 @@ const $ = <T extends HTMLElement>(id: string): T => {
 const appEl = $("app");
 const setupScreen = $("setup-screen");
 const playerScreen = $("player-screen");
+
+// DOM-узлы менеджера плейлистов — модуль playlist-ui.ts, инъекция ниже (issue #123)
+const playlistUiNodes: PlaylistUiNodes = {
+  plList: $("pl-list"),
+  plSwitch: $("pl-switch"),
+  plSwitchBtn: $<HTMLButtonElement>("pl-switch-btn"),
+  plSwitchMenu: $("pl-switch-menu"),
+  plSwitchName: $("pl-switch-name"),
+  plSwitchCount: $("pl-switch-count"),
+};
 const setupPlaylist = $<HTMLInputElement>("setup-playlist");
 const setupEpg = $<HTMLInputElement>("setup-epg");
 const setupLoad = $<HTMLButtonElement>("setup-load");
 const setupName = $<HTMLInputElement>("setup-name");
-const plList = $("pl-list");
-const plSwitch = $("pl-switch");
-const plSwitchBtn = $<HTMLButtonElement>("pl-switch-btn");
-const plSwitchMenu = $("pl-switch-menu");
 const addForm = $<HTMLFormElement>("add-form");
 const btnAddPl = $<HTMLButtonElement>("btn-add-pl");
 const themeSeg = $("theme-seg");
@@ -283,8 +287,6 @@ const tabbar = $("tabbar");
 const viewTitle = $("view-title");
 const viewCount = $("view-count");
 const catLabel = $("cat-label");
-const plSwitchName = $("pl-switch-name");
-const plSwitchCount = $("pl-switch-count");
 const catPicker = $("cat-picker");
 const btnCategories = $<HTMLButtonElement>("btn-categories");
 const catMenu = $("cat-menu");
@@ -357,6 +359,27 @@ try {
   playerSettings = parsePlayerSettings(localStorage.getItem(PLAYER_SETTINGS_KEY));
 } catch { /* приватный режим: используем дефолты */ }
 const playerSettingsForm = $<HTMLFormElement>("player-settings-form");
+
+// ---------- Менеджер плейлистов — UI-слой вынесен в playlist-ui.ts (issue #123) ----------
+// Инстанс обязан создаваться до первого топ-уровневого applyLanguage() ниже
+// по модулю — иначе TDZ: «Cannot access 'playlistUi' before initialization»
+// (поймали визуальные спеки Playwright, tsc это не видит).
+const playlistUi = createPlaylistUi({
+  nodes: playlistUiNodes,
+  storage: typeof localStorage !== "undefined" ? localStorage : null,
+  // Счётчик как в списке каналов: с учётом скрытых каналов (#206)
+  channelCount: () => (snapshot ? applyChannelOverrides(snapshot.channels, channelOverrides).length : null),
+  createButton: () => document.createElement("button"),
+  language: () => currentLanguage,
+  icon: setIcon,
+  showSetupError: (message) => {
+    if (message) setSystemText(setupError, message);
+    setupError.hidden = !message;
+  },
+  showPlayer,
+  activatePlaylist,
+  renderSettingsMode,
+});
 const playerBuffer = $<HTMLInputElement>("player-buffer");
 const playerLowLatency = $<HTMLInputElement>("player-low-latency");
 const playerDiagnosticsTimeout = $<HTMLInputElement>("player-diagnostics-timeout");
@@ -522,20 +545,9 @@ function applyLanguage(): void {
     b.classList.toggle("on", on);
     b.setAttribute("aria-checked", String(on));
   }
-  // Перерисовка списка не должна уничтожать незавершённое редактирование.
-  for (const [index, p] of plState.items.entries()) {
-    const row = plList.children[index];
-    if (!row || row.classList.contains("editing")) continue;
-    const pick = row.querySelector<HTMLElement>(".pl-pick")!;
-    pick.title = tr(p.id === plState.activeId ? "playlist.active" : "playlist.pick");
-    row.querySelector<HTMLElement>(".pl-url")!.textContent = urlLabel(p.playlistUrl, p.epgUrl);
-    const edit = row.querySelector<HTMLElement>(".pl-act")!;
-    edit.title = tr("playlist.editHint");
-    edit.setAttribute("aria-label", tr("playlist.edit", { name: p.name }));
-    const del = row.querySelector<HTMLElement>(".pl-del")!;
-    del.title = tr("playlist.deleteHint");
-    del.setAttribute("aria-label", tr("playlist.delete", { name: p.name }));
-  }
+  // Подписи менеджера плейлистов обновляет playlist-ui.ts (editing-строки
+  // не пересоздаются — незавершённое редактирование не теряется).
+  playlistUi.applyLanguage();
   renderPlaylistSwitcher();
   renderSettingsMode();
   renderNav();
@@ -3016,145 +3028,9 @@ window.addEventListener("storage", (e) => {
   }
 });
 
-// ---------- Менеджер плейлистов (setup-экран) ----------
+/** Пересобрать список плейлистов (setup-экран), синхронизировав состояние. */
 function renderPlaylistManager(): void {
-  plList.textContent = "";
-  for (const p of plState.items) {
-    const active = p.id === plState.activeId;
-    const row = document.createElement("div");
-    row.className = active ? "item pl-row active" : "item pl-row";
-
-    // Вся строка — выбор плейлиста: радиокнопка, название, откуда он
-    const pick = document.createElement("button");
-    pick.className = "pl-pick";
-    pick.setAttribute("role", "radio");
-    pick.setAttribute("aria-checked", String(active));
-    pick.title = active ? tr("playlist.active") : tr("playlist.pick");
-    const radio = document.createElement("span");
-    radio.className = "radio";
-    const text = document.createElement("span");
-    text.className = "pl-text";
-    const name = document.createElement("span");
-    name.className = "pl-name";
-    name.textContent = p.name;
-    const url = document.createElement("span");
-    url.className = "pl-url muted";
-    url.textContent = urlLabel(p.playlistUrl, p.epgUrl);
-    text.append(name, url);
-    pick.append(radio, text);
-    pick.addEventListener("click", () => {
-      if (!active) activatePlaylist(p.id);
-      else showPlayer();
-    });
-
-    const edit = document.createElement("button");
-    edit.className = "icon-btn pl-act";
-    edit.title = tr("playlist.editHint");
-    edit.setAttribute("aria-label", tr("playlist.edit", { name: p.name }));
-    setIcon(edit, "edit");
-    edit.addEventListener("click", () => {
-      // Инлайн-редактирование: строка превращается в форму
-      row.textContent = "";
-      row.classList.add("editing");
-      const form = document.createElement("form");
-      form.className = "pl-edit";
-      form.noValidate = true;
-      const mk = (key: TranslationKey, value: string, type = "text"): HTMLInputElement => {
-        const field = document.createElement("label");
-        field.className = "field";
-        const l = document.createElement("span");
-        l.className = "field-label";
-        l.dataset.i18n = key;
-        l.textContent = tr(key);
-        const box = document.createElement("span");
-        box.className = "input";
-        const input = document.createElement("input");
-        input.type = type;
-        input.value = value;
-        box.append(input);
-        field.append(l, box);
-        form.append(field);
-        return input;
-      };
-      const nameIn = mk("playlist.name", p.name);
-      const urlIn = mk("playlist.url", p.playlistUrl, "url");
-      const epgIn = mk("playlist.epgOptional", p.epgUrl ?? "", "url");
-      const btns = document.createElement("div");
-      btns.className = "pl-edit-actions";
-      const save = document.createElement("button");
-      save.className = "btn btn-primary btn-sm";
-      save.type = "submit";
-      save.dataset.i18n = "common.save";
-      save.textContent = tr("common.save");
-      const cancel = document.createElement("button");
-      cancel.className = "btn btn-ghost btn-sm";
-      cancel.type = "button";
-      cancel.dataset.i18n = "common.cancel";
-      cancel.textContent = tr("common.cancel");
-      btns.append(save, cancel);
-      form.append(btns);
-      row.append(form);
-      nameIn.focus();
-
-      cancel.addEventListener("click", () => renderPlaylistManager());
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const newName = nameIn.value.trim();
-        const newUrl = urlIn.value.trim();
-        const newEpg = epgIn.value.trim();
-        if (!/^https?:\/\//.test(newUrl)) {
-          setSystemText(setupError, t("error.url"));
-          setupError.hidden = false;
-          return;
-        }
-        plState = updatePlaylist(plState, p.id, {
-          name: newName || p.name,
-          playlistUrl: newUrl,
-          epgUrl: newEpg || null,
-        });
-        savePlaylists(localStorage, plState);
-        setupError.hidden = true;
-        renderPlaylistManager();
-        renderPlaylistSwitcher();
-      });
-    });
-
-    const del = document.createElement("button");
-    del.className = "icon-btn pl-act pl-del";
-    del.title = tr("playlist.deleteHint");
-    del.setAttribute("aria-label", tr("playlist.delete", { name: p.name }));
-    setIcon(del, "trash");
-    del.addEventListener("click", () => {
-      if (!window.confirm(tr("playlist.confirmDelete", { name: p.name }))) return;
-      if (typeof localStorage !== "undefined") {
-        localStorage.removeItem(favoritesKey(p.id));
-      }
-      // Локальный плейлист: чистим и содержимое в OPFS (FR-10)
-      if (p.playlistUrl.startsWith("local:")) {
-        const fs = getLocalFs();
-        if (fs) void fs.then((f) => removeLocalPlaylist(f, p.playlistUrl.slice("local:".length)));
-      }
-      plState = removePlaylist(plState, p.id);
-      savePlaylists(localStorage, plState);
-      renderPlaylistManager();
-      renderPlaylistSwitcher();
-      renderSettingsMode();
-    });
-
-    row.append(pick, edit, del);
-    plList.append(row);
-  }
-}
-
-/** «storage.yandexcloud.net · с телепрограммой» — откуда плейлист, коротко. */
-function urlLabel(playlistUrl: string, epgUrl: string | null): string {
-  let host = playlistUrl;
-  try {
-    host = new URL(playlistUrl).host;
-  } catch {
-    // оставим как есть
-  }
-  return epgUrl ? tr("playlist.withEpg", { host }) : host;
+  playlistUi.renderManager(plState);
 }
 
 // ---------- Экспорт / импорт настроек ----------
@@ -3266,41 +3142,17 @@ importFile.addEventListener("change", () => {
     });
 });
 
-// ---------- Переключатель плейлистов (топбар) ----------
+// ---------- Переключатель плейлистов (топбар) — DOM в playlist-ui.ts ----------
 function renderPlaylistSwitcher(): void {
-  const active = activePlaylist(plState);
-  plSwitch.hidden = !active;
-  if (!active) return;
-  plSwitchName.textContent = active.name;
-  // Видимый текст — название, а имя кнопки для скринридера — её действие
-  plSwitchBtn.setAttribute("aria-label", tr("playlist.switchNamed", { name: active.name }));
-  plSwitchCount.textContent = snapshot ? channelsWord(applyChannelOverrides(snapshot.channels, channelOverrides).length) : "";
-  plSwitchMenu.textContent = "";
-  for (const p of plState.items) {
-    const b = document.createElement("button");
-    b.className =
-      menuItemClass(p.id === plState.activeId);
-    b.textContent = p.name;
-    b.addEventListener("click", () => {
-      plSwitchMenu.hidden = true;
-      plSwitchBtn.setAttribute("aria-expanded", "false");
-      if (p.id !== plState.activeId) activatePlaylist(p.id);
-    });
-    plSwitchMenu.append(b);
-  }
+  playlistUi.renderSwitcher(plState);
 }
 
-plSwitchBtn.addEventListener("click", (e) => {
+playlistUiNodes.plSwitchBtn.addEventListener("click", (e) => {
   e.stopPropagation();
-  const willOpen = plSwitchMenu.hidden;
-  plSwitchMenu.hidden = !willOpen;
-  plSwitchBtn.setAttribute("aria-expanded", String(willOpen));
+  playlistUi.toggleSwitcherMenu();
 });
 document.addEventListener("click", (e) => {
-  if (!plSwitchMenu.hidden && !plSwitch.contains(e.target as Node)) {
-    plSwitchMenu.hidden = true;
-    plSwitchBtn.setAttribute("aria-expanded", "false");
-  }
+  playlistUi.closeSwitcherIfOutside(e.target as Node | null);
 });
 
 // ---------- Setup ----------
@@ -3326,7 +3178,6 @@ addForm.addEventListener("submit", (e) => {
   setupEpg.value = "";
   setupName.value = "";
   renderPlaylistManager();
-  renderPlaylistSwitcher();
   activatePlaylist(plState.items[plState.items.length - 1]!.id);
 });
 
@@ -3375,6 +3226,8 @@ function getLocalFs(): Promise<LocalFs> | null {
   }
   return localFsPromise;
 }
+// Удаление локального плейлиста в playlist-ui.ts чистит и содержимое в OPFS.
+playlistUi.setLocalFsProvider(getLocalFs);
 
 const btnLocalFile = $<HTMLButtonElement>("btn-local-file");
 const localFile = $<HTMLInputElement>("local-file");
@@ -3403,7 +3256,6 @@ localFile.addEventListener("change", async () => {
   await saveLocalPlaylist(await fs, id, content, null);
   savePlaylists(localStorage, plState);
   renderPlaylistManager();
-  renderPlaylistSwitcher();
   activatePlaylist(id);
 });
 
