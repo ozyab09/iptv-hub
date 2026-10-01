@@ -6,6 +6,8 @@ export interface Channel {
   normalizedName: string;
   /** URL потока (http/https/rtmp…). */
   url: string;
+  /** Дополнительные URL того же канала, в порядке автоматического переключения. */
+  mirrors?: string[];
   /** tvg-id из #EXTINF, если был. */
   tvgId: string | null;
   /** tvg-logo из #EXTINF, если был. */

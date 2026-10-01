@@ -77,6 +77,7 @@ export function parseM3U(content: string): PlaylistSnapshot {
   const lines = content.split(/\r?\n/);
   const channels: Channel[] = [];
   const seenUrls = new Set<string>();
+  const byTvgId = new Map<string, Channel>();
   let headerTvgUrl: string | null = null;
   let droppedHttp = 0;
   let pending: {
@@ -117,13 +118,22 @@ export function parseM3U(content: string): PlaylistSnapshot {
         pending = null; // мусор без схемы — entry отбрасываем
         continue;
       }
-      if (seenUrls.has(line)) {
-        pending = null; // дедуп по URL: первый вариант выигрывает
+      const urls = line.split(/\s*\|\s*(?=[\w-]+:\/\/)/).filter((url) => {
+        if (!/^[\w-]+:\/\//.test(url) || seenUrls.has(url)) return false;
+        seenUrls.add(url); // скрытый http-URL тоже считаем только один раз
+        if (isPlayableStreamUrl(url)) return true;
+        droppedHttp++;
+        return false;
+      });
+      if (urls.length === 0) {
+        pending = null;
         continue;
       }
-      seenUrls.add(line); // до проверки http: дубликат не считает скрытым второй раз
-      if (!isPlayableStreamUrl(line)) {
-        droppedHttp++; // http-канал на публичном хосте — в браузере не заиграет
+      const tvgId = extractAttr(pending.attrs, "tvg-id");
+      const id = tvgId?.trim().toLowerCase();
+      const existing = id ? byTvgId.get(id) : undefined;
+      if (existing) {
+        existing.mirrors = [...(existing.mirrors ?? []), ...urls];
         pending = null;
         continue;
       }
@@ -135,17 +145,20 @@ export function parseM3U(content: string): PlaylistSnapshot {
         extractAttr(pending.attrs, "catchup"),
         extractAttr(pending.attrs, "catchup-source"),
       );
-      channels.push({
+      const channel: Channel = {
         name,
         normalizedName: normalizeName(name),
-        url: line,
-        tvgId: extractAttr(pending.attrs, "tvg-id"),
+        url: urls[0]!,
+        ...(urls.length > 1 ? { mirrors: urls.slice(1) } : {}),
+        tvgId,
         logo: extractAttr(pending.attrs, "tvg-logo"),
         group: extractAttr(pending.attrs, "group-title") ?? "Основные",
         quality: detectQuality(name),
         catchupDays: catchupInfo.days,
         catchupSource: catchupInfo.source,
-      });
+      };
+      channels.push(channel);
+      if (id) byTvgId.set(id, channel);
       pending = null;
     }
   }

@@ -4,6 +4,7 @@ import type { Channel } from "./types";
 import { DEFAULT_PLAYER_SETTINGS, playerHlsConfig, sanitizePlayerSettings, type PlayerSettings } from "./player-settings";
 import { recordingManifest } from "./recording-playback";
 import { t } from "./i18n";
+import { createMirrorState, nextMirror, type MirrorState } from "./channel-mirrors";
 
 /**
  * Сколько подряд сетевых сбоев переживаем, прежде чем сдаться. Без предела
@@ -21,6 +22,10 @@ export class Player {
   private video: HTMLVideoElement;
   private hls: Hls | null = null;
   private currentUrl: string | null = null;
+  private mirrorState: MirrorState | null = null;
+  private channelUrl: string | null = null;
+  private forceHls = false;
+  private onMirrorChange: (() => void) | null;
   private toast: (msg: string) => void;
   /** Вызывается, когда hls сообщит о манифесте/уровне/дорожках (для UI). */
   private onHlsState: (() => void) | null;
@@ -50,12 +55,14 @@ export class Player {
     onHlsState?: () => void,
     onFatalError?: () => void,
     readSettings: () => PlayerSettings = () => ({ ...DEFAULT_PLAYER_SETTINGS }),
+    onMirrorChange?: () => void,
   ) {
     this.video = video;
     this.toast = toast;
     this.onHlsState = onHlsState ?? null;
     this.onFatalError = onFatalError ?? null;
     this.readSettings = readSettings;
+    this.onMirrorChange = onMirrorChange ?? null;
     // Нативный playback (mp4/Safari): ошибки <video> — единственный канал
     // фатальных ошибок; через них же спасаем mixed content апгрейдом.
     this.video.addEventListener("error", this.handleVideoError);
@@ -106,6 +113,7 @@ export class Player {
       this.onFatalError?.();
       return;
     }
+    if (this.tryNextMirror()) return;
     const err = this.video.error;
     console.debug(
       `[iptv-hub] native video error: code=${err?.code} ${err?.message ?? ""}`,
@@ -138,30 +146,44 @@ export class Player {
    * показывает вызывающий; сам плеер про это не тостит, чтобы сообщения
    * не наслаивались).
    */
-  play(channel: Pick<Channel, "url">, forceHls = false): string | null {
-    // Смешанный контент: вместо немедленного отказа пробуем https-порт —
-    // у большинства IPTV-CDN тот же контент доступен по TLS (issue #67).
-    const url = this.resolvePlayableUrl(channel.url);
-    if (this.currentUrl === url && !this.video.paused) return null;
+  play(channel: Pick<Channel, "url" | "mirrors">, forceHls = false): string | null {
+    if (this.channelUrl === channel.url && this.currentUrl && !this.video.paused) return null;
     this.activeSettings = sanitizePlayerSettings(this.readSettings());
     this.stop();
+    this.channelUrl = channel.url;
+    this.mirrorState = createMirrorState(channel);
+    const refused = this.startStream(channel.url, forceHls);
+    return refused && this.tryNextMirror() ? null : refused;
+  }
+
+  /** Зеркала и ручной повтор используют снимок настроек исходного запуска. */
+  private startStream(source: string, forceHls = false): string | null {
+    // Смешанный контент: вместо немедленного отказа пробуем https-порт —
+    // у большинства IPTV-CDN тот же контент доступен по TLS (issue #67).
+    const url = this.resolvePlayableUrl(source);
+    const isHls = forceHls || /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
+    if (!isHls && /\.mpd(\?|$)/i.test(url)) {
+      return "MPEG-DASH не поддерживается в MVP (см. ROADMAP)";
+    }
+    this.stopMedia();
+    this.forceHls = forceHls;
     this.networkRetries = 0;
     this.httpsFallbackTried = false;
 
-    const isHls = forceHls || /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
-    const isDash = /\.mpd(\?|$)/i.test(url);
-
     if (isHls && Hls.isSupported()) {
-      this.hls = new Hls(playerHlsConfig(this.activeSettings));
-      this.hls.loadSource(url);
-      this.hls.attachMedia(this.video);
-      this.hls.on(Hls.Events.ERROR, (_e, data) => {
+      const hls = new Hls(playerHlsConfig(this.activeSettings));
+      this.hls = hls;
+      hls.loadSource(url);
+      hls.attachMedia(this.video);
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (this.hls !== hls) return;
         if (!data.fatal) return;
         if (this.recordingUrls.length > 0) {
           this.toast(t("error.recordPlayback"));
           this.onFatalError?.();
           return;
         }
+        if (this.tryNextMirror()) return;
         // Автовосстановление по типу ошибки (рекомендации hls.js):
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           if (!shouldRetryNetwork(++this.networkRetries)) {
@@ -197,8 +219,6 @@ export class Player {
       this.hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, notify);
       this.hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, notify);
       this.attachFragmentListener();
-    } else if (isDash) {
-      return "MPEG-DASH не поддерживается в MVP (см. ROADMAP)";
     } else {
       // http progressive (mp4) или нативный HLS в Safari/iOS
       this.video.src = url;
@@ -209,6 +229,22 @@ export class Player {
       // автоплей с звуком может быть заблокирован — юзер нажмёт play вручную
     });
     return null;
+  }
+
+  private tryNextMirror(): boolean {
+    if (!this.mirrorState || this.recordingUrls.length > 0) return false;
+    let next = nextMirror(this.mirrorState);
+    if (next) this.onMirrorChange?.();
+    while (next) {
+      this.mirrorState = next;
+      const refused = this.startStream(next.urls[next.index]!);
+      if (!refused) {
+        this.onHlsState?.(); // убрать меню качества/дорожек старого источника
+        return true;
+      }
+      next = nextMirror(next);
+    }
+    return false;
   }
 
   /** Проиграть запись из OPFS; MPEG-TS преобразуется существующим hls.js через MSE. */
@@ -277,6 +313,13 @@ export class Player {
   }
 
   stop(): void {
+    this.stopMedia();
+    this.mirrorState = null;
+    this.channelUrl = null;
+    this.forceHls = false;
+  }
+
+  private stopMedia(): void {
     if (this.hls) {
       this.hls.destroy();
       this.hls = null;
@@ -322,39 +365,18 @@ export class Player {
 
   /** Перезапустить текущий поток с нуля (retry-кнопка). */
   retry(): void {
-    const url = this.currentUrl;
-    if (!url) return;
-    const isHls = this.hls !== null || /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
-    const channel: Channel = { url, name: "", normalizedName: "", tvgId: null, logo: null, group: "", quality: null, catchupDays: 0, catchupSource: null };
+    if (!this.currentUrl || !this.mirrorState) return;
+    this.mirrorState = { ...this.mirrorState, index: 0 };
+    const url = this.mirrorState.urls[0]!;
+    const forceHls = this.forceHls;
     const recordingUrls = this.recordingUrls;
     this.recordingUrls = [];
-    this.stop();
+    const refused = this.startStream(url, forceHls);
     this.recordingUrls = recordingUrls;
-    this.networkRetries = 0; // ручной повтор даёт потоку новый лимит попыток
-    this.httpsFallbackTried = false;
-    if (isHls && Hls.isSupported()) {
-      this.hls = new Hls(playerHlsConfig(this.activeSettings));
-      this.hls.loadSource(url);
-      this.hls.attachMedia(this.video);
-      this.hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) {
-          this.toast(this.recordingUrls.length > 0
-            ? t("error.recordPlayback")
-            : `Ошибка потока: ${data.details ?? "unknown"}`);
-          this.onFatalError?.();
-        }
-      });
-      const notify = (): void => this.onHlsState?.();
-      this.hls.on(Hls.Events.MANIFEST_PARSED, notify);
-      this.hls.on(Hls.Events.LEVEL_SWITCHED, notify);
-      this.hls.on(Hls.Events.LEVEL_UPDATED, notify);
-      this.attachFragmentListener();
-    } else {
-      this.video.src = url;
+    if (refused && !this.tryNextMirror()) {
+      this.toast(refused);
+      this.onFatalError?.();
     }
-    this.currentUrl = url;
-    this.video.play().catch(() => undefined);
-    void channel;
   }
 }
 

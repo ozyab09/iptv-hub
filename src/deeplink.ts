@@ -12,11 +12,11 @@ export type DeepLinkResult =
  * Найти канал по URL из ?ch=; URL без схемы/не http(s) не считается диплинком.
  */
 export function resolveChannelDeepLink(
-  channels: { url: string }[],
+  channels: { url: string; mirrors?: string[] }[],
   chParam: string | null,
 ): DeepLinkResult {
   const url = chParam?.trim() ?? "";
   if (!url || !/^https?:\/\//.test(url)) return { found: false };
-  const hit = channels.find((c) => c.url === url);
+  const hit = channels.find((c) => c.url === url || c.mirrors?.includes(url));
   return hit ? { found: true, url: hit.url } : { found: false };
 }

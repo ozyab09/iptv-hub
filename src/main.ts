@@ -454,6 +454,11 @@ const player = new Player(
     void diagnoseStreamFailure();
   },
   () => playerSettings,
+  () => {
+    if (!segSession.isRecording()) return;
+    stopRecordingNow();
+    showToast("Запись остановлена: поток переключён на зеркало");
+  },
 );
 
 // Меню качества/дорожек — DOM-слой вынесен в quality-menu.ts (issue #123)
@@ -1247,7 +1252,7 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
   saveCurrentPosition(); // уходим с предыдущего канала — запоминаем позицию (FR-9)
-  const refused = player.play(archiveUrl ? { ...c, url: archiveUrl } : c);
+  const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
   if (refused) {
     showToast(refused);
     return false;
