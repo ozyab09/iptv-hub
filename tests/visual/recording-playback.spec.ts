@@ -33,7 +33,7 @@ for (const kind of ["ts", "mp4", "invalid-ts"]) {
       (window as unknown as { revoked: string[] }).revoked = [];
       URL.revokeObjectURL = (url) => { (window as unknown as { revoked: string[] }).revoked.push(url); revoke(url); };
     });
-    await page.locator(".recording-card").click();
+    await page.locator(".recording-play").click();
     if (kind === "invalid-ts") {
       await expect(page.locator("#toast")).toContainText("Браузер не смог воспроизвести запись");
       return;
@@ -59,7 +59,7 @@ for (const kind of ["ts", "mp4", "invalid-ts"]) {
     await expect.poll(() => video.evaluate((el) => (el as HTMLVideoElement).currentTime)).toBeCloseTo(2, 1);
     await page.locator("#btn-close-player").click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { revoked: string[] }).revoked.length)).toBeGreaterThanOrEqual(ext === "ts" ? 2 : 1);
-    await page.locator(".recording-card").click();
+    await page.locator(".recording-play").click();
     await expect.poll(() => video.evaluate((el) => (el as HTMLVideoElement).videoWidth)).toBe(160);
   });
 }

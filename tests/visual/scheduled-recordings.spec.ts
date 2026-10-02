@@ -58,7 +58,7 @@ test("guide schedules, edits, automatically records and deletes a series", async
   expect(meta.sizeBytes).toBeGreaterThan(0);
   await rule.getByRole("button", { name: "Delete schedule" }).click();
   await expect(rule).toHaveCount(0);
-  await page.locator(".recording-card").click();
+  await page.locator(".recording-play").click();
   await expect.poll(() => page.locator("#video").evaluate((el: HTMLVideoElement) => el.videoWidth)).toBe(160);
 });
 
