@@ -1205,8 +1205,11 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 .video .top { align-items: flex-start; padding: var(--space-4) var(--space-3) var(--space-3); }
 .now-meta { display: flex; align-items: center; gap: 2px; flex: none; }
 .now-meta .player-status { max-width: 120px; }
-.now-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
-.now-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: 13px; line-height: 18px; }
+/* Центр текста первой строки совпадает с рядом .vbtn (44px).
+   Отступ вычисляется из высоты строки, без пустого места под её текстом:
+   передача остаётся рядом с названием даже на коротком мобильном кадре. */
+.now-info { --now-line-height: 18px; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); padding-top: calc((44px - var(--now-line-height)) / 2); }
+.now-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: 13px; line-height: var(--now-line-height); }
 .now-title { flex: 0 0 auto; max-width: 70%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Не хватает места — первой сжимается категория, а не название канала */
 .now-category { flex: 0 3 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: rgba(255, 255, 255, 0.75); }
@@ -1368,6 +1371,9 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   .player-status { display: none; }
 }
 @media (max-width: 479px) {
+  /* После выравнивания первой строки передача должна помещаться над декой
+     даже в кадре 320×180; область нажатия кнопок остаётся 44px. */
+  .player-bar.open .top { padding-top: var(--space-1); }
   /* Семь кнопок помещаются даже в 320px (#229). */
   .player-bar.open .transport .vbtn,
   .player-bar.open .transport .vbtn.big { width: 40px; height: 40px; }
