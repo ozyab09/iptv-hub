@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">IPTV Hub</string>
     <string name="twa_name">IPTV Hub</string>
+    <!-- Подпись под иконкой в лаунчере: длинные названия обрезаются. -->
     <string name="twa_short_name">IPTV Hub</string>
     <string name="close">Закрыть</string>
 </resources>

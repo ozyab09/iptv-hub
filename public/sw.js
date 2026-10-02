@@ -14,7 +14,7 @@
  */
 // При сборке к версии дописывается хэш index.html (vite.config.ts →
 // src/sw-version.ts), поэтому каждый деплой — новый SW и новый кэш.
-const VERSION = "v0.2.27";
+const VERSION = "v0.2.28";
 const SHELL_CACHE = `iptv-hub-shell-${VERSION}`;
 const DATA_CACHE = `iptv-hub-data-${VERSION}`;
 
@@ -25,6 +25,8 @@ const SHELL_ASSETS = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
+  "./icons/apple-touch-180.png",
+  "./icons/favicon-32.png",
 ];
 
 self.addEventListener("install", (event) => {

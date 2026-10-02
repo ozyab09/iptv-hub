@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Тот же акцент, что в public/icons и --accent дизайн-системы v2. -->
+    <color name="ic_launcher_background">#FF4FA3</color>
+    <color name="splash_background">#0C0D10</color>
+</resources>

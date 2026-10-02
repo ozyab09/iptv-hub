@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Тема Android-обёртки.
+
+  Было Theme.Translucent.NoTitleBar: окно без фона, из-за которого первый кадр
+  показывал белое полотно, а системные бары жили по своим правилам. Теперь
+  фон окна совпадает с background_color манифеста (#0c0d10), поэтому запуск
+  идёт без белой вспышки, а статус-бар и навигация выкрашены в тот же тёмный
+  тон, что и «хром» приложения. Тёмная схема зафиксирована намеренно: кадр
+  плеера всегда чёрный, светлые иконки баров — единственный читаемый вариант.
+-->
+<resources>
+    <style name="LauncherTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@color/system_bar</item>
+        <item name="android:navigationBarColor">@color/system_bar</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Тема, к которой система возвращается после системного сплэша
+         (values-v31 ссылается сюда из postSplashScreenTheme). -->
+    <style name="PostSplashTheme" parent="LauncherTheme" />
+</resources>

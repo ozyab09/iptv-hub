@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Цвета системного «хрома». Держим отдельно от colors.xml: тот файл целиком
+  перегенерируется scripts/gen-icons.mjs, и правки в нём теряются.
+-->
+<resources>
+    <!-- Тёмный тон бара: совпадает с --bg приложения и кадром плеера. -->
+    <color name="system_bar">#0C0D10</color>
+</resources>
