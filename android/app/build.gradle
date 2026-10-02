@@ -21,6 +21,17 @@ android {
     }
     buildFeatures { buildConfig true }
 }
+// Kotlin stdlib тянется транзитивно из androidx (webkit/appcompat): старые
+// kotlin-stdlib-jdk7/jdk8 дублируют классы уже из kotlin-stdlib. Выравниваем
+// версии, иначе checkReleaseDuplicateClasses валит сборку.
+configurations.configureEach {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
+    }
+}
+
 dependencies {
     // AppCompatActivity: тема LauncherTheme наследует DeviceDefault, но материал
     // для WebView-активити нужен для корректного edge-to-edge и диалогов.
