@@ -96,11 +96,15 @@ jobs:
       # клиентского автообновления TWA.
       - name: Stamp version metadata
         if: needs.release-check.outputs.version != ''
-        run: node android/scripts/release-metadata.mjs
+        env:
+          VERSION_NAME: ${{ needs.release-check.outputs.version }}
+          VERSION_CODE: ${{ needs.release-check.outputs.version_code }}
+        run: node android/scripts/release-version.mjs --write
       - run: npm run build
         env:
           APP_VERSION: ${{ needs.release-check.outputs.version }}
-      # Обычная сборка кладёт НЕ github-pages, а запасной артефакт:
+      # Одна web-сборка для visual, Android и Pages на любом событии.
+      # Кладём НЕ github-pages, а артефакт для проверок и fallback:
       # в Pages её отправит deploy, но только если release не дошёл
       # (упал визуальный тест или сборка APK). Два одноимённых
       # github-pages в одном прогоне роняли deploy-pages (#250).
@@ -112,14 +116,18 @@ jobs:
           name: pages-build
           path: dist
           include-hidden-files: true
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+          if-no-files-found: error
 
   visual:
     # always(): на PR release-check пропущен, а без этого условия зависимый
     # job тоже пропустился бы — так и случилось в первом прогоне.
-    if: always() && needs.release-check.result != 'failure'
-    needs: [release-check]
+    if: always() && needs.build.result == 'success'
+    needs: [release-check, build]
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox-media]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -127,30 +135,52 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install chromium firefox --with-deps
-      - run: npm run build
-      - run: npx playwright test
+      - uses: actions/download-artifact@v4
+        with:
+          name: pages-build
+          path: dist
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-playwright-${{ hashFiles('package-lock.json') }}
+      - name: Install browsers and system dependencies
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install chromium firefox --with-deps --only-shell
+      # Каждый job получает свежую VM: браузеры кэшируются, apt-библиотеки — нет.
+      - name: Install system dependencies for cached browsers
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium firefox
+      - run: npx playwright test --project=${{ matrix.project }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: playwright-report/
           retention-days: 7
 
   android:
     # always(): на PR release-check пропущен, а без этого условия зависимый
     # job тоже пропустился бы — так и случилось в первом прогоне.
-    if: always() && needs.release-check.result != 'failure'
-    needs: [release-check]
+    if: always() && needs.build.result == 'success'
+    needs: [release-check, build]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      # Web-сборка зашивается в APK, значит нужны node и зависимости.
+      # Node нужен только скриптам упаковки и проверки, без npm-зависимостей.
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: pages-build
+          path: dist
+      - name: Stamp Android version
+        if: needs.release-check.outputs.version != ''
+        env:
+          VERSION_NAME: ${{ needs.release-check.outputs.version }}
+          VERSION_CODE: ${{ needs.release-check.outputs.version_code }}
+        run: node android/scripts/release-version.mjs --write
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -162,11 +192,7 @@ jobs:
         with:
           packages: 'platform-tools'
       - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-      - run: node android/scripts/release-metadata.mjs
-      # Web-сборка зашивается в APK: приложение запускается локально, без Pages.
-      - run: npm run build
-        env:
-          APP_VERSION: ${{ needs.release-check.outputs.version }}
+      # Проверенный dist зашивается в APK: без повторной web-сборки.
       - run: node android/scripts/bundle-web.mjs
       - run: gradle -p android/app clean assembleRelease --no-daemon
       - name: Проверить, что ассеты попали в APK
@@ -209,7 +235,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: pages-build
+          path: dist
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -242,13 +271,14 @@ jobs:
           "$tools/apksigner" verify --verbose iptv-hub.apk
           node android/scripts/gen-assetlinks.mjs --keystore "$keystore" --alias "$ANDROID_KEY_ALIAS" --output public/.well-known/assetlinks.json
       - name: Prepare release metadata
-        run: node android/scripts/release-metadata.mjs
-      - run: npm ci
-      - run: npm run build
         env:
-          APP_VERSION: ${{ needs.release-check.outputs.version }}
-      # Web-сборка зашивается в APK: релизный APK тоже работает без сети.
-      - run: node android/scripts/bundle-web.mjs
+          VERSION_NAME: ${{ needs.release-check.outputs.version }}
+          VERSION_CODE: ${{ needs.release-check.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          node android/scripts/release-version.mjs --write
+          cp public/version.json dist/version.json
+          cp public/.well-known/assetlinks.json dist/.well-known/assetlinks.json
       - uses: actions/upload-artifact@v4
         with:
           name: android-signed
