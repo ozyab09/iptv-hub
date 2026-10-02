@@ -52,6 +52,11 @@ export function showsCategories(view: View): boolean {
   return view === "channels";
 }
 
+/** Единый отбор до разделов, поиска передач, now/next и счётчиков. */
+export function filterVisibleGroups(channels: readonly Channel[], hidden: ReadonlySet<string>): Channel[] {
+  return channels.filter((channel) => !hidden.has(channel.group));
+}
+
 /**
  * Каналы раздела до фильтров категории и поиска.
  *

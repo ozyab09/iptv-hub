@@ -846,6 +846,12 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 .player-switch input:checked + .player-switch-track::before { transform: translateX(20px); background: var(--on-accent); }
 .player-switch input:focus-visible + .player-switch-track { outline: 2px solid var(--focus); outline-offset: 2px; }
 .first-run .player-settings-group { display: none; }
+.first-run .group-preferences-group { display: none; }
+.group-preference { gap: var(--space-2); }
+.group-visibility { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; cursor: pointer; }
+.group-visibility .item-label { min-width: 0; overflow-wrap: anywhere; }
+.group-move { width: 44px; min-width: 44px; min-height: 44px; padding: 0; flex: none; }
+.group-move:disabled { opacity: .4; cursor: default; }
 .add-pl { color: var(--accent) !important; }
 .add-pl[aria-expanded="true"] { background: var(--surface-2); }
 
