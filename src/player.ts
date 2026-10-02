@@ -387,6 +387,9 @@ export class Player {
     return this.currentUrl;
   }
 
+  /** Основной URL остаётся идентификатором канала при переключении зеркала. */
+  get currentChannelUrl(): string | null { return this.channelUrl; }
+
   /** Таймаут снимка настроек текущего канала, независимо от редактирования UI. */
   get diagnosticsTimeoutMs(): number {
     return this.activeSettings.diagnosticsTimeoutMs;

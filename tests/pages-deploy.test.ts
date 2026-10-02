@@ -21,6 +21,7 @@ function uploadSteps(text: string): string[] {
 
 /** Текст job'ы от её заголовка до заголовка следующей. */
 function jobSection(text: string, job: string): string {
+  text = text.replace(/\r\n/g, "\n");
   const start = text.indexOf(`\n  ${job}:\n`);
   expect(start, `job ${job} не найден`).toBeGreaterThanOrEqual(0);
   const rest = text.slice(start + 1);
