@@ -19,67 +19,69 @@ concurrency:
   group: pages-${{ github.ref }}
 
 jobs:
-  # ============ Решение о релизе: тег + проверка «уже выпущено» ============
+  # ============ Версия, тег и релиз ============
+  #
+  # Источник правды по версии — git-тег vX.Y.Z. На каждый push в main job
+  # вычисляет следующий патч (максимальный тег + 1), синхронизирует файлы
+  # (package.json, android/version.properties, public/version.json) отдельным
+  # коммитом [skip ci], ставит тег на этот коммит и сообщает версию дальше.
+  # Ручной bump версии больше не нужен: новая версия выходит на каждый push.
   #
   # Почему тег создаётся здесь, а не отдельным workflow: пуш тега с
-  # GITHUB_TOKEN не запускает новый прогон workflow (защита GitHub от
-  # рекурсии), поэтому единственный рабочий путь — создать тег и тут же
-  # собрать релиз в этом же прогоне.
+  # GITHUB_TOKEN не запускает новый прогон (защита GitHub от рекурсии),
+  # поэтому тег и релиз обязаны быть в одном прогоне.
   release-check:
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      exists: ${{ steps.release.outputs.exists }}
+      version: ${{ steps.version.outputs.version || steps.from-tag.outputs.version || steps.manual.outputs.version }}
+      version_code: ${{ steps.version.outputs.version_code || steps.from-tag.outputs.version_code || steps.manual.outputs.version_code }}
+      # Коммит синхронизации версии (пусто, если коммита не было). Остальные
+      # job'ы собирают именно его — тот же код, что помечен тегом и попадёт
+      # в релиз.
+      commit: ${{ steps.version.outputs.commit }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      # Версия и тег: на push в main тег создаётся, если его ещё нет
-      # (node-тесты логики — tests/release-version.test.ts).
+      # Push в main: пишем версию в файлы, коммитим их в main и только потом
+      # ставим тег на этот коммит — так package.json и тег всегда совпадают.
+      # Логика выбора версии покрыта tests/release-version.test.ts.
       - id: version
-        env:
-          EVENT_NAME: ${{ github.event_name }}
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
-          if [[ -f android/version.properties ]]; then
-            args=()
-          else
-            echo "::error::android/version.properties не найден — node android/scripts/release-metadata.mjs упадёт"
+          test -f android/version.properties || {
+            echo "::error::android/version.properties не найден — сборка APK упадёт"
             exit 1
-          fi
-          if [[ "$EVENT_NAME" == "push" ]]; then
-            args+=(--ensure-tag)
-          fi
-          node android/scripts/release-version.mjs "${args[@]}"
-      - id: release
+          }
+          node android/scripts/release-version.mjs --write --sync-main --ensure-tag
+      # Пуш тега v*: версия уже в теге, синхронизируем файлы без коммита
+      # (тег неизменяем) и передаём версию дальше.
+      - id: from-tag
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          TAG: ${{ steps.version.outputs.tag }}
+          VERSION_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # Ручной запуск — всегда собираем текущую версию, даже если релиз
-          # с таким тегом уже есть: это осознанная пересборка.
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Идемпотентность: повторный прогон и повторный push с той же версией
-          # не должны перезаписывать уже опубликованный релиз.
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Релиз ${TAG} уже опубликован — пропускаем"
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          node android/scripts/release-version.mjs --write
+      # Ручной запуск — пересборка текущей версии из package.json.
+      - id: manual
+        if: github.event_name == 'workflow_dispatch'
+        run: node android/scripts/release-version.mjs
 
   build:
+    # always() обязателен: на PR release-check пропущен, и без этого
+    # обязательный чек build не запустился бы вовсе.
+    if: always() && needs.release-check.result != 'failure'
+    needs: [release-check]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release-check.outputs.commit || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -90,10 +92,11 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           if git fetch origin gh-pages; then
-            git show FETCH_HEAD:version.json > public/version.json
             git show FETCH_HEAD:.well-known/assetlinks.json > public/.well-known/assetlinks.json
           fi
       - run: npm run build
+        env:
+          APP_VERSION: ${{ needs.release-check.outputs.version }}
       # include-hidden-files обязателен: upload-pages-artifact с v4 по
       # умолчанию выбрасывает dot-файлы (--exclude=.[^/]*), и
       # public/.well-known/assetlinks.json не доезжает до живого сайта —
@@ -105,9 +108,12 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
   visual:
+    needs: [release-check]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release-check.outputs.commit || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -124,9 +130,12 @@ jobs:
           retention-days: 7
 
   android:
+    needs: [release-check]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release-check.outputs.commit || github.sha }}
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -154,16 +163,14 @@ jobs:
           if-no-files-found: error
 
   release:
-    # Три входа: push в main (обычный путь — тег и релиз), push тега v*
-    # (совместимость с ручным тегом) и workflow_dispatch (пересборка версии
-    # из package.json). Во всех случаях релиз выпускается один раз: повторный
-    # прогон видит опубликованный релиз и не перезаписывает артефакт.
+    # Новая версия выходит на каждый push в main (release-check её уже
+    # закоммитил и пометил тегом), а также на тег v* и ручной запуск.
+    # Гарда «релиз уже есть» больше нет — версия всегда новая.
     # Проверка ref обязательна: на PR release-check пропущен, и без неё
     # релиз собирался бы на каждый pull_request.
     if: >-
       always()
-      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-      && needs.release-check.outputs.exists == 'false'
+      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
       && needs.build.result == 'success'
       && needs.visual.result == 'success'
       && needs.android.result == 'success'
@@ -173,6 +180,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release-check.outputs.commit || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -212,6 +221,8 @@ jobs:
         run: node android/scripts/release-metadata.mjs
       - run: npm ci
       - run: npm run build
+        env:
+          APP_VERSION: ${{ needs.release-check.outputs.version }}
       # Тот же include-hidden-files, что и в build: релизный деплой обязан
       # опубликовать .well-known/assetlinks.json с отпечатком keystore.
       - uses: actions/upload-pages-artifact@v5
@@ -225,10 +236,13 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.release-check.outputs.version }}
         run: |
-          tag="v$(node -p 'require("./package.json").version')"
-          gh release view "$tag" || gh release create "$tag" --target "$GITHUB_SHA" --title "IPTV Hub $tag" --generate-notes
-          gh release upload "$tag" iptv-hub.apk --clobber
+          set -euo pipefail
+          tag="v${VERSION}"
+          # Тег уже создан release-check на коммите синхронизации версии.
+          gh release create "$tag" --title "IPTV Hub $tag" --generate-notes iptv-hub.apk \
+            || gh release upload "$tag" iptv-hub.apk --clobber
 
       - name: Save Android metadata for future Pages builds
         env:

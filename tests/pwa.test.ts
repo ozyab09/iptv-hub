@@ -83,20 +83,22 @@ describe("обновление без смеси старого и нового"
     expect(sw).toMatch(/networkFirstNavigation[\s\S]*cache:\s*"no-cache"/);
   });
 
-  it("версия SW получает хэш сборки", () => {
-    const stamped = stampVersion('const VERSION = "v0.2.5";\nrest', "<html>a</html>");
-    expect(stamped).toMatch(/^const VERSION = "v0\.2\.5\+[0-9a-f]{10}";\nrest$/);
+  it("версия SW собирается из версии приложения и хэша сборки", () => {
+    const stamped = stampVersion('const VERSION = "v0.2.5";\nrest', "<html>a</html>", "0.2.7");
+    expect(stamped).toMatch(/^const VERSION = "v0\.2\.7\+[0-9a-f]{10}";\nrest$/);
     // другая сборка — другая версия, та же — та же
-    expect(stampVersion('const VERSION = "v0.2.5";', "<html>b</html>")).not.toBe(
-      stampVersion('const VERSION = "v0.2.5";', "<html>a</html>"),
+    expect(stampVersion('const VERSION = "v0.2.5";', "<html>b</html>", "0.2.7")).not.toBe(
+      stampVersion('const VERSION = "v0.2.5";', "<html>a</html>", "0.2.7"),
     );
     expect(buildId("x")).toBe(buildId("x"));
     // повторная простановка не копит хэши
-    expect(stampVersion(stamped, "<html>c</html>")).toMatch(/^const VERSION = "v0\.2\.5\+[0-9a-f]{10}";/);
+    expect(stampVersion(stamped, "<html>c</html>", "0.2.7")).toMatch(/^const VERSION = "v0\.2\.7\+[0-9a-f]{10}";/);
+    // версия приходит извне (тег в CI), а не из константы файла
+    expect(stampVersion('const VERSION = "v0.0.1";', "<html>a</html>", "9.9.9")).toContain('"v9.9.9+');
   });
 
   it("без строки VERSION сборка падает, а не молча ставит старый кэш", () => {
-    expect(() => stampVersion("const X = 1;", "")).toThrow();
+    expect(() => stampVersion("const X = 1;", "", "0.2.7")).toThrow();
   });
 
   it("новая версия перезагружает страницу или предлагает обновиться", () => {

@@ -18,11 +18,13 @@ Go-пайплайн, который ежедневно фильтрует M3U/EP
 `tvg-id`, `tvg-logo`, `group-title`, `tvg-rec`/`catchup`) и XMLTV EPG
 (`.xml` или `.xml.gz`).
 
-**Текущий статус:** v0.2.6 — мультиплейлисты, плеер (hls.js + нативный, quality,
+**Текущий статус:** мультиплейлисты, плеер (hls.js + нативный, quality,
 аудио/субтитры, retry, mixed-content-апгрейд), скрытие http-каналов, EPG +
 catchup-архив, запись эфира (HLS — сегментами, остальное — перекодированием),
-PWA. Версия пакета (`package.json`) синхронна с этим статусом и бампится при
-релизах — тест `tests/version.test.ts` следит за расхождением.
+PWA. Версию приложения задаёт git-тег (см. «Версии и релизы»): на каждый
+push в main CI вычисляет следующий патч, синхронизирует `package.json`,
+`android/version.properties` и `public/version.json`, ставит тег и выпускает
+APK. Руками версию бампать не нужно.
 
 ---
 
@@ -379,40 +381,47 @@ CI `.github/workflows/ci.yml` собирает unsigned APK и проверяе�
 `/iptv-hub/` недостаточен. Этот workflow не меняет root Pages-репозиторий;
 без отдельной публикации браузер может показывать панель Custom Tab.
 
-**Автотег и авто-релиз (#222).** Тег создаёт job `release-check`, а не
-отдельный workflow: пуш тега через `GITHUB_TOKEN` не запускает новый прогон
-(защита GitHub от рекурсии), поэтому тег и релиз обязаны быть в одном прогоне.
-Порядок в `release-check`:
+**Версии и авто-релиз (#222, #233).** Источник правды по версии — git-тег
+`vX.Y.Z`; руками версию не бампают. На каждый push в `main` job
+`release-check`:
 
 1. `android/scripts/release-version.mjs` (логика покрыта
-   `tests/release-version.test.ts`) берёт `version` из `package.json`,
-   проверяет semver, делает `git fetch --tags` и — только на push в `main` —
-   создаёт аннотированный тег `vX.Y.Z`, если его ещё нет;
-2. `gh release view` решает, опубликован ли релиз этой версии.
+   `tests/release-version.test.ts`) берёт максимальный semver-тег, прибавляет
+   патч (`0.2.6 → 0.2.7`; без тегов — `0.0.1`), синхронизирует `package.json`,
+   `android/version.properties` (`versionCode = 1000 + major*1000 + minor*100 +
+   patch`) и `public/version.json`;
+2. коммитит эти файлы в `main` сообщением `chore: версия X [skip ci]` и только
+   **потом** ставит аннотированный тег на этот коммит — так тег и
+   `package.json` всегда совпадают. `[skip ci]` обязателен: без него пуш
+   запустил бы новый прогон и версия уехала бы по кругу;
+3. версия уезжает дальше через outputs: `build` собирает web с
+   `APP_VERSION` (её подставляет `vite.config.ts` в `sw.js` и `dist`), а
+   `release` берёт `versionName`/`versionCode` из `android/version.properties`.
 
 `release` идёт после зелёных `build`, `visual`, `android` и запускается на
-push в `main`, push тега `v*` и `workflow_dispatch`; при уже опубликованном
-релизе job пропускается (идемпотентность: повторный прогон не перезаписывает
-APK). `workflow_dispatch` пересобирает текущую версию принудительно.
-Следствие для версий: новая версия выходит только тогда, когда в `main`
-приехал изменённый `package.json.version` — bump делается в PR перед merge,
-иначе тег `vX.Y.Z` уже существует и релиз пропускается.
+push в `main`, push тега `v*` и `workflow_dispatch` — гарды «релиз уже есть»
+больше нет, потому что версия всегда новая. Порядок сборки: `release-check`
+(версия + тег) → `build`/`visual`/`android` → `release` (подпись + GitHub
+Release) → `deploy` (Pages). Тег и релиз в одном прогоне обязательны: пуш
+тега через `GITHUB_TOKEN` не запускает новый прогон (защита GitHub от
+рекурсии).
 
 Релиз: assembleRelease → zipalign → apksigner → verify → генерация Asset Links
 из DER-сертификата (`android/scripts/gen-assetlinks.mjs`) → version.json →
 metadata в `gh-pages` → Pages artifact и GitHub Release с APK. Pages использует
-GitHub Actions; обычный main-деплой восстанавливает metadata из `gh-pages`,
-чтобы не стереть отпечаток. Секреты: `ANDROID_KEYSTORE_B64`,
-`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
-(репозиторий без них падает на подписи — это ожидаемо, не баг CI).
-Keystore не коммитить и сохранять между релизами: потеря ключа ломает
-обновление установленного приложения. Локальная папка для ключа —
+GitHub Actions; обычный main-деплой восстанавливает из `gh-pages` только
+`assetlinks.json` (версию ему больше не навязываем). Секреты:
+`ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD` (репозиторий без них падает на подписи — это ожидаемо,
+не баг CI). Keystore не коммитить и сохранять между релизами: потеря ключа
+ломает обновление установленного приложения. Локальная папка для ключа —
 `.local-signing/` (в `.gitignore`).
 
-Версии: package.json и android/version.properties versionName синхронны;
-versionCode — возрастающее целое; public/version.json содержит оба значения.
-Тег должен совпадать с package.json. При release VERSION SW штампуется SHA;
-для обычных изменений shell остаётся обязательный ручной bump.
+Версия service worker'а больше не константа: при сборке `stampVersion`
+(`src/sw-version.ts`) ставит `v<APP_VERSION>+<хэш index.html>`, так что каждый
+деплой с изменёнными файлами даёт новый SW и новый кэш. `vX.Y.Z` в
+`public/sw.js` — только fallback для dev-сервера.
+
 APK обновляется вручную через GitHub Releases; нативная автоустановка и
 автообновление не реализованы. Проверка на физическом устройстве обязательна
 перед заявлением о работоспособности playback; CI проверяет сборку и подпись.
