@@ -62,6 +62,8 @@ for (const theme of ["light", "dark"]) {
       await expect(page.locator("#now-title")).toHaveText("Alpha");
       if (width >= 1024) {
         await page.locator("#btn-collapse-list").click();
+        await expect(page.locator("#channel-list")).toBeHidden();
+        await page.locator("#btn-restore-panel").click();
         await checkLogos(page);
       }
     });

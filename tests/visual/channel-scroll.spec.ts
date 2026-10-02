@@ -34,8 +34,9 @@ for (const theme of ["light", "dark"]) {
         await expect(page.locator("#now-title")).toHaveText("Channel 021");
         expect(await list.evaluate((el) => el.scrollTop)).toBe(1440);
         await page.locator("#btn-collapse-list").click();
-        await selectAtScroll();
-        await page.locator("#btn-collapse-list").click();
+        await expect(list).toBeHidden();
+        await page.locator("#btn-restore-panel").click();
+        expect(await list.evaluate((el) => el.scrollTop)).toBe(1440);
       }
       await page.locator("#search").fill("Channel 14");
       await expect(page.locator("#view-count")).toHaveText("10");

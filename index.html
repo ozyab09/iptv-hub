@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#0c0d10" />
     <meta name="description" content="IPTV Hub — self-hosted веб-плеер для IPTV-плейлистов с телепрограммой" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icons/icon-192.png" type="image/png" />
-    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="icon" href="./icons/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-180.png" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>IPTV Hub</title>
@@ -36,6 +36,7 @@
         <nav id="side-nav" class="side-nav" aria-label="Разделы"></nav>
         <div id="cat-label" class="side-label t-overline" data-i18n="nav.categories">Категории</div>
         <nav id="categories" class="categories" aria-label="Категории" data-i18n-aria-label="nav.categories"></nav>
+        <button id="btn-hide-panel" class="icon-btn list-toggle" title="Скрыть панель целиком" aria-label="Скрыть панель навигации и список каналов"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
       </aside>
 
       <!-- Шапка: какой плейлист открыт (он же переключатель), поиск, тема -->
@@ -236,9 +237,8 @@
               <div class="view-head">
                 <h2 class="t-heading view-title"><span id="view-title">Каналы</span> <span id="view-count" class="view-count num"></span></h2>
                 <!-- Только в режиме просмотра на широком экране: список
-                     сворачивается в колонку логотипов, плеер растёт (C) -->
+                     скрывается целиком, плеер растёт (C) -->
                   <button id="btn-collapse-list" class="icon-btn sm list-toggle" title="Свернуть список (C)" aria-label="Свернуть список каналов" aria-expanded="true"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-panel-close"></use></svg></button>
-                <button id="btn-hide-panel" class="icon-btn sm list-toggle" title="Скрыть панель целиком" aria-label="Скрыть панель навигации и список каналов"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
               </div>
               <!-- Выбор категории в режиме просмотра: сайдбар там сжат
                    в рельс, и списку чипов места не остаётся. -->
@@ -258,6 +258,7 @@
               <div class="view-head">
                 <h2 class="t-heading view-title" data-i18n="nav.recordings">Записи</h2>
               </div>
+              <div id="recording-schedule" class="recording-schedule"></div>
               <div id="recordings-empty" class="empty-state" hidden>Записей пока нет</div>
               <div id="recordings-list" class="recordings-list" role="list"></div>
             </section>
@@ -275,8 +276,8 @@
              авто-отступами, и программа отрывается от кадра. -->
         <div id="player-stack">
         <!-- Все контролы воспроизведения — на кадре, одной панелью снизу
-             (дизайн-система v2): строка передачи, под ней слева
-             воспроизведение, справа настройки. Белые на чёрном градиенте в
+             (дизайн-система v2): информация сверху, громкость, транспорт и
+             настройки снизу. Белые на чёрном градиенте в
              любой теме, автоскрытие через 3 секунды. Под кадром — только
              информация о канале и переключение каналов. -->
         <div id="video-stage" class="video">
@@ -286,6 +287,10 @@
           <!-- Верх кадра: что смотрим и навигация по каналам. Всё про
                плеер — на самом плеере, под кадром остаётся только программа. -->
           <div class="top">
+            <div class="now-meta">
+              <span id="player-status" class="t-caption vt player-status" title="Разрешение и скорость потока"></span>
+              <button id="btn-guide" class="vbtn ghost" title="Программа передач (G)" aria-label="Программа передач"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></button>
+            </div>
             <div class="now-info">
               <div class="now-line"><span id="live-badge" class="live on-video" hidden>Эфир</span><span id="now-title" class="now-title">—</span><span id="now-category" class="now-category"></span></div>
               <div id="now-show" class="now-show"></div>
@@ -296,24 +301,6 @@
               <button id="now-fav" class="vbtn ghost fav-star" title="В избранное" aria-label="В избранное или убрать"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
               <button id="btn-shot" class="vbtn ghost" title="Снять скриншот кадра (S)" aria-label="Скриншот кадра"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-camera"></use></svg></button>
               <button id="btn-close-player" class="vbtn ghost" title="Закрыть" aria-label="Закрыть плеер"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
-            </div>
-          </div>
-
-          <!-- Транспортная дека «как на магнитофоне»: всё управление
-               воспроизведением в одном ряду, порядок — ход ленты:
-               назад-15 · предыдущий канал · пауза · следующий канал ·
-               вперёд-15 · запись.
-               На телефоне деко крупно по центру кадра, на широком экране
-               CSS переносит её в нижнюю панель (см. .transport в стилях). -->
-          <div class="center">
-            <div class="transport">
-              <button id="btn-seek-back" class="vbtn ghost" title="Назад 15 сек (J)" aria-label="Назад 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-back"></use></svg></button>
-              <button id="btn-prev" class="vbtn ghost" title="Предыдущий канал (←)" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
-              <button id="btn-pause" class="vbtn big" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить"><svg class="i i-lg i-fill" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg></button>
-              <button id="btn-next" class="vbtn ghost" title="Следующий канал (→)" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
-              <button id="btn-seek-fwd" class="vbtn ghost" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-fwd"></use></svg></button>
-              <button id="btn-rec" class="vbtn ghost rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
-              <button id="btn-sleep" class="vbtn ghost" title="Sleep-таймер: выключить позже" aria-label="Sleep-таймер"><span id="sleep-badge" class="sleep-badge" hidden></span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-clock"></use></svg></button>
             </div>
           </div>
 
@@ -340,10 +327,25 @@
                 <button id="btn-mute" class="vbtn ghost" title="Звук вкл/выкл (M)" aria-label="Звук вкл или выкл"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-volume"></use></svg></button>
                 <input id="volume-slider" type="range" min="0" max="100" value="100" aria-label="Громкость" />
               </div>
-              <button id="btn-live" class="vbtn btn-live" hidden>К эфиру</button>
+              <!-- Транспортная дека «как на магнитофоне»: всё управление
+                   воспроизведением в одном ряду, порядок — ход ленты:
+                   назад-15 · предыдущий канал · пауза · следующий канал ·
+                   вперёд-15 · запись.
+                   На широком кадре — между громкостью и настройками,
+                   на компактном — отдельным рядом над ними. -->
+              <div class="center">
+                <div class="transport">
+                  <button id="btn-seek-back" class="vbtn ghost" title="Назад 15 сек (J)" aria-label="Назад 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-back"></use></svg></button>
+                  <button id="btn-prev" class="vbtn ghost" title="Предыдущий канал (←)" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
+                  <button id="btn-pause" class="vbtn big" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить"><svg class="i i-lg i-fill" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg></button>
+                  <button id="btn-next" class="vbtn ghost" title="Следующий канал (→)" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
+                  <button id="btn-seek-fwd" class="vbtn ghost" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-fwd"></use></svg></button>
+                  <button id="btn-rec" class="vbtn ghost rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
+                  <button id="btn-sleep" class="vbtn ghost" title="Sleep-таймер: выключить позже" aria-label="Sleep-таймер"><span id="sleep-badge" class="sleep-badge" hidden></span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-clock"></use></svg></button>
+                </div>
+              </div>
               <div class="video-actions-right">
-                <span id="player-status" class="t-caption vt player-status" title="Разрешение и скорость потока"></span>
-                <button id="btn-guide" class="vbtn ghost" title="Программа передач (G)" aria-label="Программа передач"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-calendar"></use></svg></button>
+                <button id="btn-live" class="vbtn btn-live" hidden>К эфиру</button>
                 <div id="quality-wrap" class="quality-wrap">
                   <button id="quality-btn" class="btn btn-sm quality-btn" title="Качество" aria-label="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
                   <div id="quality-menu" class="quality-menu menu" role="listbox" hidden></div>

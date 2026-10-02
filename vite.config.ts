@@ -3,10 +3,18 @@ import { join } from "node:path";
 import { defineConfig, type Plugin } from "vitest/config";
 import { stampVersion } from "./src/sw-version";
 
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
+
 /**
- * После сборки проставляет в dist/sw.js версию от хэша index.html: каждый
- * деплой с изменённым кодом или стилями — новый service worker и новый кэш,
- * без ручного подъёма VERSION (см. src/sw-version.ts).
+ * Версия для сборки: APP_VERSION из CI (её вычисляет CI из git-тега) либо
+ * version из package.json как запасной вариант для локальных сборок.
+ */
+const appVersion = process.env.APP_VERSION?.trim() || pkg.version;
+
+/**
+ * После сборки проставляет в dist/sw.js версию приложения и хэш index.html:
+ * каждый деплой с изменённым кодом или стилями — новый service worker и
+ * новый кэш, без ручного подъёма VERSION (см. src/sw-version.ts).
  */
 function stampServiceWorker(): Plugin {
   let outDir = "dist";
@@ -19,7 +27,7 @@ function stampServiceWorker(): Plugin {
     writeBundle() {
       const sw = join(outDir, "sw.js");
       const html = readFileSync(join(outDir, "index.html"), "utf-8");
-      writeFileSync(sw, stampVersion(readFileSync(sw, "utf-8"), html));
+      writeFileSync(sw, stampVersion(readFileSync(sw, "utf-8"), html, appVersion));
     },
   };
 }
@@ -30,6 +38,9 @@ function stampServiceWorker(): Plugin {
 export default defineConfig({
   base: "./",
   plugins: [stampServiceWorker()],
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],

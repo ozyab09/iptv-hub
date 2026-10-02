@@ -17,10 +17,11 @@ function run(properties: string, ref = "refs/tags/v0.2.5") {
     return { version: JSON.parse(readFileSync(join(dir, "public/version.json"), "utf8")), sw: readFileSync(join(dir, "public/sw.js"), "utf8") };
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
-it("публикует Android versionCode целым числом и обновляет кэш релиза", () => {
+it("публикует Android versionCode целым числом", () => {
   const result = run("versionCode=1001\nversionName=0.2.5\n");
   expect(result.version).toEqual({ versionCode: 1001, versionName: "0.2.5" });
-  expect(result.sw).toContain('"v0.2.5-123456789abc"');
+  // SW штампует vite (src/sw-version.ts), а не release-metadata.
+  expect(result.sw).toBe('const VERSION = "old";');
 });
 it("отклоняет несовпадение Android и package.json", () => {
   expect(() => run("versionCode=1001\nversionName=0.2.6")).toThrow();

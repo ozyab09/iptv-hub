@@ -20,6 +20,6 @@ const output = resolve(option("--output", "public/.well-known/assetlinks.json"))
 mkdirSync(dirname(output), { recursive: true });
 writeFileSync(output, JSON.stringify([{
   relation: ["delegate_permission/common.handle_all_urls"],
-  target: { namespace: "android_app", package_name: option("--audience", "com.izzy.twa"), sha256_cert_fingerprints: [fingerprint] },
+  target: { namespace: "android_app", package_name: option("--audience", "io.github.ozyab09.iptvhub"), sha256_cert_fingerprints: [fingerprint] },
 }], null, 2) + "\n");
 console.log(`Wrote ${output}`);

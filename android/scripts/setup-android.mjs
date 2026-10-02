@@ -94,7 +94,7 @@ async function main() {
   // 2. Placeholder assetlinks.json (SHA-256 filled by CI from keystore).
   const assetlinksPlaceholder = [
     '{"relation": ["delegate_permission/common.handle_all_urls"],',
-    '  "audience": {"target_package": "com.izzy.twa"}}',
+    '  "audience": {"target_package": "io.github.ozyab09.iptvhub"}}',
   ].join("\n");
   await fs.writeFile(
     path.resolve(srcMainAssets, "assetlinks-temp.json"),

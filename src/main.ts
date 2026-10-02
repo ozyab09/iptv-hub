@@ -1,4 +1,5 @@
 import "./style.css";
+import { createRecordingScheduleUi } from "./recording-schedule-ui";
 import { LANGUAGE_KEY, resolveLanguage, t, translateMessage, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
@@ -335,6 +336,7 @@ let activeCategory: string | null = null;
 let plState: PlaylistsState = loadPlaylists(
   typeof localStorage !== "undefined" ? localStorage : null,
 );
+let scheduleUi: ReturnType<typeof createRecordingScheduleUi> | null = null;
 let favKey: string | null = null; // favoritesKey(id) активного плейлиста (legacy)
 void favKey;
 let favorites = new Set<string>();
@@ -1859,6 +1861,7 @@ function noteRecordingStop(): void {
 }
 
 function renderRecordings(): void {
+  scheduleUi?.render();
   const list = loadRecordings(typeof localStorage !== "undefined" ? localStorage : null);
   // Раздел «Записи» — самостоятельный экран из сайдбара (см. VIEWS).
   const recordingsScreen = $("recordings-screen");
@@ -1869,23 +1872,27 @@ function renderRecordings(): void {
   row.textContent = "";
   if (activeView !== "recordings") return;
   for (const r of list) {
-    const card = document.createElement("button");
+    const card = document.createElement("div");
     card.className = "recording-card";
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "recording-play";
     const when = new Date(r.startedAt);
     card.title = `${r.channelName} · ${when.toLocaleString("ru")} · ${formatDuration(r.durationSec)}`;
 
     const name = document.createElement("span");
     name.className = "recording-name ellipsis";
     name.textContent = r.programmeTitle ?? r.channelName;
-    card.append(name);
+    play.append(name);
 
     const sub = document.createElement("span");
     sub.className = "recording-sub muted num";
     sub.textContent = `${r.channelName} · ${when.toLocaleDateString("ru")} ${when.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} · ${formatDuration(r.durationSec)} · ${formatBytes(r.sizeBytes)}`;
-    card.append(sub);
+    play.append(sub);
+    card.append(play);
 
     // Клик — воспроизведение из OPFS.
-    card.addEventListener("click", () => {
+    play.addEventListener("click", () => {
       if (!recordingsFs) return;
       void recordingsFs.read(storedRecordingName(r.id, r.ext)).then((file) => {
         if (!file) {
@@ -1896,34 +1903,37 @@ function renderRecordings(): void {
       });
     });
 
+    const actions = document.createElement("div");
+    actions.className = "recording-actions";
     const download = document.createElement("button");
+    download.type = "button";
     download.className = "recording-act";
     download.title = "Скачать файл";
     download.setAttribute("aria-label", "Скачать файл записи");
     download.innerHTML = iconMarkup("download");
-    download.addEventListener("click", (ev) => {
-      ev.stopPropagation();
+    download.addEventListener("click", () => {
       if (!recordingsFs) return;
       void recordingsFs.read(storedRecordingName(r.id, r.ext)).then((file) => {
         if (file) offerDownload(file, recordingFileName(r.channelName, new Date(r.startedAt), r.ext));
       });
     });
-    card.append(download);
+    actions.append(download);
 
     const del = document.createElement("button");
+    del.type = "button";
     del.className = "recording-act";
     del.title = "Удалить запись";
     del.setAttribute("aria-label", "Удалить запись");
     del.innerHTML = iconMarkup("trash");
-    del.addEventListener("click", (ev) => {
-      ev.stopPropagation();
+    del.addEventListener("click", () => {
       if (!recordingsFs) return;
       void recordingsFs.remove(storedRecordingName(r.id, r.ext)).then(() => {
         removeRecording(typeof localStorage !== "undefined" ? localStorage : null, r.id);
         renderRecordings();
       });
     });
-    card.append(del);
+    actions.append(del);
+    card.append(actions);
 
     row.append(card);
   }
@@ -2076,14 +2086,16 @@ window.addEventListener("popstate", () => {
 });
 
 /**
- * Свернуть список каналов рядом с плеером в колонку логотипов: плеер
+ * Скрыть список каналов рядом с плеером: плеер
  * забирает освободившееся место. Выбор запоминается — кто смотрит без
  * списка, тот и в следующий раз хочет без него.
  */
 const LIST_COLLAPSED_KEY = "iptv-hub.list-collapsed.v1";
 
 function setListCollapsed(on: boolean): void {
+  const moveFocus = document.activeElement === btnCollapseList || document.activeElement === btnRestorePanel;
   appEl.classList.toggle("list-collapsed", on);
+  btnRestorePanel.hidden = !on;
   btnCollapseList.setAttribute("aria-expanded", String(!on));
   btnCollapseList.title = on ? "Развернуть список (C)" : "Свернуть список (C)";
   btnCollapseList.setAttribute(
@@ -2093,6 +2105,8 @@ function setListCollapsed(on: boolean): void {
   btnCollapseList
     .querySelector("use")
     ?.setAttribute("href", on ? "#i-panel-open" : "#i-panel-close");
+  if (!on) renderVirtualWindow();
+  if (moveFocus) (on ? btnRestorePanel : btnCollapseList).focus();
   try {
     localStorage.setItem(LIST_COLLAPSED_KEY, on ? "1" : "0");
   } catch {
@@ -2105,14 +2119,14 @@ btnCollapseList.addEventListener("click", () =>
 );
 
 // ---------- Полное скрытие панели (сайдбар + список каналов) ----------
-// Кнопка «Скрыть панель целиком» рядом со сворачиванием: уходит и рельс
+// Кнопка «Скрыть панель целиком» на рельсе навигации: уходит и рельс
 // навигации, и панель каналов — плеер занимает весь экран. Возврат —
 // кнопка на кадре, клавиша C или Escape.
 function setPanelHidden(on: boolean): void {
   if (on && !appEl.classList.contains("list-collapsed")) setListCollapsed(true);
   appEl.classList.toggle("panel-hidden", on);
+  if (!on) setListCollapsed(false);
   btnRestorePanel.hidden = !on;
-  btnRestorePanel.title = on ? "Показать список (C)" : "";
   try {
     localStorage.setItem(PANEL_HIDDEN_KEY, on ? "1" : "0");
   } catch {
@@ -2378,7 +2392,7 @@ function renderGuide(): void {
  * плеером. Эфир включается, прошедшее с архивом — открывается из архива,
  * прошедшее без архива приглушено, будущее просто подписано.
  */
-function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLButtonElement {
+function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLElement {
   const c = lastPlayed!;
   const cu = { days: c.catchupDays, source: c.catchupSource };
   const start = Date.parse(p.start);
@@ -2439,7 +2453,14 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLBut
         ? "Вне глубины архива"
         : "Архив недоступен на этом канале (нет tvg-rec)";
   }
-  return row;
+  if (stop <= now.getTime()) return row;
+  const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
+  const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
+  record.textContent = tr("schedule.title");
+  const playlistId = plState.activeId;
+  record.addEventListener("click", () => { if (playlistId) scheduleUi?.plan(c, p, playlistId); });
+  wrapper.append(row, record);
+  return wrapper;
 }
 
 /** Передачи текущего канала по телепрограмме, по времени начала. */
@@ -2793,9 +2814,9 @@ videoEl.addEventListener("pause", wakeControls);
 videoEl.addEventListener("loadedmetadata", () => refreshPlayerStatus());
 videoEl.addEventListener("durationchange", () => refreshPlayerStatus());
 videoEl.addEventListener("play", wakeControls);
-videoStage.addEventListener("pointerleave", () => {
-  if (!videoEl.paused) videoStage.classList.add("idle");
-});
+// Меню компактного кадра выходит за его границы: после выбора пункта
+// оставляем обычные 3 секунды, чтобы вернуться к кнопке качества (#226).
+videoStage.addEventListener("pointerleave", wakeControls);
 
 /**
  * Узкая ширина (телефон и планшет в портрете): плеер живёт мини-плеером и
@@ -3493,5 +3514,10 @@ window.addEventListener("online", () => showToast(tr("network.online")));
 
 // Навигация рисуется до загрузки плейлиста: пустой таб-бар в первые секунды
 // выглядел бы поломкой.
+scheduleUi = createRecordingScheduleUi({
+  list: $("recording-schedule"), language: () => currentLanguage, fs: () => recordingsFs,
+  protected: (rule) => parseParentalPins(localStorage.getItem(parentalPinsKey(rule.playlistId))).has(rule.group),
+  notify: showToast, onSaved: renderRecordings,
+});
 renderNav();
 bootstrap();

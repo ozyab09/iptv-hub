@@ -80,8 +80,10 @@ for (const theme of ["light", "dark"]) {
       await expect(rows.first()).toHaveClass(/\bon\b/);
       if (width >= 1024) {
         await page.locator("#btn-collapse-list").click();
+        await expect(page.locator("#channel-list")).toBeHidden();
+        await page.locator("#btn-restore-panel").click();
         await checkRows();
-        expect(await rows.first().locator(".logo").evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe("none");
+        await expect(rows.first()).toHaveClass(/\bon\b/);
       }
     });
   }

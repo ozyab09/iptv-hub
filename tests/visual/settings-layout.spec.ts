@@ -64,7 +64,8 @@ for (const theme of ["light", "dark"]) {
       await checkSettings(page);
       await navigate(page, "Каналы");
       await expect(page.locator("#app")).toHaveClass(/channel-view.*list-collapsed|list-collapsed.*channel-view/);
-      expect((await page.locator(".screens").boundingBox())!.width).toBe(64);
+      await expect(page.locator(".screens")).toBeHidden();
+      await expect(page.locator(".sidebar")).toBeVisible();
       await page.locator("#btn-hide-panel").click();
       await expect(page.locator(".screens")).toBeHidden();
       await page.keyboard.press("c");
