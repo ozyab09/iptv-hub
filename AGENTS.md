@@ -407,6 +407,17 @@ push в `main` — то же + деплой `dist/` в GitHub Pages (artifact +
 `actions/deploy-pages@v5`). Required check — `build`. Pages включить руками:
 Settings → Pages → Source: **GitHub Actions**.
 
+**Общий dist (#263).** `build` публикует `pages-build` на всех событиях,
+включая PR. `visual` и `android` ждут успешного `build` и скачивают этот
+артефакт; `release` также использует его без повторной web-сборки.
+`npm ci` нужен только `build` и `visual` (Playwright/Vite preview).
+Версия и versionCode в отдельных checkout штампуются из outputs
+`release-check`; подпись APK не меняет web-бандл. После подписи `release`
+копирует новые `version.json` и `.well-known/assetlinks.json` в готовый dist.
+Кэш браузеров привязан к ОС, архитектуре, образу Ubuntu и lockfile;
+системные зависимости устанавливаются и при попадании в кэш.
+Playwright: в CI два воркера, `firefox-media` ограничен одним; локально один.
+
 `concurrency` больше не отменяет прогоны (`cancel-in-progress` снят): push в
 `main` может запускать релиз, и отмена оставила бы GitHub Release полупустым.
 
@@ -443,7 +454,7 @@ EPG, настройки и записи доступны офлайн. Digital A
 - `android/scripts/bundle-web.mjs` копирует `dist/` в
   `android/app/src/main/assets/www/` (каталог в `.gitignore`, артефакт сборки)
   и пишет туда `version.json` из `android/version.properties`. Запускается в CI
-  после `npm run build` в job'ах `android` и `release`; job `android` проверяет
+  после скачивания `pages-build` в job `android`; job `android` проверяет
   `assets/www/index.html` внутри APK.
 - `src/main.ts` не регистрирует service worker на локальном origin: ассеты и
   так лежат в APK, а SW только маскировал бы ошибки и мешал первому запуску.
@@ -482,7 +493,7 @@ request», «Required status check build is expected») — первая вер�
 `release` идёт после зелёных `build`, `visual`, `android` и запускается на
 push в `main`, push тега `v*` и `workflow_dispatch` — гарды «релиз уже есть»
 больше нет, потому что версия всегда новая. Порядок сборки: `release-check`
-(версия + тег) → `build`/`visual`/`android` → `release` (подпись + GitHub
+(версия + тег) → `build` → `visual`/`android` → `release` (подпись + GitHub
 Release) → `deploy` (Pages). Тег и релиз в одном прогоне обязательны: пуш
 тега через `GITHUB_TOKEN` не запускает новый прогон (защита GitHub от
 рекурсии).

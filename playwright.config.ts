@@ -12,7 +12,7 @@ export default defineConfig({
   // промежуточный layout (статус игрока ещё не ужался до max-width),
   // и падение такого теста блокировало релиз APK.
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: process.env.CI ? 2 : 1,
   use: {
     baseURL: process.env.VISUAL_BASE_URL ?? "http://localhost:4173",
     locale: "ru-RU",
@@ -28,7 +28,7 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },
-    { name: "firefox-media", testMatch: /(recording-playback|multi-view|channel-mirrors|channel-health|timeshift|scheduled-recordings|xtream|numeric-zap)\.spec\.ts/, use: { browserName: "firefox" } },
+    { name: "firefox-media", workers: 1, testMatch: /(recording-playback|multi-view|channel-mirrors|channel-health|timeshift|scheduled-recordings|xtream|numeric-zap)\.spec\.ts/, use: { browserName: "firefox" } },
   ],
   reporter: [["list"]],
 });
