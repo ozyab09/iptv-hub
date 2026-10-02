@@ -137,6 +137,7 @@ test("повторный вход восстанавливает сетку; п�
   await expect(page.locator(".multi-select").nth(1)).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".multi-select").nth(0)).toContainText("Канал 1");
   await expect(page.locator(".multi-select").nth(3)).toContainText("Канал 4");
+  expect(await page.locator(".multi-grid video").evaluateAll((els) => els.map((el) => (el as HTMLVideoElement).muted ? 0 : (el as HTMLVideoElement).volume))).toEqual([0, 1, 0, 0]);
   await page.locator("#multi-exit").click();
   await expect(page.locator("#now-title")).toHaveText("Канал 2");
   // После выхода включён другой канал — вход начинается только с него.
@@ -149,6 +150,40 @@ test("повторный вход восстанавливает сетку; п�
   await expect(page.locator(".multi-select").nth(1)).toContainText("Выберите канал");
   await page.locator("#multi-exit").click();
   await expect(page.locator("#now-title")).toHaveText("Канал 3");
+});
+
+test("восстановление исключает удалённые, скрытые и защищённые каналы; reload забывает сетку", async ({ page }) => {
+  await openChannels(page, 1440);
+  await fillGrid(page);
+  await page.locator(".multi-select").nth(0).click();
+  await page.locator("#multi-exit").click();
+  await expect(page.locator("#now-title")).toHaveText("Канал 1");
+  // Новый snapshot меняет метаданные, скрывает одну категорию, защищает
+  // другую и удаляет четвёртый канал. Память сетки при refresh сохраняется.
+  await page.route("https://fixture.test/playlist.m3u", (route) => route.fulfill({ body: "#EXTM3U\n#EXTINF:-1,Новое имя\nhttps://fixture.test/1/live.m3u8\n#EXTINF:-1 group-title=\"Hidden\",Канал 2\nhttps://fixture.test/2/live.m3u8\n#EXTINF:-1 group-title=\"Protected\",Канал 3\nhttps://fixture.test/3/live.m3u8\n" }));
+  await page.evaluate(() => {
+    const hiddenKey = "iptv-hub.groups.v1:one";
+    const pinKey = "iptv-hub.parental-pins.v1:one";
+    localStorage.setItem(hiddenKey, JSON.stringify({ hidden: ["Hidden"], order: [] }));
+    window.dispatchEvent(new StorageEvent("storage", { key: hiddenKey }));
+    localStorage.setItem(pinKey, JSON.stringify([{ group: "Protected", salt: "00".repeat(16), hash: "00".repeat(32) }]));
+    window.dispatchEvent(new StorageEvent("storage", { key: pinKey }));
+  });
+  await page.locator("#side-nav button").filter({ hasText: "Настройки" }).click();
+  await page.locator("#btn-refresh-now").click();
+  await page.locator("#side-nav button").filter({ hasText: "Каналы" }).click();
+  const renamed = page.locator('#channel-list .channel-card[data-channel-url="https://fixture.test/1/live.m3u8"]');
+  await expect(renamed).toContainText("Новое имя");
+  await renamed.click();
+  await page.locator("#btn-multi-view").click();
+  await expect(page.locator(".multi-select").nth(0)).toContainText("Новое имя");
+  for (const index of [1, 2, 3]) await expect(page.locator(".multi-select").nth(index)).toContainText("Выберите канал");
+  await expect(page.locator("#now-title")).toHaveText("Новое имя");
+  await expect.poll(() => page.locator(".multi-grid video").evaluateAll((els) => els.filter((el) => (el as HTMLVideoElement).videoWidth > 0).length)).toBe(1);
+  await page.reload();
+  await expect(page.locator("#multi-view")).toBeHidden();
+  await expect(page.locator(".multi-grid video")).toHaveCount(0);
+  await expect(page.locator("#video")).toHaveJSProperty("paused", true);
 });
 
 test("на мобильной ширине — явный отказ без дополнительных потоков", async ({ page }) => {

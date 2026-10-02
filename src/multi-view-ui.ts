@@ -113,6 +113,7 @@ export function createMultiViewUi(opts: Options) {
       const refused = model.startLayout(plan, initialVolume);
       opts.panel.hidden = false;
       render();
+      opts.select(model.channel);
       if (refused) opts.toast(refused);
     },
     play(channel: Channel): void {

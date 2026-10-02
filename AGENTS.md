@@ -122,8 +122,15 @@ push в main CI вычисляет следующий патч, штампует
 - Воспроизведение записей: `Player.playRecording()` владеет локальными blob-URL
   до остановки/смены записи. TS оборачивается в конечный HLS-манифест
   (`recording-playback.ts`) и преобразуется hls.js через MSE; mp4/webm — нативно.
-  Локальные ошибки не отправлять в сетевую CORS-диагностику. Регрессионные
-  проверки TS/MP4 с настоящими кадрами и звуком запускаются в Chromium и Firefox.
+  Локальные ошибки не отправлять в сетевую CORS-диагностику.
+  `Player.isRecordingPlayback` определяется владением локальными URL;
+  общий `refreshPlaybackControls()` отключает качество и «К эфиру», скрывает
+  запись и sleep, сбрасывает таймер. События HLS не включают качество записи.
+  `mediaScrub()` в `scrub.ts` рассчитывает позицию/длительность в mm:ss и
+  прогресс локальной записи; до metadata использует `Player.recordingDurationSec`.
+  Основная и мини-полоска синхронны; эфир и catchup сохраняют шкалу EPG.
+  Регрессионные проверки TS/MP4 с настоящими кадрами и звуком запускаются
+  в Chromium и Firefox.
   Карточка `.recording-card` — контейнер: `.recording-play` и кнопки скачивания/
   удаления в `.recording-actions` соседние, без вложенных кнопок. Действия имеют
   область нажатия 44×44 px и видимый клавиатурный фокус; текст не перекрывается.
@@ -138,7 +145,10 @@ push в main CI вычисляет следующий патч, штампует
   Повторный вход (#254): `entryPlan(saved, current, resolve)` возвращает
   прошлую раскладку только если текущий канал равен возобновлённому при
   выходе (`MultiLayout.resumedUrl`); иначе — одна строка с ним. `resolve`
-  переводит URL в каналы текущего snapshot (исчезнувший → пустое окно),
+  переводит URL в видимые каналы текущего snapshot (исчезнувший, скрытый
+  или защищённый PIN → пустое окно); устаревший текущий канал не запускается.
+  PIN-каналы выбираются заново через `playChannel()`. Заголовок следует
+  за активным восстановленным окном.
   `close()` идемпотентен и не затирает память, `forgetLayout()` вызывается
   при смене плейлиста. Раскладка живёт в памяти модели (не в localStorage):
   перезагрузка начинает сетку заново.
@@ -306,6 +316,18 @@ HLS  ─→ FRAG_LOADED ─→ segment-recorder ─→ OPFS/память ─→ 
 
 ### Контракты данных
 
+**Проблемные каналы (#252):** чистый `channel-health.ts`, ключ
+`iptv-hub.channel-health.v1:<playlist-id>`, JSON `{ version: 1, failures: [{ url,
+failedAt, kind, status? }] }`. URL — основной идентификатор канала, в том числе
+при сбое зеркала. Метка появляется только в фатальном колбэке одиночного live-плеера
+после исчерпания восстановления/зеркал. Archive/recording запускаются без live-контекста.
+Диагностика уточняет тип ошибки с проверкой контекста и времени: поздний результат
+не возвращает метку после восстановления/сброса и не меняет другой канал/плейлист.
+`loadeddata`/`playing` с готовыми кадрами снимают метку. Ручной сброс — активный
+плейлист, удаление плейлиста чистит ключ. Бейдж в `renderChannelCard()` использует
+`--warning`, не меняет логотип, высоту строки, порядок и отбор каналов/EPG.
+Метки пока не входят в backup JSON.
+
 **Группы (#171):** `group-preferences.ts` хранит `{ hidden: string[], order: string[] }`
 по ключу `iptv-hub.groups.v1:<playlist-id>`. `filterVisibleGroups()` в `views.ts`
 применяется до разделов, поиска EPG, «Продолжить» и счётчиков. Порядок меняет
@@ -402,6 +424,19 @@ push в `main` — то же + деплой `dist/` в GitHub Pages (artifact +
 `actions/deploy-pages@v5`). Required check — `build`. Pages включить руками:
 Settings → Pages → Source: **GitHub Actions**.
 
+**Общий dist (#263).** `build` публикует `pages-build` на всех событиях,
+включая PR. `visual` и `android` ждут успешного `build` и скачивают этот
+артефакт; `release` также использует его без повторной web-сборки.
+`npm ci` нужен только `build` и `visual` (Playwright/Vite preview).
+Версия и versionCode в отдельных checkout штампуются из outputs
+`release-check`; подпись APK не меняет web-бандл. После подписи `release`
+копирует новые `version.json` и `.well-known/assetlinks.json` в готовый dist.
+Кэш браузеров привязан к ОС, архитектуре, образу Ubuntu и lockfile;
+системные зависимости устанавливаются и при попадании в кэш.
+Playwright: CI-матрица `chromium`/`firefox-media` с `fail-fast: false`:
+три воркера Chromium, один Firefox на отдельных VM, чтобы декодирование
+не конкурировало с UI-тестами. Локально один воркер; общий лимит CI — четыре.
+
 `concurrency` больше не отменяет прогоны (`cancel-in-progress` снят): push в
 `main` может запускать релиз, и отмена оставила бы GitHub Release полупустым.
 
@@ -431,15 +466,21 @@ Settings → Pages → Source: **GitHub Actions**.
 `applicationId io.github.ozyab09.iptvhub`. Приложение **самостоятельное**, не TWA:
 web-сборка зашита в `assets/www` и открывается в `WebView` через
 `WebViewAssetLoader` на локальном https-origin `appassets.androidplatform.net`
-(issue #246). Сеть нужна только видеопотоку провайдера — интерфейс, плейлист,
-EPG, настройки и записи доступны офлайн. Digital Asset Links не нужны, панели
+(issue #246). Интерфейс и сохранённые настройки доступны офлайн; удалённые
+плейлисты, EPG и потоки требуют сети. Digital Asset Links не нужны, панели
 браузера нет; `androidbrowserhelper` из зависимостей убран.
 
 - `android/scripts/bundle-web.mjs` копирует `dist/` в
   `android/app/src/main/assets/www/` (каталог в `.gitignore`, артефакт сборки)
   и пишет туда `version.json` из `android/version.properties`. Запускается в CI
-  после `npm run build` в job'ах `android` и `release`; job `android` проверяет
+  после скачивания `pages-build` в job `android`; job `android` проверяет
   `assets/www/index.html` внутри APK.
+- `WebViewAssetLoader` удаляет зарегистрированный URL-префикс `/www/`.
+  Обработчик обязан добавлять `www/` к пути ассета и заменять пустой путь
+  на `index.html`; иначе запуск даёт `FileNotFoundException: index.html`
+  и `ERR_INVALID_RESPONSE` (#257). `LocalLaunchTest` проверяет загрузку
+  интерфейса с блокировкой сети в WebView и переход «На главную»;
+  запуск на устройстве: `gradle -p android/app connectedDebugAndroidTest`.
 - `src/main.ts` не регистрирует service worker на локальном origin: ассеты и
   так лежат в APK, а SW только маскировал бы ошибки и мешал первому запуску.
 - `MainActivity` — `AppCompatActivity` с `WebView`: `domStorageEnabled` (данные
@@ -477,7 +518,7 @@ request», «Required status check build is expected») — первая вер�
 `release` идёт после зелёных `build`, `visual`, `android` и запускается на
 push в `main`, push тега `v*` и `workflow_dispatch` — гарды «релиз уже есть»
 больше нет, потому что версия всегда новая. Порядок сборки: `release-check`
-(версия + тег) → `build`/`visual`/`android` → `release` (подпись + GitHub
+(версия + тег) → `build` → `visual`/`android` → `release` (подпись + GitHub
 Release) → `deploy` (Pages). Тег и релиз в одном прогоне обязательны: пуш
 тега через `GITHUB_TOKEN` не запускает новый прогон (защита GitHub от
 рекурсии).
@@ -522,6 +563,10 @@ APK обновляется вручную через GitHub Releases; натив
 - Сброс браузерного оформления `button.menu-item` живёт в `style.css`:
   шрифт/цвет наследуются, рамки нет, строки не сжимаются, фокус использует
   `--focus`. В меню категорий название и счётчик — отдельные элементы.
+- Sleep-меню использует `.menu`, `menuItemClass()` и общий стек оверлеев
+  (`sleep`): Escape, клик мимо и системный «назад» закрывают верхнее меню.
+  Попап остаётся прямым ребёнком кадра, привязан к кнопке и ограничен
+  границами кадра над транспортом; на узком экране пункты прокручиваются.
 - **Один акцент.** Розовый значит «играет / выбрано / эфир / избранное».
   Выбранный чип инвертируется, а не розовеет; цвет в бейдже качества есть
   только у 4K. Правила живут в `src/ui-classes.ts` и покрыты тестами.

@@ -120,18 +120,23 @@ describe("восстановление раскладки (#254)", () => {
   });
   it("исчезнувший из плейлиста канал даёт пустое окно", () => {
     const gone = channel("gone");
-    const stale: MultiLayout = { channels: [catalogue[0]!, gone, null, null], active: 1, resumedUrl: gone.url };
+    const stale: MultiLayout = { channels: [catalogue[0]!, gone, null, null], active: 1, resumedUrl: catalogue[0]!.url };
     const plan = entryPlan(stale, catalogue[0]!, resolve);
     expect(plan.channels).toEqual([catalogue[0], null, null, null]);
     // Активное окно исчезло — звук переходит к первому заполненному.
     expect(plan.active).toBe(0);
     expect(plan.resumedUrl).toBe(catalogue[0]!.url);
   });
-  it("когда не осталось ни одного канала — одиночная строка", () => {
-    const stale: MultiLayout = { channels: [channel("gone"), null, null, null], active: 0, resumedUrl: null };
-    const plan = entryPlan(stale, catalogue[2]!, resolve);
-    expect(plan.channels).toEqual([catalogue[2], null, null, null]);
+  it("удаление канала-источника сбрасывает сетку без запуска старого URL", () => {
+    const plan = entryPlan(saved, catalogue[1]!, (url) => url === catalogue[1]!.url ? null : resolve(url));
+    expect(plan.channels).toEqual([null, null, null, null]);
     expect(plan.active).toBe(0);
+    expect(plan.resumedUrl).toBeNull();
+  });
+  it("первый вход тоже использует текущие метаданные, а не старый объект", () => {
+    const updated = { ...catalogue[0]!, name: "Новое имя" };
+    expect(entryPlan(null, catalogue[0]!, () => updated).channels[0]).toBe(updated);
+    expect(entryPlan(null, catalogue[0]!, () => null).channels).toEqual([null, null, null, null]);
   });
 
   it("close запоминает раскладку, повторный close её не затирает", () => {

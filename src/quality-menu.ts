@@ -54,6 +54,7 @@ export interface QualityMenuNodes {
 export interface QualityMenuDeps {
   player: QualityPlayerAdapter;
   nodes: QualityMenuNodes;
+  isRecordingPlayback(): boolean;
   /** Разрешение и состояние видео — для статус-бара нативного playback. */
   videoSize(): { width: number; height: number };
   /** Фабрика элементов меню (в браузере — document.createElement). */
@@ -68,8 +69,15 @@ export function createQualityMenu(deps: QualityMenuDeps) {
     nodes.qualityBtn.setAttribute("aria-expanded", "false");
   }
 
+  function refreshQualityAvailability(): void {
+    nodes.qualityBtn.disabled = deps.isRecordingPlayback() || !player.getHls();
+    nodes.qualityBtn.setAttribute("aria-disabled", String(nodes.qualityBtn.disabled));
+    if (nodes.qualityBtn.disabled) closeQualityMenu();
+  }
+
   /** Перестроить селект качества + дорожки после смены канала. */
   function refreshQualityUi(): void {
+    refreshQualityAvailability();
     const hls = player.getHls();
     nodes.qualityMenu.textContent = "";
     nodes.audioMenu.textContent = "";
@@ -77,7 +85,6 @@ export function createQualityMenu(deps: QualityMenuDeps) {
 
     if (!hls) {
       // нативный playback (Safari/iOS, mp4): выбор качества/дорожек недоступен
-      nodes.qualityBtn.disabled = true;
       nodes.qualityBtn.textContent = "Auto";
       nodes.qualityMenu.hidden = true;
       nodes.audioWrap.hidden = true;
@@ -89,7 +96,6 @@ export function createQualityMenu(deps: QualityMenuDeps) {
       return;
     }
 
-    nodes.qualityBtn.disabled = false;
     const levels = sortLevelsDesc(hls.levels.map((lv, i) => ({ ...lv, index: i })));
     const currentLv = hls.levels[hls.currentLevel] ?? null;
     nodes.qualityBtn.textContent = qualityButtonLabel(hls.autoLevelEnabled, currentLv);
@@ -99,6 +105,7 @@ export function createQualityMenu(deps: QualityMenuDeps) {
       b.setAttribute("role", "option");
       b.textContent = label;
       b.addEventListener("click", () => {
+        if (deps.isRecordingPlayback() || nodes.qualityBtn.disabled) return;
         player.setLevel(levelIndex);
         closeQualityMenu();
       });
@@ -174,6 +181,7 @@ export function createQualityMenu(deps: QualityMenuDeps) {
   }
 
   return {
+    refreshQualityAvailability,
     refreshQualityUi,
     refreshPlayerStatus,
     closeQualityMenu,

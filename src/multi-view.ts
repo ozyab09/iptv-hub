@@ -35,12 +35,13 @@ export function entryPlan(
   current: Channel | null,
   resolve: (url: string) => Channel | null,
 ): MultiLayout {
+  const resolved = current ? resolve(current.url) : null;
   const single = (): MultiLayout => ({
-    channels: [current, null, null, null],
+    channels: [resolved, null, null, null],
     active: 0,
-    resumedUrl: current?.url ?? null,
+    resumedUrl: resolved?.url ?? null,
   });
-  if (!saved || !current || saved.resumedUrl !== current.url) return single();
+  if (!saved || !resolved || saved.resumedUrl !== resolved.url) return single();
 
   const channels = ([0, 1, 2, 3] as const).map((index) => {
     const savedChannel = saved.channels[index] ?? null;
@@ -54,7 +55,7 @@ export function entryPlan(
     : firstFull >= 0
       ? (firstFull as MultiSlot)
       : 0;
-  return { channels, active, resumedUrl: current.url };
+  return { channels, active, resumedUrl: resolved.url };
 }
 
 /** Жизненный цикл четырёх плееров без DOM: звук только у выбранного окна. */

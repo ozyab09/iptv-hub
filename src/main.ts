@@ -1,5 +1,6 @@
 import "./style.css";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
+import { channelHealthKey, parseChannelHealth, serializeChannelHealth, markChannelFailure, clearChannelFailure, type ChannelHealth, type ChannelFailure } from "./channel-health";
 import { createGroupPreferencesUi } from "./group-preferences-ui";
 import { groupPreferencesKey, parseGroupPreferences, serializeGroupPreferences, orderedGroups, moveGroup, type GroupPreferences } from "./group-preferences";
 import { appendZapDigit, zapChannelIndex, ZAP_DELAY_MS, type NumericZap } from "./numeric-zap";
@@ -57,7 +58,7 @@ import {
   computeWindow,
   spacerHeight,
 } from "./virtual-list";
-import { clock, isBehindLive, programmeProgress } from "./scrub";
+import { clock, isBehindLive, mediaScrub, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
 import {
   loadPosition,
@@ -353,6 +354,50 @@ const btnTheme = $<HTMLButtonElement>("btn-theme");
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
 let channelOverrides: ChannelOverrides = new Map();
+let channelHealth: ChannelHealth = new Map();
+let healthAttempt: { playlistId: string; url: string } | null = null;
+
+function currentHealthAttempt(): typeof healthAttempt {
+  return healthAttempt && healthAttempt.playlistId === plState.activeId && player.currentChannelUrl === healthAttempt.url ? healthAttempt : null;
+}
+
+function persistChannelHealth(): void {
+  if (!plState.activeId) return;
+  try {
+    if (channelHealth.size) localStorage.setItem(channelHealthKey(plState.activeId), serializeChannelHealth(channelHealth));
+    else localStorage.removeItem(channelHealthKey(plState.activeId));
+  } catch { /* Метки остаются в текущей сессии. */ }
+  renderChannels(false);
+}
+
+function noteChannelFailure(): void {
+  const attempt = currentHealthAttempt();
+  if (!attempt) return;
+  channelHealth = markChannelFailure(channelHealth, attempt.url, {
+    failedAt: Date.now(), kind: isMixedContent(window.location.href, attempt.url) ? "mixed-content" : "unknown",
+  });
+  persistChannelHealth();
+}
+
+function noteChannelRecovered(): void {
+  const attempt = currentHealthAttempt();
+  if (!attempt || videoEl.readyState < 2 || videoEl.videoWidth === 0 || videoEl.error || !channelHealth.has(attempt.url)) return;
+  channelHealth = clearChannelFailure(channelHealth, attempt.url);
+  persistChannelHealth();
+}
+
+videoEl.addEventListener("loadeddata", noteChannelRecovered);
+videoEl.addEventListener("playing", noteChannelRecovered);
+
+$("channel-health-reset").addEventListener("click", () => {
+  channelHealth = new Map();
+  persistChannelHealth();
+});
+
+function channelFailureLabel(failure: ChannelFailure): string {
+  const reason = failure.kind === "http" ? `HTTP ${failure.status ?? ""}` : tr(`health.${failure.kind}`);
+  return tr("health.detail", { time: new Date(failure.failedAt).toLocaleString(currentLanguage), reason });
+}
 let groupPreferences: GroupPreferences = parseGroupPreferences(null);
 
 function displayChannels(): Channel[] {
@@ -516,8 +561,15 @@ async function diagnoseStreamFailure(): Promise<void> {
   const url = player.currentStreamUrl;
   if (!url || url.startsWith("blob:") || diagnosticsFor === url) return;
   diagnosticsFor = url;
+  const attempt = currentHealthAttempt();
+  const failedAt = attempt ? channelHealth.get(attempt.url)?.failedAt : undefined;
   try {
     const r = await probeStream(url, (u, init) => fetch(u, init), player.diagnosticsTimeoutMs);
+    if (attempt && currentHealthAttempt() === attempt && failedAt !== undefined && channelHealth.get(attempt.url)?.failedAt === failedAt) {
+      const kind = isMixedContent(window.location.href, attempt.url) ? "mixed-content" : r.kind === "ok" ? "unknown" : r.kind;
+      channelHealth = markChannelFailure(channelHealth, attempt.url, { failedAt, kind, ...(r.kind === "http" ? { status: r.status } : {}) });
+      persistChannelHealth();
+    }
     const verdict = probeVerdict(r);
     const detail =
       r.kind === "blocked" ? corsChecklist() : r.kind === "http" ? httpChecklist(r.status) : "";
@@ -538,6 +590,7 @@ const player = new Player(
   },
   () => {
     btnRetry.hidden = false; // фатальная ошибка — показываем retry
+    noteChannelFailure();
     void diagnoseStreamFailure();
   },
   () => playerSettings,
@@ -551,6 +604,7 @@ const player = new Player(
 // Меню качества/дорожек — DOM-слой вынесен в quality-menu.ts (issue #123)
 const qualityMenuUi = createQualityMenu({
   player,
+  isRecordingPlayback: () => player.isRecordingPlayback,
   nodes: {
     qualityWrap,
     qualityBtn,
@@ -586,12 +640,9 @@ const multiViewUi = createMultiViewUi({
   },
   exit: () => closeMultiView(true),
   // Восстановление сетки при повторном входе (#254): URL → канал из
-  // ТЕКУЩЕГО snapshot (с учётом алиасов), исчезнувшие каналы станут
-  // пустыми окнами.
-  resolve: (url) =>
-    snapshot
-      ? applyChannelOverrides(snapshot.channels, channelOverrides).find((c) => c.url === url) ?? null
-      : null,
+  // ТЕКУЩЕГО snapshot с алиасами и скрытием. PIN-каналы нужно выбрать
+  // заново через playChannel(), а не запускать без нового подтверждения.
+  resolve: (url) => displayChannels().find((c) => c.url === url && !parentalPins.has(c.group)) ?? null,
 });
 
 function closeMultiView(resume: boolean): void {
@@ -1200,6 +1251,8 @@ function renderChannelCard(c: Channel): HTMLElement {
   card.className = channelRowClass(lastPlayed?.url === c.url);
   card.setAttribute("role", "listitem");
   card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
+  const failure = channelHealth.get(c.url);
+  card.classList.toggle("has-failure", failure !== undefined);
 
   card.append(renderChannelLogo(c));
 
@@ -1213,6 +1266,16 @@ function renderChannelCard(c: Channel): HTMLElement {
   name.textContent = c.name;
   name.title = c.url; // ссылка на поток при наведении
   line.append(name);
+
+  if (failure) {
+    const badge = document.createElement("span");
+    badge.className = "channel-failure";
+    badge.textContent = "!";
+    badge.title = channelFailureLabel(failure);
+    badge.setAttribute("role", "img");
+    badge.setAttribute("aria-label", badge.title);
+    line.append(badge);
+  }
 
   if (c.quality) {
     const q = document.createElement("span");
@@ -1357,7 +1420,10 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
   saveCurrentPosition(); // уходим с предыдущего канала — запоминаем позицию (FR-9)
+  healthAttempt = archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
+  diagnosticsFor = null;
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
+  refreshPlaybackControls();
   if (refused) {
     showToast(refused);
     return false;
@@ -1380,6 +1446,7 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
+  healthAttempt = null;
   cancelNumericZap();
   playRequest++;
   pinDialog.cancel();
@@ -1448,6 +1515,7 @@ btnSeekFwd.addEventListener("click", () => player.seekBy(15));
 
 // Ручной перезапуск потока после фатальной ошибки
 btnRetry.addEventListener("click", () => {
+  diagnosticsFor = null;
   btnRetry.hidden = true;
   player.retry();
   showToast("Перезапуск потока…");
@@ -1628,13 +1696,11 @@ window.addEventListener("keydown", (e) => {
       player.setVolume(Number(volumeSlider.value) / 100);
       refreshMuteIcon();
       break;
-    case "Escape":
-      if (!sleepMenu.hidden) {
-        sleepMenu.hidden = true;
-        break;
-      }
-      if (!qualityMenu.hidden) {
-        closeOverlay("quality");
+    case "Escape": {
+      const top = topOverlay(overlayStack);
+      if (top !== null) {
+        e.preventDefault();
+        closeOverlay(top);
         break;
       }
       if (playerBar.classList.contains("open")) {
@@ -1642,6 +1708,7 @@ window.addEventListener("keydown", (e) => {
         togglePlayerPage(false);
       }
       break;
+    }
     case "g":
     case "п": // ru-раскладка
       e.preventDefault();
@@ -2087,10 +2154,12 @@ function renderRecordings(): void {
 
 /** Проиграть сохранённый файл в плеере (#159). */
 function playRecording(file: File, r: RecordingMeta): void {
+  healthAttempt = null;
   closeMultiView(false);
   stopIfRecording();
   lastPlayed = null; // позиция записи не должна сохраняться под URL прошлого канала
   const refused = player.playRecording(file, r.ext, r.durationSec);
+  refreshPlaybackControls();
   if (refused) {
     showToast(refused);
     return;
@@ -2105,6 +2174,7 @@ function playRecording(file: File, r: RecordingMeta): void {
   playerStatus.textContent = "Записанный эфир";
   btnRetry.hidden = true;
   liveBadge.hidden = true;
+  refreshScrub();
   showToast(`Запись от ${new Date(r.startedAt).toLocaleString("ru")}`);
 }
 
@@ -2185,6 +2255,10 @@ function applyOverlay(name: OverlayName, on: boolean): void {
   } else if (name === "quality") {
     qualityMenu.hidden = !on;
     qualityBtn.setAttribute("aria-expanded", String(on));
+  } else if (name === "sleep") {
+    sleepMenu.hidden = !on;
+    btnSleep.setAttribute("aria-expanded", String(on));
+    if (on) positionSleepMenu();
   }
 }
 
@@ -2212,6 +2286,7 @@ function closeOverlay(name: OverlayName): void {
 
 qualityBtn.addEventListener("click", (event) => {
   event.stopPropagation();
+  if (qualityBtn.disabled) return;
   if (qualityMenu.hidden) openOverlay("quality");
   else closeOverlay("quality");
 });
@@ -2219,7 +2294,15 @@ qualityMenu.addEventListener("click", (event) => {
   if ((event.target as HTMLElement).closest(".menu-item")) closeOverlay("quality");
 });
 document.addEventListener("click", (event) => {
-  if (!qualityMenu.hidden && !qualityWrap.contains(event.target as Node)) closeOverlay("quality");
+  const top = topOverlay(overlayStack);
+  for (const [name, menu, trigger] of [
+    ["quality", qualityMenu, qualityBtn],
+    ["sleep", sleepMenu, btnSleep],
+  ] as const) {
+    if (top === name && !menu.contains(event.target as Node) && !trigger.contains(event.target as Node)) {
+      closeOverlay(name);
+    }
+  }
 });
 
 /** Системный «назад»: закрываем верхний оверлей без повторного history.back(). */
@@ -2661,10 +2744,29 @@ function liveEdge(): number {
 // модуль sleep-timer.ts, здесь DOM: меню, бейдж, пауза и затемнение.
 let sleepState: SleepState = initialSleepState;
 
-function sleepRender(): void {
+function refreshPlaybackControls(): void {
+  const recording = player.isRecordingPlayback;
+  btnRec.hidden = recording;
+  btnSleep.hidden = recording;
+  btnLive.disabled = recording;
+  btnLive.setAttribute("aria-disabled", String(recording));
+  btnLive.hidden = recording || !isBehindLive(videoEl.currentTime, liveEdge());
+  if (recording) {
+    if (overlayStack.includes("quality")) closeOverlay("quality");
+    if (overlayStack.includes("sleep")) closeOverlay("sleep");
+    sleepState = sleepCancel(sleepState);
+    videoStage.classList.remove("sleep-dim");
+  }
   const label = sleepLabel(sleepState, Date.now());
-  sleepBadge.hidden = label === null;
+  sleepBadge.hidden = recording || label === null;
   if (label !== null) sleepBadge.textContent = label;
+  qualityMenuUi.refreshQualityAvailability();
+}
+
+videoEl.addEventListener("emptied", refreshScrub);
+
+function sleepRender(): void {
+  refreshPlaybackControls();
   for (const b of sleepMenu.querySelectorAll<HTMLButtonElement>("[data-sleep]")) {
     const v = b.dataset.sleep;
     const on =
@@ -2674,9 +2776,20 @@ function sleepRender(): void {
         sleepRemainderMin(sleepState, Date.now()) !== null &&
         Math.abs((sleepState.mode.kind === "duration" ? sleepState.mode.endsAt : 0) -
           (Date.now() + Number(v) * 60_000)) < 60_000);
-    b.classList.toggle("on", on);
+    b.className = menuItemClass(on);
+    b.setAttribute("aria-selected", String(on));
   }
 }
+
+/** Попап привязан к кнопке; CSS ограничивает его краями кадра и высотой. */
+function positionSleepMenu(): void {
+  if (sleepMenu.hidden || (isCompact() && !playerBar.classList.contains("open"))) return;
+  const stage = videoStage.getBoundingClientRect();
+  const trigger = btnSleep.getBoundingClientRect();
+  sleepMenu.style.setProperty("--sleep-left", `${trigger.right - stage.left - sleepMenu.offsetWidth}px`);
+}
+
+new ResizeObserver(positionSleepMenu).observe(videoStage);
 
 function sleepApplyFired(): void {
   if (!sleepState.fired) return;
@@ -2692,18 +2805,14 @@ function sleepApplyFired(): void {
 
 btnSleep.addEventListener("click", (e) => {
   e.stopPropagation();
-  sleepMenu.hidden = !sleepMenu.hidden;
+  if (player.isRecordingPlayback) return;
+  if (sleepMenu.hidden) openOverlay("sleep");
+  else closeOverlay("sleep");
   sleepRender();
 });
 
-document.addEventListener("click", (e) => {
-  if (sleepMenu.hidden) return;
-  if (!sleepMenu.contains(e.target as Node) && !btnSleep.contains(e.target as Node)) {
-    sleepMenu.hidden = true;
-  }
-});
-
 sleepMenu.addEventListener("click", (e) => {
+  if (player.isRecordingPlayback) return;
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-sleep]");
   if (!b) return;
   const v = b.dataset.sleep;
@@ -2723,7 +2832,7 @@ sleepMenu.addEventListener("click", (e) => {
   } else {
     sleepState = sleepStart(sleepState, Number(v), Date.now());
   }
-  sleepMenu.hidden = true;
+  closeOverlay("sleep");
   sleepRender();
 });
 
@@ -2747,7 +2856,7 @@ for (const ev of ["click", "keydown"] as const) {
 }
 
 /**
- * Полоса перемотки: ход текущей передачи по телепрограмме.
+ * Полоса: позиция локальной записи или ход передачи по телепрограмме.
  *
  * У прямого эфира нет длительности, поэтому положение в потоке показывать
  * нечем — зато есть программа, и зрителю важно именно «сколько осталось
@@ -2757,13 +2866,27 @@ function refreshScrub(): void {
   // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
   // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
   // а отстать от эфира на них можно ровно так же.
-  btnLive.hidden = !isBehindLive(videoEl.currentTime, liveEdge());
+  refreshPlaybackControls();
+
+  if (player.isRecordingPlayback) {
+    const timeline = mediaScrub(videoEl.currentTime, videoEl.duration, player.recordingDurationSec);
+    const pct = `${(timeline.progress * 100).toFixed(1)}%`;
+    scrubFill.style.width = pct;
+    miniProgFill.style.width = pct;
+    progStart.textContent = timeline.position;
+    progEnd.textContent = timeline.duration;
+    nowShow.textContent = "";
+    nowTimeLeft.textContent = "";
+    if (scheduleKey) renderSchedule();
+    return;
+  }
 
   const prog =
     epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null;
   if (!prog) {
     if (scheduleKey) renderSchedule();
     scrubFill.style.width = "0%";
+    miniProgFill.style.width = "0%";
     progStart.textContent = "";
     progEnd.textContent = "";
     nowShow.textContent = "";
@@ -2870,6 +2993,7 @@ function renderContinue(): void {
 }
 
 btnLive.addEventListener("click", () => {
+  if (btnLive.disabled) return;
   player.goLive();
   btnLive.hidden = true;
 });
@@ -3506,6 +3630,9 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  healthAttempt = null;
+  try { channelHealth = parseChannelHealth(plState.activeId ? localStorage.getItem(channelHealthKey(plState.activeId)) : null); }
+  catch { channelHealth = new Map(); }
   cancelNumericZap();
   try { groupPreferences = parseGroupPreferences(plState.activeId ? localStorage.getItem(groupPreferencesKey(plState.activeId)) : null); }
   catch { groupPreferences = parseGroupPreferences(null); }

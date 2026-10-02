@@ -5,9 +5,27 @@ import {
   isBehindLive,
   LIVE_TOLERANCE_SEC,
   programmeProgress,
+  mediaScrub,
 } from "../src/scrub";
 
 const t = (iso: string): number => Date.parse(iso);
+
+describe("mediaScrub", () => {
+  it("formats the file position and duration and computes progress", () => {
+    expect(mediaScrub(65.9, 130.5, 300)).toEqual({ position: "01:05", duration: "02:10", progress: 65.9 / 130.5 });
+    expect(mediaScrub(3601, 7200).position).toBe("60:01");
+  });
+  it.each([NaN, Infinity, 0, -1])("uses recording metadata when duration is %s", (duration) => {
+    expect(mediaScrub(30, duration, 60)).toEqual({ position: "00:30", duration: "01:00", progress: 0.5 });
+  });
+  it("handles invalid metadata and clamps progress", () => {
+    expect(mediaScrub(NaN, Infinity, NaN)).toEqual({ position: "00:00", duration: "00:00", progress: 0 });
+    expect(mediaScrub(Infinity, 60).progress).toBe(0);
+    expect(mediaScrub(-5, 60).progress).toBe(0);
+    expect(mediaScrub(90, 60).progress).toBe(1);
+    expect(mediaScrub(10, 0, -1).duration).toBe("00:00");
+  });
+});
 
 describe("programmeProgress", () => {
   const start = t("2026-09-29T18:00:00Z");

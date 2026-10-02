@@ -21,6 +21,7 @@ function uploadSteps(text: string): string[] {
 
 /** Текст job'ы от её заголовка до заголовка следующей. */
 function jobSection(text: string, job: string): string {
+  text = text.replace(/\r\n/g, "\n");
   const start = text.indexOf(`\n  ${job}:\n`);
   expect(start, `job ${job} не найден`).toBeGreaterThanOrEqual(0);
   const rest = text.slice(start + 1);
@@ -75,4 +76,43 @@ it("github-pages в прогоне кладётся одним условием:
   expect(deploy.slice(Math.max(0, fallbackUpload - 300), fallbackUpload)).toContain(
     "if: needs.release.result != 'success'",
   );
+});
+
+it("проверки и релиз используют один dist текущего прогона, включая PR", () => {
+  const text = readFileSync(join(workflowDir, "ci.yml"), "utf8");
+  const build = jobSection(text, "build");
+  const upload = build.slice(build.indexOf("- uses: actions/upload-artifact"));
+  expect(upload).not.toContain("if:");
+  expect(upload).toContain("if-no-files-found: error");
+  expect(build).toContain("npm test");
+  expect(build).toContain("npm run build");
+
+  for (const name of ["visual", "android", "release"]) {
+    const job = jobSection(text, name);
+    expect(job).toContain("needs.build.result == 'success'");
+    expect(job).toMatch(/needs: \[[^\]]*\bbuild\b/);
+    expect(job).toMatch(/uses: actions\/download-artifact@v4\n        with:\n          name: pages-build\n          path: dist/);
+    expect(job).not.toContain("npm run build");
+    if (name !== "visual") expect(job).not.toContain("npm ci");
+  }
+  const visual = jobSection(text, "visual");
+  expect(visual).toContain("project: [chromium, firefox-media]");
+  expect(visual).toContain("fail-fast: false");
+  expect(visual).toContain("npx playwright test --project=${{ matrix.project }}");
+  const android = jobSection(text, "android");
+  expect(android).toContain("node android/scripts/bundle-web.mjs");
+  expect(android).toContain('"$tools/apksigner" verify');
+});
+
+it("версия общей web-сборки, APK и релизных метаданных берётся из release-check", () => {
+  const text = readFileSync(join(workflowDir, "ci.yml"), "utf8");
+  for (const name of ["build", "android", "release"]) {
+    const job = jobSection(text, name);
+    expect(job).toContain("VERSION_NAME: ${{ needs.release-check.outputs.version }}");
+    expect(job).toContain("VERSION_CODE: ${{ needs.release-check.outputs.version_code }}");
+    expect(job).toContain("node android/scripts/release-version.mjs --write");
+  }
+  const release = jobSection(text, "release");
+  expect(release).toContain("cp public/version.json dist/version.json");
+  expect(release).toContain("cp public/.well-known/assetlinks.json dist/.well-known/assetlinks.json");
 });

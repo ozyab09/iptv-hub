@@ -45,6 +45,26 @@ function fixture() {
 }
 
 describe("Player mirror fallback", () => {
+  it.each(["ts", "mp4"])("tracks local %s playback through retry, stop and channel change", (ext) => {
+    const { player } = fixture();
+    expect(player.isRecordingPlayback).toBe(false);
+    expect(player.recordingDurationSec).toBe(0);
+    player.playRecording(new Blob(["fixture"]), ext, 4);
+    expect(player.isRecordingPlayback).toBe(true);
+    expect(player.recordingDurationSec).toBe(4);
+    const url = player.currentStreamUrl;
+    player.retry();
+    expect(player.isRecordingPlayback).toBe(true);
+    expect(player.recordingDurationSec).toBe(4);
+    expect(player.currentStreamUrl).toBe(url);
+    player.stop();
+    expect(player.isRecordingPlayback).toBe(false);
+    expect(player.recordingDurationSec).toBe(0);
+    player.playRecording(new Blob(["fixture"]), ext, 4);
+    player.play({ url: "https://live/stream.m3u8" });
+    expect(player.isRecordingPlayback).toBe(false);
+    player.stop();
+  });
   it("silently falls back on a fatal HLS error, preserving the launch settings", () => {
     const f = fixture();
     f.player.play({ url: "https://bad/live.m3u8", mirrors: ["https://good/live.m3u8"] });
@@ -52,6 +72,7 @@ describe("Player mirror fallback", () => {
     instances[0]!.handlers.get("error")!("error", { fatal: true, type: "network" });
     expect(instances[0]!.destroy).toHaveBeenCalledOnce();
     expect(instances[1]!.source).toBe("https://good/live.m3u8");
+    expect(f.player.currentChannelUrl).toBe("https://bad/live.m3u8");
     expect(instances[1]!.config).toMatchObject({ maxBufferLength: 30 });
     expect(f.toast).not.toHaveBeenCalled();
     expect(f.fatal).not.toHaveBeenCalled();
@@ -85,6 +106,7 @@ describe("Player mirror fallback", () => {
     expect(instances).toHaveLength(1);
     expect(f.fatal).toHaveBeenCalledOnce();
     f.player.stop();
+    expect(f.player.currentChannelUrl).toBeNull();
     f.nativeError();
     expect(f.fatal).toHaveBeenCalledOnce();
   });

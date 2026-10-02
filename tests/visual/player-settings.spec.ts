@@ -22,12 +22,12 @@ for (const [theme, width] of [["light", 390], ["light", 1440], ["dark", 390], ["
     await expect(timeout).toHaveValue("8");
     await page.locator("#player-settings-form").screenshot({ path: `test-results/player-settings-${theme}-${width}.png` });
     for (const field of [buffer, timeout]) {
+      await expect(field).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       const style = await field.evaluate((el) => {
         const s = getComputedStyle(el);
         const parent = getComputedStyle(el.closest(".input")!);
-        return { background: s.backgroundColor, border: s.borderTopWidth, color: s.color, parentColor: parent.color, font: s.fontFamily, bodyFont: getComputedStyle(document.body).fontFamily };
+        return { border: s.borderTopWidth, color: s.color, parentColor: parent.color, font: s.fontFamily, bodyFont: getComputedStyle(document.body).fontFamily };
       });
-      expect(style.background).toBe("rgba(0, 0, 0, 0)");
       expect(style.border).toBe("0px");
       expect(style.color).toBe(style.parentColor);
       expect(style.font).toBe(style.bodyFont);
