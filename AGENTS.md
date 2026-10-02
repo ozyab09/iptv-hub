@@ -343,26 +343,50 @@ push в `main` — то же + деплой `dist/` в GitHub Pages (artifact +
 `actions/deploy-pages@v5`). Required check — `build`. Pages включить руками:
 Settings → Pages → Source: **GitHub Actions**.
 
-## Android TWA и выпуск APK (#160, #205)
+`concurrency` больше не отменяет прогоны (`cancel-in-progress` снят): push в
+`main` может запускать релиз, и отмена оставила бы GitHub Release полупустым.
+
+## Android TWA и выпуск APK (#160, #205, #222)
 
 Android-код уже смержен через PR #167; повторно мержить старую ветку не нужно.
 `android/app` — один Gradle-модуль: Java 17, Gradle 8.7, AGP 8.6.1, SDK 35.
 `MainActivity` наследует стандартный TWA `LauncherActivity`, без WebView-моста.
 CI `.github/workflows/ci.yml` собирает unsigned APK и проверяет подпись
-временным ключом на PR. `release` запускается через `workflow_dispatch` или
-тег `v*`, после зелёных `build`, `visual`, `android`.
+временным ключом на PR.
 Для trusted fullscreen Asset Links должен быть опубликован в корне origin:
 `https://ozyab09.github.io/.well-known/assetlinks.json`; проектный подпуть
 `/iptv-hub/` недостаточен. Этот workflow не меняет root Pages-репозиторий;
 без отдельной публикации браузер может показывать панель Custom Tab.
+
+**Автотег и авто-релиз (#222).** Тег создаёт job `release-check`, а не
+отдельный workflow: пуш тега через `GITHUB_TOKEN` не запускает новый прогон
+(защита GitHub от рекурсии), поэтому тег и релиз обязаны быть в одном прогоне.
+Порядок в `release-check`:
+
+1. `android/scripts/release-version.mjs` (логика покрыта
+   `tests/release-version.test.ts`) берёт `version` из `package.json`,
+   проверяет semver, делает `git fetch --tags` и — только на push в `main` —
+   создаёт аннотированный тег `vX.Y.Z`, если его ещё нет;
+2. `gh release view` решает, опубликован ли релиз этой версии.
+
+`release` идёт после зелёных `build`, `visual`, `android` и запускается на
+push в `main`, push тега `v*` и `workflow_dispatch`; при уже опубликованном
+релизе job пропускается (идемпотентность: повторный прогон не перезаписывает
+APK). `workflow_dispatch` пересобирает текущую версию принудительно.
+Следствие для версий: новая версия выходит только тогда, когда в `main`
+приехал изменённый `package.json.version` — bump делается в PR перед merge,
+иначе тег `vX.Y.Z` уже существует и релиз пропускается.
 
 Релиз: assembleRelease → zipalign → apksigner → verify → генерация Asset Links
 из DER-сертификата (`android/scripts/gen-assetlinks.mjs`) → version.json →
 metadata в `gh-pages` → Pages artifact и GitHub Release с APK. Pages использует
 GitHub Actions; обычный main-деплой восстанавливает metadata из `gh-pages`,
 чтобы не стереть отпечаток. Секреты: `ANDROID_KEYSTORE_B64`,
-`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
-Keystore не коммитить и сохранять между релизами.
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
+(репозиторий без них падает на подписи — это ожидаемо, не баг CI).
+Keystore не коммитить и сохранять между релизами: потеря ключа ломает
+обновление установленного приложения. Локальная папка для ключа —
+`.local-signing/` (в `.gitignore`).
 
 Версии: package.json и android/version.properties versionName синхронны;
 versionCode — возрастающее целое; public/version.json содержит оба значения.

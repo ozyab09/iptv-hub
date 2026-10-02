@@ -12,11 +12,70 @@ permissions:
   pages: write
   id-token: write
 
+# cancel-in-progress выключен намеренно: push в main с новой версией запускает
+# подпись APK и публикацию GitHub Release, и «отмена устаревшего прогона»
+# оставила бы релиз полупустым. Прогоны одной ветки/тега просто ждут очереди.
 concurrency:
   group: pages-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
+  # ============ Решение о релизе: тег + проверка «уже выпущено» ============
+  #
+  # Почему тег создаётся здесь, а не отдельным workflow: пуш тега с
+  # GITHUB_TOKEN не запускает новый прогон workflow (защита GitHub от
+  # рекурсии), поэтому единственный рабочий путь — создать тег и тут же
+  # собрать релиз в этом же прогоне.
+  release-check:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      exists: ${{ steps.release.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # Версия и тег: на push в main тег создаётся, если его ещё нет
+      # (node-тесты логики — tests/release-version.test.ts).
+      - id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ -f android/version.properties ]]; then
+            args=()
+          else
+            echo "::error::android/version.properties не найден — node android/scripts/release-metadata.mjs упадёт"
+            exit 1
+          fi
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            args+=(--ensure-tag)
+          fi
+          node android/scripts/release-version.mjs "${args[@]}"
+      - id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # Ручной запуск — всегда собираем текущую версию, даже если релиз
+          # с таким тегом уже есть: это осознанная пересборка.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Идемпотентность: повторный прогон и повторный push с той же версией
+          # не должны перезаписывать уже опубликованный релиз.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Релиз ${TAG} уже опубликован — пропускаем"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     runs-on: ubuntu-24.04
     steps:
@@ -90,8 +149,20 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
-    needs: [build, visual, android]
+    # Три входа: push в main (обычный путь — тег и релиз), push тега v*
+    # (совместимость с ручным тегом) и workflow_dispatch (пересборка версии
+    # из package.json). Во всех случаях релиз выпускается один раз: повторный
+    # прогон видит опубликованный релиз и не перезаписывает артефакт.
+    # Проверка ref обязательна: на PR release-check пропущен, и без неё
+    # релиз собирался бы на каждый pull_request.
+    if: >-
+      always()
+      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+      && needs.release-check.outputs.exists == 'false'
+      && needs.build.result == 'success'
+      && needs.visual.result == 'success'
+      && needs.android.result == 'success'
+    needs: [release-check, build, visual, android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
