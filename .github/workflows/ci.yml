@@ -94,9 +94,14 @@ jobs:
             git show FETCH_HEAD:.well-known/assetlinks.json > public/.well-known/assetlinks.json
           fi
       - run: npm run build
+      # include-hidden-files обязателен: upload-pages-artifact с v4 по
+      # умолчанию выбрасывает dot-файлы (--exclude=.[^/]*), и
+      # public/.well-known/assetlinks.json не доезжает до живого сайта —
+      # Android Asset Links отдают 404, TWA теряет fullscreen.
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+          include-hidden-files: true
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
   visual:
@@ -207,9 +212,12 @@ jobs:
         run: node android/scripts/release-metadata.mjs
       - run: npm ci
       - run: npm run build
+      # Тот же include-hidden-files, что и в build: релизный деплой обязан
+      # опубликовать .well-known/assetlinks.json с отпечатком keystore.
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+          include-hidden-files: true
       - uses: actions/upload-artifact@v4
         with:
           name: android-signed
