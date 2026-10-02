@@ -390,6 +390,8 @@ export class Player {
   /** Основной URL остаётся идентификатором канала при переключении зеркала. */
   get currentChannelUrl(): string | null { return this.channelUrl; }
 
+  get isRecordingPlayback(): boolean { return this.recordingUrls.length > 0; }
+
   /** Таймаут снимка настроек текущего канала, независимо от редактирования UI. */
   get diagnosticsTimeoutMs(): number {
     return this.activeSettings.diagnosticsTimeoutMs;

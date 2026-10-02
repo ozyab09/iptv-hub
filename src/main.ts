@@ -604,6 +604,7 @@ const player = new Player(
 // Меню качества/дорожек — DOM-слой вынесен в quality-menu.ts (issue #123)
 const qualityMenuUi = createQualityMenu({
   player,
+  isRecordingPlayback: () => player.isRecordingPlayback,
   nodes: {
     qualityWrap,
     qualityBtn,
@@ -1418,6 +1419,7 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   healthAttempt = archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
   diagnosticsFor = null;
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
+  refreshPlaybackControls();
   if (refused) {
     showToast(refused);
     return false;
@@ -2154,6 +2156,7 @@ function playRecording(file: File, r: RecordingMeta): void {
   stopIfRecording();
   lastPlayed = null; // позиция записи не должна сохраняться под URL прошлого канала
   const refused = player.playRecording(file, r.ext, r.durationSec);
+  refreshPlaybackControls();
   if (refused) {
     showToast(refused);
     return;
@@ -2275,6 +2278,7 @@ function closeOverlay(name: OverlayName): void {
 
 qualityBtn.addEventListener("click", (event) => {
   event.stopPropagation();
+  if (qualityBtn.disabled) return;
   if (qualityMenu.hidden) openOverlay("quality");
   else closeOverlay("quality");
 });
@@ -2724,10 +2728,29 @@ function liveEdge(): number {
 // модуль sleep-timer.ts, здесь DOM: меню, бейдж, пауза и затемнение.
 let sleepState: SleepState = initialSleepState;
 
-function sleepRender(): void {
+function refreshPlaybackControls(): void {
+  const recording = player.isRecordingPlayback;
+  btnRec.hidden = recording;
+  btnSleep.hidden = recording;
+  btnLive.disabled = recording;
+  btnLive.setAttribute("aria-disabled", String(recording));
+  btnLive.hidden = recording || !isBehindLive(videoEl.currentTime, liveEdge());
+  if (recording) {
+    if (overlayStack.includes("quality")) closeOverlay("quality");
+    sleepMenu.hidden = true;
+    sleepState = sleepCancel(sleepState);
+    videoStage.classList.remove("sleep-dim");
+  }
   const label = sleepLabel(sleepState, Date.now());
-  sleepBadge.hidden = label === null;
+  sleepBadge.hidden = recording || label === null;
   if (label !== null) sleepBadge.textContent = label;
+  qualityMenuUi.refreshQualityAvailability();
+}
+
+videoEl.addEventListener("emptied", refreshPlaybackControls);
+
+function sleepRender(): void {
+  refreshPlaybackControls();
   for (const b of sleepMenu.querySelectorAll<HTMLButtonElement>("[data-sleep]")) {
     const v = b.dataset.sleep;
     const on =
@@ -2755,6 +2778,7 @@ function sleepApplyFired(): void {
 
 btnSleep.addEventListener("click", (e) => {
   e.stopPropagation();
+  if (player.isRecordingPlayback) return;
   sleepMenu.hidden = !sleepMenu.hidden;
   sleepRender();
 });
@@ -2767,6 +2791,7 @@ document.addEventListener("click", (e) => {
 });
 
 sleepMenu.addEventListener("click", (e) => {
+  if (player.isRecordingPlayback) return;
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-sleep]");
   if (!b) return;
   const v = b.dataset.sleep;
@@ -2820,7 +2845,7 @@ function refreshScrub(): void {
   // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
   // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
   // а отстать от эфира на них можно ровно так же.
-  btnLive.hidden = !isBehindLive(videoEl.currentTime, liveEdge());
+  refreshPlaybackControls();
 
   const prog =
     epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null;
@@ -2933,6 +2958,7 @@ function renderContinue(): void {
 }
 
 btnLive.addEventListener("click", () => {
+  if (btnLive.disabled) return;
   player.goLive();
   btnLive.hidden = true;
 });

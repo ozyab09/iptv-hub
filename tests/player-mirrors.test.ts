@@ -45,6 +45,22 @@ function fixture() {
 }
 
 describe("Player mirror fallback", () => {
+  it.each(["ts", "mp4"])("tracks local %s playback through retry, stop and channel change", (ext) => {
+    const { player } = fixture();
+    expect(player.isRecordingPlayback).toBe(false);
+    player.playRecording(new Blob(["fixture"]), ext, 4);
+    expect(player.isRecordingPlayback).toBe(true);
+    const url = player.currentStreamUrl;
+    player.retry();
+    expect(player.isRecordingPlayback).toBe(true);
+    expect(player.currentStreamUrl).toBe(url);
+    player.stop();
+    expect(player.isRecordingPlayback).toBe(false);
+    player.playRecording(new Blob(["fixture"]), ext, 4);
+    player.play({ url: "https://live/stream.m3u8" });
+    expect(player.isRecordingPlayback).toBe(false);
+    player.stop();
+  });
   it("silently falls back on a fatal HLS error, preserving the launch settings", () => {
     const f = fixture();
     f.player.play({ url: "https://bad/live.m3u8", mirrors: ["https://good/live.m3u8"] });
