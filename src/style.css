@@ -1323,6 +1323,15 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   #btn-pip { display: none; }
   .player-status { display: none; }
 }
+@media (max-width: 479px) {
+  /* Семь кнопок помещаются даже в 320px; нижние 76px занимает панель
+     прогресса и настроек. Дека стоит над ней с зазором 4px (#229). */
+  .player-bar.open .bottom { padding-top: 0; }
+  .player-bar.open .center { inset: auto 0 80px; }
+  .player-bar.open .transport { gap: 2px; }
+  .player-bar.open .transport .vbtn,
+  .player-bar.open .transport .vbtn.big { width: 40px; height: 40px; }
+}
 
 /* ---- нативный полный экран: только кадр ---- */
 #player-bar:fullscreen {
