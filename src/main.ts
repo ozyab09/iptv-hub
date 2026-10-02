@@ -44,6 +44,7 @@ import {
   toggleFavorite,
 } from "./favorites";
 import { parseM3U } from "./m3u";
+import { validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtream";
 import { createOpfsFs, createTransport, type Transport } from "./playlist-transport";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
@@ -212,6 +213,22 @@ const setupEpg = $<HTMLInputElement>("setup-epg");
 const setupLoad = $<HTMLButtonElement>("setup-load");
 const setupName = $<HTMLInputElement>("setup-name");
 const addForm = $<HTMLFormElement>("add-form");
+const xtreamHost = $<HTMLInputElement>("xtream-host");
+const xtreamUser = $<HTMLInputElement>("xtream-user");
+const xtreamPassword = $<HTMLInputElement>("xtream-password");
+let xtreamMode = false;
+$("source-type").addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-source]");
+  if (!button) return;
+  xtreamMode = button.dataset.source === "xtream";
+  $("m3u-fields").hidden = xtreamMode;
+  $("xtream-fields").hidden = !xtreamMode;
+  for (const option of $("source-type").querySelectorAll("button")) {
+    option.setAttribute("aria-checked", String(option === button));
+    option.classList.toggle("on", option === button);
+  }
+  (xtreamMode ? xtreamHost : setupPlaylist).focus();
+});
 const btnAddPl = $<HTMLButtonElement>("btn-add-pl");
 const themeSeg = $("theme-seg");
 const refreshSeg = $("refresh-seg");
@@ -383,6 +400,7 @@ const playlistUi = createPlaylistUi({
   showPlayer,
   activatePlaylist,
   renderSettingsMode,
+  stateChanged: (next) => { plState = next; },
 });
 
 // ---------- Транспорт загрузки плейлистов — playlist-transport.ts (issue #123) ----------
@@ -3082,6 +3100,7 @@ function saveFavoritesFor(id: string): void {
 function activatePlaylist(id: string): void {
   plState = { ...plState, activeId: id };
   savePlaylists(localStorage, plState);
+  renderSettingsMode();
   favorites = loadFavoritesFor(id);
   loadRecentsFor(id);
   const pl = activePlaylist(plState);
@@ -3264,9 +3283,15 @@ document.addEventListener("click", (e) => {
 // ---------- Setup ----------
 addForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const pUrl = setupPlaylist.value.trim();
-  const eUrl = setupEpg.value.trim();
+  let pUrl = setupPlaylist.value.trim();
+  let eUrl = setupEpg.value.trim();
   const name = setupName.value.trim();
+  if (xtreamMode) {
+    const source = validateXtream({ host: xtreamHost.value, username: xtreamUser.value, password: xtreamPassword.value });
+    if (!source || (eUrl && !eUrl.startsWith("https://"))) { showSetup(tr("error.xtreamInput")); return; }
+    pUrl = xtreamApiUrl(source, "get_live_streams");
+    eUrl = eUrl || xtreamEpgUrl(source);
+  }
   if (!/^https?:\/\//.test(pUrl)) {
     showSetup(tr("error.playlistUrl"));
     return;
@@ -3283,6 +3308,7 @@ addForm.addEventListener("submit", (e) => {
   setupPlaylist.value = "";
   setupEpg.value = "";
   setupName.value = "";
+  xtreamHost.value = xtreamUser.value = xtreamPassword.value = "";
   renderPlaylistManager();
   activatePlaylist(plState.items[plState.items.length - 1]!.id);
 });

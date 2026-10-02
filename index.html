@@ -74,7 +74,7 @@
                 <div class="onboard">
                   <span class="onboard-mark"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-tv"></use></svg></span>
                   <h1 class="t-display" data-i18n="onboard.title">Ваше ТВ — в&nbsp;одном месте</h1>
-                  <p class="muted" data-i18n="onboard.note">Вставьте ссылку на плейлист M3U. Если в нём указана телепрограмма, она подтянется сама.</p>
+                  <p class="muted" data-i18n="onboard.note">Добавьте M3U по ссылке или из файла, либо подключите Xtream Codes. Телепрограмма загрузится из источника, если доступна.</p>
                 </div>
                 <h1 class="t-display settings-title" data-i18n="settings.title">Настройки</h1>
 
@@ -87,6 +87,11 @@
                 </section>
 
                 <form id="add-form" class="add-form" novalidate>
+                  <div id="source-type" class="seg" role="radiogroup" aria-label="Тип источника" data-i18n-aria-label="playlist.source">
+                    <button type="button" role="radio" class="on" aria-checked="true" data-source="m3u" data-i18n="playlist.m3uSource">M3U: ссылка или файл</button>
+                    <button type="button" role="radio" aria-checked="false" data-source="xtream">Xtream Codes</button>
+                  </div>
+                  <div id="m3u-fields">
                   <div class="field">
                     <label for="setup-playlist" data-i18n="playlist.url">Ссылка на плейлист</label>
                     <div class="input"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg><input id="setup-playlist" type="url" inputmode="url" placeholder="https://…/playlist.m3u" autocomplete="off" required /></div>
@@ -96,6 +101,22 @@
                     <button type="button" id="btn-local-file" class="btn btn-outline btn-block local-file-btn" aria-describedby="local-file-note"><svg class="i muted" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg><span data-i18n="playlist.chooseFile">Выбрать .m3u файл</span></button>
                     <input id="local-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/x-mpegurl" hidden />
                     <p id="local-file-note" class="set-note muted" data-i18n="playlist.localNote">Файл останется на устройстве (OPFS) — никуда не отправляется.</p>
+                  </div>
+                  </div>
+                  <div id="xtream-fields" hidden>
+                    <div class="field">
+                      <label for="xtream-host" data-i18n="playlist.xtreamHost">Сервер (HTTPS)</label>
+                      <div class="input"><input id="xtream-host" type="url" inputmode="url" placeholder="https://provider.example:443" autocomplete="off" /></div>
+                    </div>
+                    <div class="field">
+                      <label for="xtream-user" data-i18n="playlist.xtreamUser">Логин</label>
+                      <div class="input"><input id="xtream-user" type="text" autocomplete="off" /></div>
+                    </div>
+                    <div class="field">
+                      <label for="xtream-password" data-i18n="playlist.xtreamPassword">Пароль</label>
+                      <div class="input"><input id="xtream-password" type="password" autocomplete="off" /></div>
+                    </div>
+                    <p class="set-note muted" data-i18n="playlist.xtreamNote">Только live-каналы. Сервер должен поддерживать HTTPS и CORS. Данные доступа сохраняются на этом устройстве и входят в резервную копию.</p>
                   </div>
                   <details class="more">
                     <summary><svg class="i i-sm" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg><span data-i18n="playlist.more">Название и телепрограмма </span><span class="muted" data-i18n="playlist.optional">(необязательно)</span></summary>

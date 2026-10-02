@@ -38,6 +38,8 @@ export function parseCatchup(
  * Собрать URL архива для передачи. Известные плейсхолдеры провайдеров:
  * {utc} / {start} — начало передачи (unix), {lutc} / {now} — текущий момент,
  * {duration} — длительность в секундах, {offset} — сдвиг от «сейчас» (сек).
+ * Xtream: {duration_minutes} — округление вверх до минут,
+ * {start_utc} — начало в UTC, YYYY-MM-DD:HH-MM.
  * Возвращает null, если шаблона нет.
  */
 export function buildCatchupUrl(
@@ -52,6 +54,8 @@ export function buildCatchupUrl(
   const lutc = Math.floor(now.getTime() / 1000);
   const offset = lutc - startSec;
   return info.source
+    .replaceAll("{duration_minutes}", String(Math.ceil(duration / 60)))
+    .replaceAll("{start_utc}", info.source.includes("{start_utc}") ? new Date(prog.start).toISOString().slice(0, 16).replace("T", ":").replace(/:(\d{2})$/, "-$1") : "")
     .replaceAll("{utc}", String(startSec))
     .replaceAll("{start}", String(startSec))
     .replaceAll("{duration}", String(duration))
