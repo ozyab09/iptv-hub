@@ -1,4 +1,4 @@
-import { createMultiView } from "./multi-view";
+import { createMultiView, entryPlan } from "./multi-view";
 import { Player, seekBy } from "./player";
 import { iconMarkup } from "./icons";
 import { t, translateMessage, type Language } from "./i18n";
@@ -13,6 +13,8 @@ interface Options {
   select: (channel: Channel | null) => void;
   playback: (playing: boolean) => void;
   exit: () => void;
+  /** URL → канал текущего плейлиста: для восстановления раскладки (#254). */
+  resolve: (url: string) => Channel | null;
 }
 
 /** DOM сетки изолирован от контролов одиночного плеера. */
@@ -105,9 +107,13 @@ export function createMultiViewUi(opts: Options) {
   return {
     start(channel: Channel, initialVolume: number): void {
       volume.value = String(initialVolume * 100);
-      const refused = model.start(channel, initialVolume);
+      // Повторный вход возвращает прошлую сетку, если текущий канал не
+      // менялся после выхода; иначе — только он один (#254).
+      const plan = entryPlan(model.lastLayout, channel, opts.resolve);
+      const refused = model.startLayout(plan, initialVolume);
       opts.panel.hidden = false;
       render();
+      opts.select(model.channel);
       if (refused) opts.toast(refused);
     },
     play(channel: Channel): void {
@@ -126,6 +132,8 @@ export function createMultiViewUi(opts: Options) {
       return channel;
     },
     render,
+    /** Смена плейлиста делает прошлую раскладку чужой — забываем (#254). */
+    forgetLayout(): void { model.forgetLayout(); },
     updateNames(nameFor: (channel: Channel) => string): void {
       for (const channel of model.channels) if (channel) channel.name = nameFor(channel);
       render();

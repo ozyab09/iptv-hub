@@ -639,6 +639,10 @@ const multiViewUi = createMultiViewUi({
       : wakeLockStop(wakeLockState);
   },
   exit: () => closeMultiView(true),
+  // Восстановление сетки при повторном входе (#254): URL → канал из
+  // ТЕКУЩЕГО snapshot с алиасами и скрытием. PIN-каналы нужно выбрать
+  // заново через playChannel(), а не запускать без нового подтверждения.
+  resolve: (url) => displayChannels().find((c) => c.url === url && !parentalPins.has(c.group)) ?? null,
 });
 
 function closeMultiView(resume: boolean): void {
@@ -3643,6 +3647,10 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
     channelOverrides = parseChannelOverrides(plState.activeId ? localStorage.getItem(channelOverridesKey(plState.activeId)) : null);
   } catch { channelOverrides = new Map(); }
   closeMultiView(false);
+  // Смена плейлиста: прошлая раскладка сетки чужая — не тащим её в новый
+  // список (#254). multiViewUi к этому моменту инициализирован: openPlaylist
+  // вызывается из boot внизу модуля и из действий пользователя.
+  multiViewUi.forgetLayout();
   stopIfRecording();
   player.stop();
   playerBar.hidden = true;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMultiView, type MultiPlayer } from "../src/multi-view";
+import { createMultiView, entryPlan, type MultiLayout, type MultiPlayer } from "../src/multi-view";
 import type { Channel } from "../src/types";
 
 const channel = (name: string): Channel => ({
@@ -91,5 +91,115 @@ describe("мульти-вью", () => {
     expect(players[0]!.setVolume).toHaveBeenLastCalledWith(0);
     model.setVolume(2);
     expect(players[0]!.setVolume).toHaveBeenLastCalledWith(1);
+  });
+});
+
+describe("восстановление раскладки (#254)", () => {
+  const catalogue = [channel("one"), channel("two"), channel("three"), channel("four")];
+  const resolve = (url: string): Channel | null => catalogue.find((entry) => entry.url === url) ?? null;
+  const saved: MultiLayout = {
+    channels: [catalogue[0]!, catalogue[1]!, null, catalogue[3]!],
+    active: 1,
+    resumedUrl: catalogue[1]!.url,
+  };
+
+  it("возвращает прошлую сетку, если текущий канал не менялся", () => {
+    const plan = entryPlan(saved, catalogue[1]!, resolve);
+    expect(plan.channels).toEqual([catalogue[0], catalogue[1], null, catalogue[3]]);
+    expect(plan.active).toBe(1);
+    expect(plan.resumedUrl).toBe(catalogue[1]!.url);
+  });
+  it("после смены канала вне сетки начинает заново с него одного", () => {
+    const plan = entryPlan(saved, catalogue[2]!, resolve);
+    expect(plan.channels).toEqual([catalogue[2], null, null, null]);
+    expect(plan.active).toBe(0);
+  });
+  it("без прошлой раскладки — одна строка с текущим каналом", () => {
+    expect(entryPlan(null, catalogue[0]!, resolve).channels).toEqual([catalogue[0], null, null, null]);
+    expect(entryPlan(saved, null, resolve).channels).toEqual([null, null, null, null]);
+  });
+  it("исчезнувший из плейлиста канал даёт пустое окно", () => {
+    const gone = channel("gone");
+    const stale: MultiLayout = { channels: [catalogue[0]!, gone, null, null], active: 1, resumedUrl: catalogue[0]!.url };
+    const plan = entryPlan(stale, catalogue[0]!, resolve);
+    expect(plan.channels).toEqual([catalogue[0], null, null, null]);
+    // Активное окно исчезло — звук переходит к первому заполненному.
+    expect(plan.active).toBe(0);
+    expect(plan.resumedUrl).toBe(catalogue[0]!.url);
+  });
+  it("удаление канала-источника сбрасывает сетку без запуска старого URL", () => {
+    const plan = entryPlan(saved, catalogue[1]!, (url) => url === catalogue[1]!.url ? null : resolve(url));
+    expect(plan.channels).toEqual([null, null, null, null]);
+    expect(plan.active).toBe(0);
+    expect(plan.resumedUrl).toBeNull();
+  });
+  it("первый вход тоже использует текущие метаданные, а не старый объект", () => {
+    const updated = { ...catalogue[0]!, name: "Новое имя" };
+    expect(entryPlan(null, catalogue[0]!, () => updated).channels[0]).toBe(updated);
+    expect(entryPlan(null, catalogue[0]!, () => null).channels).toEqual([null, null, null, null]);
+  });
+
+  it("close запоминает раскладку, повторный close её не затирает", () => {
+    const { model } = setup();
+    model.start(catalogue[0]!, 1);
+    model.select(1);
+    model.play(catalogue[1]!);
+    model.select(3);
+    model.play(catalogue[3]!);
+    model.close();
+    expect(model.lastLayout?.channels).toEqual([catalogue[0], catalogue[1], null, catalogue[3]]);
+    expect(model.lastLayout?.active).toBe(3);
+    expect(model.lastLayout?.resumedUrl).toBe(catalogue[3]!.url);
+    // Повторный close (уже закрыто) не должен затирать память пустой сеткой.
+    expect(model.close()).toBeNull();
+    expect(model.lastLayout?.channels).toEqual([catalogue[0], catalogue[1], null, catalogue[3]]);
+  });
+  it("lastLayout — копия: внешняя правка не ломает память модели", () => {
+    const { model } = setup();
+    model.start(catalogue[0]!, 1);
+    model.close();
+    const layout = model.lastLayout!;
+    layout.channels[0] = null;
+    layout.active = 2;
+    expect(model.lastLayout?.channels[0]).toEqual(catalogue[0]);
+    expect(model.lastLayout?.active).toBe(0);
+  });
+  it("forgetLayout забывает прошлую сетку (смена плейлиста)", () => {
+    const { model } = setup();
+    model.start(catalogue[0]!, 1);
+    model.close();
+    expect(model.lastLayout).not.toBeNull();
+    model.forgetLayout();
+    expect(model.lastLayout).toBeNull();
+  });
+  it("startLayout играет все заполненные окна и возвращает первый отказ", () => {
+    type MockPlayer = MultiPlayer & {
+      play: ReturnType<typeof vi.fn>;
+      stop: ReturnType<typeof vi.fn>;
+      setVolume: ReturnType<typeof vi.fn>;
+      togglePause: ReturnType<typeof vi.fn>;
+    };
+    const players: MockPlayer[] = [];
+    const model = createMultiView(() => {
+      const index = players.length;
+      const player: MockPlayer = {
+        play: vi.fn(() => (index === 2 ? "unsupported" : null)),
+        stop: vi.fn(),
+        setVolume: vi.fn(),
+        togglePause: vi.fn(),
+      };
+      players.push(player);
+      return player;
+    });
+    const layout: MultiLayout = { channels: [catalogue[0]!, catalogue[1]!, catalogue[2]!, null], active: 1, resumedUrl: catalogue[1]!.url };
+    expect(model.startLayout(layout, 0.4)).toBe("unsupported");
+    expect(players).toHaveLength(4);
+    expect(players[0]!.play).toHaveBeenCalledWith(catalogue[0]);
+    expect(players[1]!.play).toHaveBeenCalledWith(catalogue[1]);
+    expect(players[2]!.play).toHaveBeenCalledWith(catalogue[2]);
+    expect(players[3]!.play).not.toHaveBeenCalled();
+    expect(players.map((player) => player.setVolume.mock.lastCall?.[0])).toEqual([0, 0.4, 0, 0]);
+    expect(model.activeSlot).toBe(1);
+    expect(model.channel).toEqual(catalogue[1]);
   });
 });
