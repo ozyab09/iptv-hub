@@ -17,6 +17,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ============ Автотег: при push в main создаём vX.Y.Z из package.json ============
+  # Тэг создаётся только при реальном изменении (push-событие с тегом не
+  # триггерит workflow заново), иначе CI бесконечно регенерировался бы.
+  # Если тэг уже существует, выходим без ошибок. Публикуемый тэг всегда
+  # совпадает с package.json (для release job и клиентского автообновления).
+  tag-on-main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: versions
+        run: |
+          TAG=$(node -p "require('./package.json').version")
+          if [[ ! "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            MAJOR=$(node -p "require('./package.json').version.split('.')[0]")
+            MINOR=$(node -p "require('./package.json').version.split('.')[1]")
+            PATCH=$(node -p "require('./package.json').version.split('.')[2]")
+            PATCH=$((PATCH + 1))
+            TAG="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          echo "tag=v${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${TAG}" >> $GITHUB_OUTPUT
+      - name: Create tag if needed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.versions.outputs.tag }}
+        run: |
+          if git rev-parse "refs/tags/${NEW_TAG}" >/dev/null 2>&1; then
+            echo "tag ${NEW_TAG} already exists; skip"
+            exit 0
+          fi
+          git config user.email "ci@iptv-hub"
+          git config user.name "CI"
+          git tag "${NEW_TAG}"
+          git push origin "${NEW_TAG}"
+      - name: Show next tag
+        run: echo "next tag: ${{ steps.versions.outputs.tag }}"
+
   build:
     runs-on: ubuntu-24.04
     steps:
