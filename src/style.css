@@ -434,6 +434,8 @@ html, body {
 }
 .row.channel-card:hover { background: var(--surface-2); }
 .row.channel-card.on { background: var(--accent-soft); }
+.channel-card.has-failure .t-strong { color: var(--muted); }
+.channel-failure { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border-radius: var(--radius-full); font-size: 12px; font-weight: 700; color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); }
 .row .meta { gap: 2px; }
 .row .row-now { font-size: 13px; line-height: 18px; }
 .row .row-now .num { margin-right: 6px; }

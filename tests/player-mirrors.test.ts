@@ -52,6 +52,7 @@ describe("Player mirror fallback", () => {
     instances[0]!.handlers.get("error")!("error", { fatal: true, type: "network" });
     expect(instances[0]!.destroy).toHaveBeenCalledOnce();
     expect(instances[1]!.source).toBe("https://good/live.m3u8");
+    expect(f.player.currentChannelUrl).toBe("https://bad/live.m3u8");
     expect(instances[1]!.config).toMatchObject({ maxBufferLength: 30 });
     expect(f.toast).not.toHaveBeenCalled();
     expect(f.fatal).not.toHaveBeenCalled();
@@ -85,6 +86,7 @@ describe("Player mirror fallback", () => {
     expect(instances).toHaveLength(1);
     expect(f.fatal).toHaveBeenCalledOnce();
     f.player.stop();
+    expect(f.player.currentChannelUrl).toBeNull();
     f.nativeError();
     expect(f.fatal).toHaveBeenCalledOnce();
   });

@@ -1,5 +1,6 @@
 import "./style.css";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
+import { channelHealthKey, parseChannelHealth, serializeChannelHealth, markChannelFailure, clearChannelFailure, type ChannelHealth, type ChannelFailure } from "./channel-health";
 import { createGroupPreferencesUi } from "./group-preferences-ui";
 import { groupPreferencesKey, parseGroupPreferences, serializeGroupPreferences, orderedGroups, moveGroup, type GroupPreferences } from "./group-preferences";
 import { appendZapDigit, zapChannelIndex, ZAP_DELAY_MS, type NumericZap } from "./numeric-zap";
@@ -352,6 +353,50 @@ const btnTheme = $<HTMLButtonElement>("btn-theme");
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
 let channelOverrides: ChannelOverrides = new Map();
+let channelHealth: ChannelHealth = new Map();
+let healthAttempt: { playlistId: string; url: string } | null = null;
+
+function currentHealthAttempt(): typeof healthAttempt {
+  return healthAttempt && healthAttempt.playlistId === plState.activeId && player.currentChannelUrl === healthAttempt.url ? healthAttempt : null;
+}
+
+function persistChannelHealth(): void {
+  if (!plState.activeId) return;
+  try {
+    if (channelHealth.size) localStorage.setItem(channelHealthKey(plState.activeId), serializeChannelHealth(channelHealth));
+    else localStorage.removeItem(channelHealthKey(plState.activeId));
+  } catch { /* Метки остаются в текущей сессии. */ }
+  renderChannels(false);
+}
+
+function noteChannelFailure(): void {
+  const attempt = currentHealthAttempt();
+  if (!attempt) return;
+  channelHealth = markChannelFailure(channelHealth, attempt.url, {
+    failedAt: Date.now(), kind: isMixedContent(window.location.href, attempt.url) ? "mixed-content" : "unknown",
+  });
+  persistChannelHealth();
+}
+
+function noteChannelRecovered(): void {
+  const attempt = currentHealthAttempt();
+  if (!attempt || videoEl.readyState < 2 || videoEl.videoWidth === 0 || videoEl.error || !channelHealth.has(attempt.url)) return;
+  channelHealth = clearChannelFailure(channelHealth, attempt.url);
+  persistChannelHealth();
+}
+
+videoEl.addEventListener("loadeddata", noteChannelRecovered);
+videoEl.addEventListener("playing", noteChannelRecovered);
+
+$("channel-health-reset").addEventListener("click", () => {
+  channelHealth = new Map();
+  persistChannelHealth();
+});
+
+function channelFailureLabel(failure: ChannelFailure): string {
+  const reason = failure.kind === "http" ? `HTTP ${failure.status ?? ""}` : tr(`health.${failure.kind}`);
+  return tr("health.detail", { time: new Date(failure.failedAt).toLocaleString(currentLanguage), reason });
+}
 let groupPreferences: GroupPreferences = parseGroupPreferences(null);
 
 function displayChannels(): Channel[] {
@@ -515,8 +560,15 @@ async function diagnoseStreamFailure(): Promise<void> {
   const url = player.currentStreamUrl;
   if (!url || url.startsWith("blob:") || diagnosticsFor === url) return;
   diagnosticsFor = url;
+  const attempt = currentHealthAttempt();
+  const failedAt = attempt ? channelHealth.get(attempt.url)?.failedAt : undefined;
   try {
     const r = await probeStream(url, (u, init) => fetch(u, init), player.diagnosticsTimeoutMs);
+    if (attempt && currentHealthAttempt() === attempt && failedAt !== undefined && channelHealth.get(attempt.url)?.failedAt === failedAt) {
+      const kind = isMixedContent(window.location.href, attempt.url) ? "mixed-content" : r.kind === "ok" ? "unknown" : r.kind;
+      channelHealth = markChannelFailure(channelHealth, attempt.url, { failedAt, kind, ...(r.kind === "http" ? { status: r.status } : {}) });
+      persistChannelHealth();
+    }
     const verdict = probeVerdict(r);
     const detail =
       r.kind === "blocked" ? corsChecklist() : r.kind === "http" ? httpChecklist(r.status) : "";
@@ -537,6 +589,7 @@ const player = new Player(
   },
   () => {
     btnRetry.hidden = false; // фатальная ошибка — показываем retry
+    noteChannelFailure();
     void diagnoseStreamFailure();
   },
   () => playerSettings,
@@ -1185,6 +1238,8 @@ function renderChannelCard(c: Channel): HTMLElement {
   card.className = channelRowClass(lastPlayed?.url === c.url);
   card.setAttribute("role", "listitem");
   card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
+  const failure = channelHealth.get(c.url);
+  card.classList.toggle("has-failure", failure !== undefined);
 
   card.append(renderChannelLogo(c));
 
@@ -1198,6 +1253,16 @@ function renderChannelCard(c: Channel): HTMLElement {
   name.textContent = c.name;
   name.title = c.url; // ссылка на поток при наведении
   line.append(name);
+
+  if (failure) {
+    const badge = document.createElement("span");
+    badge.className = "channel-failure";
+    badge.textContent = "!";
+    badge.title = channelFailureLabel(failure);
+    badge.setAttribute("role", "img");
+    badge.setAttribute("aria-label", badge.title);
+    line.append(badge);
+  }
 
   if (c.quality) {
     const q = document.createElement("span");
@@ -1345,6 +1410,8 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
   saveCurrentPosition(); // уходим с предыдущего канала — запоминаем позицию (FR-9)
+  healthAttempt = archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
+  diagnosticsFor = null;
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
   if (refused) {
     showToast(refused);
@@ -1368,6 +1435,7 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
+  healthAttempt = null;
   cancelNumericZap();
   playRequest++;
   pinDialog.cancel();
@@ -1436,6 +1504,7 @@ btnSeekFwd.addEventListener("click", () => player.seekBy(15));
 
 // Ручной перезапуск потока после фатальной ошибки
 btnRetry.addEventListener("click", () => {
+  diagnosticsFor = null;
   btnRetry.hidden = true;
   player.retry();
   showToast("Перезапуск потока…");
@@ -2057,6 +2126,7 @@ function renderRecordings(): void {
 
 /** Проиграть сохранённый файл в плеере (#159). */
 function playRecording(file: File, r: RecordingMeta): void {
+  healthAttempt = null;
   closeMultiView(false);
   stopIfRecording();
   lastPlayed = null; // позиция записи не должна сохраняться под URL прошлого канала
@@ -3473,6 +3543,9 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  healthAttempt = null;
+  try { channelHealth = parseChannelHealth(plState.activeId ? localStorage.getItem(channelHealthKey(plState.activeId)) : null); }
+  catch { channelHealth = new Map(); }
   cancelNumericZap();
   try { groupPreferences = parseGroupPreferences(plState.activeId ? localStorage.getItem(groupPreferencesKey(plState.activeId)) : null); }
   catch { groupPreferences = parseGroupPreferences(null); }

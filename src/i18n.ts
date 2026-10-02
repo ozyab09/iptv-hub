@@ -2,6 +2,13 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "health.title": "Проблемные каналы",
+  "health.reset": "Сбросить метки текущего плейлиста",
+  "health.note": "Метка появляется после окончательной ошибки подключения и снимается, когда канал успешно заиграет. Ошибки архива и записей не учитываются.",
+  "health.detail": "Проблемы подключения · {time} · {reason}",
+  "health.unknown": "Ошибка воспроизведения",
+  "health.blocked": "Нет CORS или источник недоступен",
+  "health.mixed-content": "HTTP на HTTPS-странице",
   "groups.title": "Группы каналов",
   "groups.note": "Выключите группу, чтобы скрыть её каналы. Стрелки меняют порядок категорий текущего плейлиста. Избранное и записи сохраняются.",
   "groups.showAll": "Показать все",
@@ -214,6 +221,13 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "health.title": "Problem channels",
+  "health.reset": "Clear marks for the current playlist",
+  "health.note": "A mark appears after a final connection error and clears when the channel plays successfully. Archive and recording errors are excluded.",
+  "health.detail": "Connection problems · {time} · {reason}",
+  "health.unknown": "Playback error",
+  "health.blocked": "No CORS or source unavailable",
+  "health.mixed-content": "HTTP on an HTTPS page",
   "groups.title": "Channel groups",
   "groups.note": "Turn a group off to hide its channels. Arrows change category order for the current playlist. Favorites and recordings are kept.",
   "groups.showAll": "Show all",
