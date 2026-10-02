@@ -312,6 +312,11 @@ html, body {
   .pl-switch { flex: 1; }
   .pl-switch-name { font-size: 22px; line-height: 28px; }
   .search-wrap { order: 3; flex: 1 1 100%; max-width: none; }
+  /* Панель привязана к шапке: соседняя кнопка темы не сдвигает её за
+     левый край телефона. Поля совпадают с содержимым шапки (#228). */
+  .topbar { position: relative; }
+  .topbar .notif-bell-wrap { position: static; }
+  .topbar .notif-panel { right: var(--space-5); width: min(360px, calc(100% - 2 * var(--space-5))); }
   /* < 16px → iOS Safari увеличивает страницу при фокусе */
   #search { font-size: 16px; }
   .search-wrap .kbd { display: none; }
