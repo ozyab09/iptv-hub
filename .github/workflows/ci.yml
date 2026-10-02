@@ -141,6 +141,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+      # Web-сборка зашивается в APK, значит нужны node и зависимости.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
