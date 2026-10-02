@@ -31,11 +31,11 @@ interface OpfsWritable {
 }
 
 /** Убрать файлы прошлых записей: их уже скачали либо бросили. */
-async function sweep(root: OpfsRoot, keep: string): Promise<void> {
+async function sweep(root: OpfsRoot, keep: string, prefix: string): Promise<void> {
   if (typeof root.keys !== "function") return;
   try {
     for await (const name of root.keys()) {
-      if (name.startsWith(WORK_PREFIX) && name !== keep) {
+      if (name.startsWith(prefix) && name !== keep) {
         await root.removeEntry(name).catch(() => undefined);
       }
     }
@@ -44,14 +44,14 @@ async function sweep(root: OpfsRoot, keep: string): Promise<void> {
   }
 }
 
-async function createOpfsSink(): Promise<RecordingSink | null> {
+async function createOpfsSink(prefix: string): Promise<RecordingSink | null> {
   const storage = (navigator as Navigator & { storage?: { getDirectory?: () => Promise<OpfsRoot> } })
     .storage;
   if (!storage?.getDirectory) return null;
-  const name = `${WORK_PREFIX}${Date.now()}.part`;
+  const name = `${prefix}${Date.now()}.part`;
   try {
     const root = await storage.getDirectory();
-    await sweep(root, name);
+    await sweep(root, name, prefix);
     const handle = await root.getFileHandle(name, { create: true });
     const writable = await handle.createWritable();
 
@@ -117,6 +117,6 @@ function createMemorySink(): RecordingSink {
 }
 
 /** Лучшее доступное хранилище: OPFS, иначе память. */
-export async function createRecordingSink(): Promise<RecordingSink> {
-  return (await createOpfsSink()) ?? createMemorySink();
+export async function createRecordingSink(prefix = WORK_PREFIX): Promise<RecordingSink> {
+  return (await createOpfsSink(prefix)) ?? createMemorySink();
 }
