@@ -453,8 +453,8 @@ Playwright: CI-матрица `chromium`/`firefox-media` с `fail-fast: false`:
 `applicationId io.github.ozyab09.iptvhub`. Приложение **самостоятельное**, не TWA:
 web-сборка зашита в `assets/www` и открывается в `WebView` через
 `WebViewAssetLoader` на локальном https-origin `appassets.androidplatform.net`
-(issue #246). Сеть нужна только видеопотоку провайдера — интерфейс, плейлист,
-EPG, настройки и записи доступны офлайн. Digital Asset Links не нужны, панели
+(issue #246). Интерфейс и сохранённые настройки доступны офлайн; удалённые
+плейлисты, EPG и потоки требуют сети. Digital Asset Links не нужны, панели
 браузера нет; `androidbrowserhelper` из зависимостей убран.
 
 - `android/scripts/bundle-web.mjs` копирует `dist/` в
@@ -462,6 +462,12 @@ EPG, настройки и записи доступны офлайн. Digital A
   и пишет туда `version.json` из `android/version.properties`. Запускается в CI
   после скачивания `pages-build` в job `android`; job `android` проверяет
   `assets/www/index.html` внутри APK.
+- `WebViewAssetLoader` удаляет зарегистрированный URL-префикс `/www/`.
+  Обработчик обязан добавлять `www/` к пути ассета и заменять пустой путь
+  на `index.html`; иначе запуск даёт `FileNotFoundException: index.html`
+  и `ERR_INVALID_RESPONSE` (#257). `LocalLaunchTest` проверяет загрузку
+  интерфейса с блокировкой сети в WebView и переход «На главную»;
+  запуск на устройстве: `gradle -p android/app connectedDebugAndroidTest`.
 - `src/main.ts` не регистрирует service worker на локальном origin: ассеты и
   так лежат в APK, а SW только маскировал бы ошибки и мешал первому запуску.
 - `MainActivity` — `AppCompatActivity` с `WebView`: `domStorageEnabled` (данные

@@ -10,6 +10,7 @@ android {
         targetSdk 35
         versionName versionProps.getProperty('versionName')
         versionCode versionProps.getProperty('versionCode').toInteger()
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildTypes {
         debug { applicationIdSuffix '.debug' }
@@ -40,4 +41,6 @@ dependencies {
     implementation 'androidx.core:core:1.13.1'
     // WebViewAssetLoader: локальный https-origin для зашитых в APK ассетов.
     implementation 'androidx.webkit:webkit:1.11.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
 }

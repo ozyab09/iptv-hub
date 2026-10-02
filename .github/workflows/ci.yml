@@ -194,7 +194,7 @@ jobs:
       - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       # Проверенный dist зашивается в APK: без повторной web-сборки.
       - run: node android/scripts/bundle-web.mjs
-      - run: gradle -p android/app clean assembleRelease --no-daemon
+      - run: gradle -p android/app clean assembleRelease compileDebugAndroidTestJavaWithJavac --no-daemon
       - name: Проверить, что ассеты попали в APK
         run: |
           set -euo pipefail
