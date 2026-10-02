@@ -23,7 +23,7 @@ import { pathToFileURL } from "node:url";
 const SEMVER = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 const FILES = ["package.json", "android/version.properties", "public/version.json"];
 
-// Личность для служебного коммита и тега задаётся через env: на чистом
+// Личность для коммита-синхронизации и тега задаётся через env: на чистом
 // CI-раннере user.name/user.email не настроены, а глобальный git config
 // трогать не хочется.
 const BOT = {
@@ -190,6 +190,8 @@ export function run({ cwd = process.cwd(), argv = process.argv.slice(2), outputF
   if (argv.includes("--write")) {
     const written = writeVersion(plan, cwd);
     changed = written.changed;
+    // --sync-main оставлен для локальных запусков и тестов: на CI пуш в main
+    // запрещён ruleset'ом, поэтому workflow его не использует.
     if (changed && argv.includes("--sync-main")) commitVersion(plan, cwd, { dryRun, ref });
   }
 
@@ -198,10 +200,9 @@ export function run({ cwd = process.cwd(), argv = process.argv.slice(2), outputF
     tagCreated = ensureTag(plan, cwd, { dryRun }).created;
   }
 
-  // Коммит синхронизации уже отправлен в main и помечен тегом: остальные job'ы
-  // обязаны собирать именно этот коммит, иначе протестируют другой код и
-  // отдадут в релиз не то, что протестировано.
-  const commit = changed ? git(["rev-parse", "HEAD"], cwd) : "";
+  // SHA HEAD: нужен локальным сценариям и тестам, где коммит синхронизации
+  // действительно создаётся (--sync-main).
+  const commit = git(["rev-parse", "HEAD"], cwd);
 
   const outputs = {
     version: plan.version,

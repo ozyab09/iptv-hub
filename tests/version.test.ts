@@ -48,11 +48,12 @@ describe("версия приложения синхронна", () => {
     expect(versionJson).toEqual({ versionCode: expectedCode(pkg.version), versionName: pkg.version });
   });
 
-  it("если тег текущей версии виден — он существует", () => {
+  it("файлы — снимок версии, тег может быть новее", () => {
+    // Источник правды — тег: CI штампует версию в файлы при сборке, но не
+    // коммитит их (ruleset запрещает пуш в main). Поэтому здесь проверяем
+    // взаимную согласованность файлов, а не равенство последнему тегу.
     const tags = gitTags();
-    if (tags.length === 0) return; // ветка без тегов (например, свежий клон CI)
-    // Тег появляется на push в main; на PR-ветке проверять нечего.
-    if (!tags.includes(`v${pkg.version}`)) return;
-    expect(tags).toContain(`v${pkg.version}`);
+    if (tags.length === 0) return;
+    for (const tag of tags) expect(tag).toMatch(/^v\d+\.\d+\.\d+$/);
   });
 });

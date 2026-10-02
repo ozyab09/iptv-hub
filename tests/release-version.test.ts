@@ -120,23 +120,25 @@ describe("release-version: чистые функции", () => {
 });
 
 describe("release-version: CLI в репозитории", () => {
-  it("на push в main пишет версию, коммитит её и ставит тег", () => {
+  it("на push в main штампует версию и ставит тег на проверяемый коммит", () => {
     const { repo, origin, clean } = makeRepo("0.2.6", ["v0.2.6"]);
     try {
-      const { outputs } = run(repo, ["--write", "--sync-main", "--ensure-tag"]);
+      const { outputs } = run(repo, ["--write", "--ensure-tag"]);
       expect(outputs).toMatchObject({
         version: "0.2.7",
         version_code: "1007",
         changed: "true",
         tag_created: "true",
       });
-      // Тег существует в origin и указывает на коммит синхронизации версии.
+      // Источник правды — тег: он уезжает в origin и указывает на коммит,
+      // который в этом прогоне и собирается.
       expect(git(["rev-parse", "refs/tags/v0.2.7^{commit}"], origin)).toBe(git(["rev-parse", "HEAD"], repo));
-      expect(git(["log", "-1", "--format=%s"], repo)).toBe("chore: версия 0.2.7 [skip ci]");
-      // Коммит отдаётся наружу: остальные job'ы собирают именно его, иначе
-      // протестируют другой код, а в релиз уйдёт непроверенное.
       expect(outputs.commit).toBe(git(["rev-parse", "HEAD"], repo));
-      expect(git(["rev-parse", "refs/tags/v0.2.7^{commit}"], repo)).toBe(outputs.commit);
+      // В main CI ничего не коммитит: ruleset запрещает пуш в main.
+      expect(git(["log", "-1", "--format=%s"], repo)).toBe("init");
+      // Файлы в рабочей копии получают новую версию — её берут Gradle и сборка.
+      expect(JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).version).toBe("0.2.7");
+      expect(readFileSync(join(repo, "android/version.properties"), "utf8")).toBe("versionCode=1007\nversionName=0.2.7\n");
     } finally {
       clean();
     }
@@ -145,9 +147,9 @@ describe("release-version: CLI в репозитории", () => {
   it("каждый прогон с новым тегом выпускает следующий патч", () => {
     const { repo, origin, clean } = makeRepo("0.2.6", ["v0.2.6"]);
     try {
-      expect(run(repo, ["--write", "--sync-main", "--ensure-tag"]).outputs.version).toBe("0.2.7");
+      expect(run(repo, ["--write", "--ensure-tag"]).outputs.version).toBe("0.2.7");
       // Тег v0.2.7 уже стоит — следующий прогон даёт 0.2.8, а не дубль 0.2.7.
-      const { outputs } = run(repo, ["--write", "--sync-main", "--ensure-tag"]);
+      const { outputs } = run(repo, ["--write", "--ensure-tag"]);
       expect(outputs).toMatchObject({ version: "0.2.8", changed: "true", tag_created: "true" });
       expect(git(["tag", "--list"], repo).split("\n").sort()).toEqual(["v0.2.6", "v0.2.7", "v0.2.8"]);
       expect(git(["rev-parse", "refs/tags/v0.2.8^{commit}"], origin)).toBe(git(["rev-parse", "HEAD"], repo));
@@ -156,7 +158,18 @@ describe("release-version: CLI в репозитории", () => {
     }
   });
 
-  it("--dry-run не создаёт тег и не коммитит", () => {
+  it("--sync-main (локальный сценарий) коммитит версию с [skip ci]", () => {
+    const { repo, clean } = makeRepo("0.2.6", ["v0.2.6"]);
+    try {
+      run(repo, ["--write", "--sync-main", "--ensure-tag"]);
+      expect(git(["log", "-1", "--format=%s"], repo)).toBe("chore: версия 0.2.7 [skip ci]");
+      expect(git(["rev-parse", "refs/tags/v0.2.7^{commit}"], repo)).toBe(git(["rev-parse", "HEAD"], repo));
+    } finally {
+      clean();
+    }
+  });
+
+  it("--dry-run не создаёт тег", () => {
     const { repo, clean } = makeRepo("0.2.6", ["v0.2.6"]);
     try {
       const before = git(["rev-parse", "HEAD"], repo);

@@ -22,10 +22,15 @@ jobs:
   # ============ Версия, тег и релиз ============
   #
   # Источник правды по версии — git-тег vX.Y.Z. На каждый push в main job
-  # вычисляет следующий патч (максимальный тег + 1), синхронизирует файлы
-  # (package.json, android/version.properties, public/version.json) отдельным
-  # коммитом [skip ci], ставит тег на этот коммит и сообщает версию дальше.
-  # Ручной bump версии больше не нужен: новая версия выходит на каждый push.
+  # вычисляет следующий патч (максимальный тег + 1), штампует его в файлы
+  # рабочей копии (package.json, android/version.properties,
+  # public/version.json), ставит тег на проверяемый коммит и сообщает версию
+  # дальше. Ручной bump версии больше не нужен: новая версия — каждый push.
+  #
+  # В main job ничего не коммитит: ruleset `main-protection` запрещает пуш в
+  # main даже с GITHUB_TOKEN («Changes must be made through a pull request»).
+  # Поэтому версия живёт в теге, а в репозитории остаётся её последний
+  # зафиксированный снимок; на CI файлы штампуются перед сборкой.
   #
   # Почему тег создаётся здесь, а не отдельным workflow: пуш тега с
   # GITHUB_TOKEN не запускает новый прогон (защита GitHub от рекурсии),
@@ -38,17 +43,12 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version || steps.from-tag.outputs.version || steps.manual.outputs.version }}
       version_code: ${{ steps.version.outputs.version_code || steps.from-tag.outputs.version_code || steps.manual.outputs.version_code }}
-      # Коммит синхронизации версии (пусто, если коммита не было). Остальные
-      # job'ы собирают именно его — тот же код, что помечен тегом и попадёт
-      # в релиз.
-      commit: ${{ steps.version.outputs.commit }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      # Push в main: пишем версию в файлы, коммитим их в main и только потом
-      # ставим тег на этот коммит — так package.json и тег всегда совпадают.
-      # Логика выбора версии покрыта tests/release-version.test.ts.
+      # Push в main: считаем следующий патч, штампуем файлы и ставим тег на
+      # проверяемый коммит. Логика покрыта tests/release-version.test.ts.
       - id: version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
@@ -57,7 +57,7 @@ jobs:
             echo "::error::android/version.properties не найден — сборка APK упадёт"
             exit 1
           }
-          node android/scripts/release-version.mjs --write --sync-main --ensure-tag
+          node android/scripts/release-version.mjs --write --ensure-tag
       # Пуш тега v*: версия уже в теге, синхронизируем файлы без коммита
       # (тег неизменяем) и передаём версию дальше.
       - id: from-tag
@@ -80,8 +80,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.release-check.outputs.commit || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -115,8 +113,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.release-check.outputs.commit || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -140,8 +136,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.release-check.outputs.commit || github.sha }}
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -186,8 +180,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.release-check.outputs.commit || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22

@@ -32,10 +32,10 @@ CI installs Gradle directly; the repository has no complete Gradle wrapper.
 
 `package.json` version and `android/version.properties` versionName are always
 equal — CI keeps them in sync. `release-metadata.mjs` validates both and writes
-`public/version.json`. A `v*` tag must equal the package version. The version is
-not edited by hand: CI derives the next patch from the latest git tag,
-synchronizes the three files, commits them with `[skip ci]`, tags that commit
-and builds the release.
+`public/version.json`. The version is not edited by hand: the tag is the source
+of truth, and CI derives the next patch from the latest tag, stamps the three
+files in the build workspace (committing to `main` is blocked by the branch
+ruleset) and creates the tag for the release.
 
 ## GitHub Actions
 
