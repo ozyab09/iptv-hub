@@ -36,7 +36,7 @@ declare module "*/release-version.mjs" {
   export function tagExistsAtHead(tag: string, cwd: string): boolean;
   /** Создать аннотированный тег и запушить его, если тега ещё нет. */
   export function ensureTag(
-    plan: VersionPlan & { tag?: string },
+    plan: { version: string; versionCode?: number; tag?: string },
     cwd: string,
     options?: { dryRun?: boolean },
   ): { created: boolean; tag: string };
