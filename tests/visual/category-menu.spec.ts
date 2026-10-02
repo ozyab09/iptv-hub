@@ -54,7 +54,7 @@ for (const theme of ["light", "dark"]) {
       await expect(menu).toBeHidden();
       // Проверяем общий сброс на реальных контейнерах остальных меню;
       // сетевой HLS и доступность дорожек к оформлению не относятся.
-      const styles = await page.evaluate(() => ["quality-menu", "audio-menu", "subtitle-menu"].map((id) => {
+      const styles = await page.evaluate(() => ["quality-menu", "audio-menu", "subtitle-menu", "sleep-menu"].map((id) => {
         const item = document.createElement("button");
         item.className = "menu-item on";
         document.getElementById(id)!.append(item);
@@ -66,7 +66,7 @@ for (const theme of ["light", "dark"]) {
       for (const s of styles) {
         expect(s.font).toContain("Onest");
         expect(s.border).toBe("0px");
-        expect(s.color).toBe(theme === "light" ? "rgb(208, 23, 111)" : "rgb(255, 79, 163)");
+        expect(s.color).toBe("rgb(255, 255, 255)");
       }
     });
   }

@@ -4,15 +4,21 @@ test.use({ serviceWorkers: "block" });
 
 const playlist = "#EXTM3U\n#EXTINF:-1,Канал\nhttps://stream.invalid/live.mp4\n";
 
-async function setup(page: Page): Promise<void> {
-  await page.addInitScript(() => {
+async function setup(page: Page, hasEpg = false): Promise<void> {
+  await page.addInitScript((epg) => {
     localStorage.setItem(
       "iptv-hub.playlists.v1",
-      JSON.stringify([{ id: "sleep", name: "Тест", playlistUrl: "https://fixture.test/playlist.m3u", epgUrl: null }]),
+      JSON.stringify([{ id: "sleep", name: "Тест", playlistUrl: "https://fixture.test/playlist.m3u", epgUrl: epg ? "https://fixture.test/epg.xml" : null }]),
     );
     localStorage.setItem("iptv-hub.active-playlist.v1", "sleep");
+  }, hasEpg);
+  await page.route("https://fixture.test/**", (route) => {
+    if (route.request().url().endsWith("epg.xml")) {
+      const date = (offset: number) => new Date(Date.now() + offset).toISOString().replace(/\D/g, "").slice(0, 14) + " +0000";
+      return route.fulfill({ contentType: "application/xml", body: `<tv><channel id="sleep"><display-name>Канал</display-name></channel><programme channel="sleep" start="${date(-3_600_000)}" stop="${date(3_600_000)}"><title>Передача</title></programme></tv>` });
+    }
+    return route.fulfill({ body: playlist });
   });
-  await page.route("https://fixture.test/**", (route) => route.fulfill({ body: playlist }));
   await page.route("https://stream.invalid/**", (route) => route.fulfill({ status: 404 }));
 }
 
@@ -50,6 +56,9 @@ async function expectAboveTransport(page: Page): Promise<void> {
 async function expectStyled(page: Page): Promise<void> {
   const menu = page.locator("#sleep-menu");
   await expect(menu).toHaveClass(/sleep-menu/);
+  await expect(menu).toHaveClass(/(^|\s)menu(\s|$)/);
+  await expect(menu.locator("button.menu-item")).toHaveCount(5);
+  await expect(page.locator("#btn-sleep")).toHaveAttribute("aria-expanded", "true");
   // Стили применены: без класса меню было бы статичным блоком с дефолтными кнопками.
   expect(await menu.evaluate((el) => getComputedStyle(el).position)).toBe("absolute");
   expect(await menu.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0.92)");
@@ -80,10 +89,23 @@ test("меню sleep-таймера стилизовано, внутри кад�
   // На широком экране меню встаёт над транспортной декой, не заходя на неё.
   await expectAboveTransport(page);
 
+  const popup = (await menu.boundingBox())!;
+  const frame = (await page.locator("#video-stage").boundingBox())!;
+  const trigger = (await page.locator("#btn-sleep").boundingBox())!;
+  const left = Math.max(8, Math.min(trigger.x + trigger.width - frame.x - popup.width, frame.width - popup.width - 8));
+  expect(Math.abs(popup.x - frame.x - left)).toBeLessThan(2);
+
   // Escape закрывает меню (не сворачивая страницу плеера).
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await expect(page.locator("#player-bar")).not.toHaveClass(/open/);
+  await expect(page.locator("#btn-sleep")).toHaveAttribute("aria-expanded", "false");
+
+  // Системная кнопка «назад» закрывает тот же оверлей, не уходя со страницы.
+  await page.locator("#btn-sleep").click();
+  await page.goBack();
+  await expect(menu).toBeHidden();
+  await expect(page.locator("#channel-list")).toBeVisible();
 
   // Клик мимо закрывает. Точка — левый край кадра на середине высоты:
   // верх занял перенесённый в .top гайд (#btn-guide), центр — меню.
@@ -152,4 +174,40 @@ test("320px: меню не выходит за кадр, не перекрыва
   expect(light).toEqual(dark);
   expect(dark.color).toBe("rgb(255, 255, 255)");
   expect(dark.bg).toBe("rgba(0, 0, 0, 0.92)");
+
+  const scroll = await menu.evaluate((el) => ({ height: el.clientHeight, content: el.scrollHeight, overflow: getComputedStyle(el).overflowY }));
+  expect(scroll.content).toBeGreaterThan(scroll.height);
+  expect(scroll.overflow).toBe("auto");
+  await menu.locator("button[data-sleep='off']").click();
+  await expect(menu).toBeHidden();
+});
+
+test("sleep-меню сохраняет выбор 30/60/90 минут, конца передачи и отмену", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await setup(page, true);
+  await page.goto("/");
+  await page.locator("#channel-list .channel-card").first().click();
+  await expect(page.locator("#now-show")).toHaveText("Передача");
+  const menu = page.locator("#sleep-menu");
+  const badge = page.locator("#sleep-badge");
+  for (const [value, label] of [["30", "30 мин"], ["60", "60 мин"], ["90", "90 мин"], ["episode", "в конце передачи"]] as const) {
+    await page.locator("#btn-sleep").click();
+    await menu.locator(`[data-sleep='${value}']`).click();
+    await expect(menu).toBeHidden();
+    await expect(badge).toHaveText(label);
+    await expect(badge).toBeVisible();
+    await page.locator("#btn-sleep").click();
+    const selected = menu.locator(`[data-sleep='${value}']`);
+    await expect(selected).toHaveClass("menu-item on");
+    await expect(selected).toHaveAttribute("aria-selected", "true");
+    await expect(menu.locator(".on")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(badge).toHaveText(label);
+  }
+  await page.locator("#btn-sleep").click();
+  await menu.locator("[data-sleep='off']").click();
+  await expect(badge).toBeHidden();
+  await page.locator("#btn-sleep").click();
+  await expect(menu.locator("[data-sleep='off']")).toHaveClass("menu-item on");
 });

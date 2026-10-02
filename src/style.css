@@ -1134,7 +1134,14 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 @keyframes rec-pulse { 50% { opacity: 0.55; } }
 /* Меню качества и дорожек раскрываются вверх и влево: у правого края кадра
    left:0 увело бы их за границу, а кадр обрезает всё, что за ним. */
-.video .quality-menu { left: auto; right: 0; color: var(--text); }
+.video .quality-menu { left: auto; right: 0; }
+.video .quality-menu, .video .sleep-menu {
+  background: rgba(0, 0, 0, 0.92);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.video .menu-item:hover { background: rgba(255, 255, 255, 0.12); }
+.video .menu-item.on { color: #fff; background: rgba(255, 255, 255, 0.22); }
 /* Театр больше не нужен: на широком экране место плееру даёт сворачивание
    списка, на узком кнопка сворачивает страницу плеера обратно в мини. */
 #btn-expand { display: none; }
@@ -1170,14 +1177,11 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
    container-запросом, что и перенос деки в одну строку (см. .center). */
 .sleep-menu {
   position: absolute;
-  left: 50%;
+  left: clamp(8px, var(--sleep-left, calc(50% - 100px)), calc(100% - 208px));
   bottom: 112px;
-  transform: translateX(-50%);
   max-height: calc(100% - 128px);
   overflow-y: auto;
-  display: flex; flex-direction: column; min-width: 200px;
-  background: rgba(0, 0, 0, 0.92); border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: var(--radius-md); padding: var(--space-2); gap: 2px; z-index: 5;
+  width: 200px; max-width: calc(100% - 16px); z-index: 5;
 }
 @container player-frame (min-width: 740px) {
   /* Дека и громкость в одну строку — нижний блок ниже (~70px), меню
@@ -1187,14 +1191,6 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
     max-height: calc(100% - 96px);
   }
 }
-.sleep-menu[hidden] { display: none; }
-.sleep-menu button {
-  text-align: left; padding: var(--space-2) var(--space-3); border: 0;
-  background: transparent; color: #fff; border-radius: var(--radius-xs);
-  font: inherit; cursor: pointer;
-}
-.sleep-menu button:hover { background: rgba(255, 255, 255, 0.12); }
-.sleep-menu button.on { background: rgba(255, 255, 255, 0.22); }
 /* Затемнение кадра после срабатывания таймера. */
 .video .stage.sleep-dim::after {
   content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.78);
@@ -1326,6 +1322,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
      становится фикс-бар — меню всплывает над ним, max-height считается от
      вьюпорта, иначе calc от высоты бара (~60px) схлопнул бы его (#227). */
   .player-bar:not(.open) .sleep-menu {
+    left: 50%; transform: translateX(-50%);
     bottom: calc(100% + 8px);
     max-height: min(45vh, 320px);
   }
