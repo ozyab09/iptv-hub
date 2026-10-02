@@ -100,12 +100,16 @@ jobs:
       - run: npm run build
         env:
           APP_VERSION: ${{ needs.release-check.outputs.version }}
-      # include-hidden-files обязателен: upload-pages-artifact с v4 по
-      # умолчанию выбрасывает dot-файлы (--exclude=.[^/]*), и
-      # public/.well-known/assetlinks.json не доезжает до живого сайта —
+      # Обычная сборка кладёт НЕ github-pages, а запасной артефакт:
+      # в Pages её отправит deploy, но только если release не дошёл
+      # (упал визуальный тест или сборка APK). Два одноимённых
+      # github-pages в одном прогоне роняли deploy-pages (#250).
+      # include-hidden-files обязателен: без него dot-файлы отбрасываются,
+      # и public/.well-known/assetlinks.json не доезжает до живого сайта —
       # Android Asset Links отдают 404, TWA теряет fullscreen.
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-artifact@v4
         with:
+          name: pages-build
           path: dist
           include-hidden-files: true
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -245,12 +249,6 @@ jobs:
           APP_VERSION: ${{ needs.release-check.outputs.version }}
       # Web-сборка зашивается в APK: релизный APK тоже работает без сети.
       - run: node android/scripts/bundle-web.mjs
-      # Тот же include-hidden-files, что и в build: релизный деплой обязан
-      # опубликовать .well-known/assetlinks.json с отпечатком keystore.
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist
-          include-hidden-files: true
       - uses: actions/upload-artifact@v4
         with:
           name: android-signed
@@ -291,6 +289,19 @@ jobs:
             git push origin HEAD:gh-pages
           fi
 
+      # ПОСЛЕДНИЙ шаг job'ы — это контракт для deploy (#250): deploy по
+      # needs.release.result решает, брать этот артефакт или запасную
+      # сборку из build. Если бы github-pages клали раньше шагов, которые
+      # могут упасть (публикация Release, push metadata), упавший release
+      # оставлял бы артефест в прогоне и deploy спотыкался бы о два
+      # одноимённых. Провалился job ⇒ артефакта нет ⇒ срабатывает fallback.
+      # include-hidden-files — как и в build: релизный деплой обязан
+      # опубликовать .well-known/assetlinks.json с отпечатком keystore.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+          include-hidden-files: true
+
   deploy:
     if: always() && needs.build.result == 'success' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || needs.release.result == 'success')
     needs: [build, release]
@@ -299,5 +310,23 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Fallback (#250): release не дошёл (упал визуальный тест или сборка
+      # APK) — его github-pages в прогоне нет, поэтому в Pages уходит
+      # сборка из build: иначе на сайте застрянет старая версия и старый
+      # version.json для автообновления TWA. При успешном release эти два
+      # шага пропускаются: артефакт github-pages уже положила release,
+      # второй с тем же именем сломал бы deploy-pages.
+      - name: Pack build artifact for Pages
+        if: needs.release.result != 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: pages-build
+          path: dist
+      - name: Upload Pages artifact
+        if: needs.release.result != 'success'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+          include-hidden-files: true
       - id: deployment
         uses: actions/deploy-pages@v5

@@ -398,10 +398,23 @@ Settings → Pages → Source: **GitHub Actions**.
 `concurrency` больше не отменяет прогоны (`cancel-in-progress` снят): push в
 `main` может запускать релиз, и отмена оставила бы GitHub Release полупустым.
 
+**Один артефакт `github-pages` на прогон (#250).** Его кладёт только
+`release` — и обязательно **последним шагом** job'ы: упавший `release`
+не оставляет артефакт, и `deploy` по `needs.release.result` понимает,
+что пора во fallback. Сам `build` класть не должен: два одноимённых
+артефактов роняют `deploy-pages` (`Artifact count is 2`) — так деплой
+не проходил ни на один push в `main`. Если `release` не дошёл (упал
+визуальный тест или сборка APK), `deploy` сам упаковывает запасной
+артефакт `pages-build` из `build`, поэтому обычный деплой не зависит
+от релиза: сайт и `version.json` обновляются всегда. Свойство покрыто
+`tests/pages-deploy.test.ts`.
+
 **Dot-файлы в Pages-артефакте.** `actions/upload-pages-artifact` с v4 по
 умолчанию архивирует с `--exclude=.[^/]*` и выбрасывает скрытые файлы, поэтому
-`include-hidden-files: true` обязателен в **обоих** вызовах (build и release).
-Без него `public/.well-known/assetlinks.json` не попадает в деплой, живой
+`include-hidden-files: true` обязателен в **каждом** сборе дистрибутива:
+релизный upload и fallback в `deploy`, а также `upload-artifact` для
+`pages-build`, иначе файл не переживёт перезагрузку. Без него
+`public/.well-known/assetlinks.json` не попадает в деплой, живой
 сайт отдаёт 404, и TWA теряет trusted fullscreen. Проверять после деплоя:
 `curl -sI https://ozyab09.github.io/iptv-hub/.well-known/assetlinks.json` → 200.
 
