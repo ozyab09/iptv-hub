@@ -156,9 +156,32 @@ export function commitVersion({ version }, cwd, { dryRun = false, ref = "HEAD:ma
   return { committed: true };
 }
 
-/** Аннотированный тег версии: создаётся, только если его ещё нет. */
+/**
+ * Тег версии указывает на текущий HEAD? Тег уже может существовать (повторный
+ * прогон того же коммита) — тогда создавать его нельзя, git откажет.
+ */
+export function tagExistsAtHead(tag, cwd) {
+  try {
+    const tagCommit = git(["rev-parse", `refs/tags/${tag}^{commit}`], cwd);
+    return tagCommit === git(["rev-parse", "HEAD"], cwd);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Аннотированный тег версии.
+ *
+ * Если тег уже указывает на этот коммит — ничего не делаем (повторный прогон).
+ * Если тег указывает на другой коммит — это конфликт версий: молча
+ * переиспользовать чужой тег нельзя, иначе релиз уедет не туда.
+ */
 export function ensureTag({ version, tag = `v${version}` }, cwd, { dryRun = false } = {}) {
-  if (localTags(cwd, false).includes(tag)) return { created: false, tag };
+  const tags = localTags(cwd, true);
+  if (tags.includes(tag)) {
+    if (tagExistsAtHead(tag, cwd)) return { created: false, tag };
+    throw new Error(`тег ${tag} уже существует и указывает на другой коммит`);
+  }
   if (dryRun) return { created: true, tag };
   git(["tag", "-a", tag, "-m", `IPTV Hub ${version}`], cwd, BOT);
   git(["push", "origin", `refs/tags/${tag}`], cwd);

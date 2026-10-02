@@ -3,7 +3,14 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { latestVersion, nextVersion, planVersion, versionCodeFor, writeVersion } from "../android/scripts/release-version.mjs";
+import {
+  ensureTag,
+  latestVersion,
+  nextVersion,
+  planVersion,
+  versionCodeFor,
+  writeVersion,
+} from "../android/scripts/release-version.mjs";
 
 const script = resolve("android/scripts/release-version.mjs");
 
@@ -177,6 +184,37 @@ describe("release-version: CLI в репозитории", () => {
       expect(outputs).toMatchObject({ version: "0.2.7", tag_created: "true" });
       expect(git(["tag", "--list"], repo)).toBe("v0.2.6");
       expect(git(["rev-parse", "HEAD"], repo)).toBe(before);
+    } finally {
+      clean();
+    }
+  });
+
+  it("не переиспользует тег, указывающий на другой коммит", () => {
+    // Сценарий «осиротевший тег»: v0.2.7 существует, но помечает другой
+    // коммит. Молча ставить релиз туда нельзя — ensureTag обязан упасть.
+    const { repo, clean } = makeRepo("0.2.6", ["v0.2.6"]);
+    try {
+      // Тег помечает текущий коммит, а затем HEAD уезжает вперёд: получается
+      // ровно «тег v0.2.7 есть, но он указывает не на тот коммит».
+      git(["tag", "-a", "v0.2.7", "-m", "чужой тег"], repo);
+      writeFileSync(join(repo, "placeholder.txt"), "x");
+      git(["add", "."], repo);
+      git(["commit", "--quiet", "-m", "другой коммит"], repo);
+      expect(() => ensureTag({ version: "0.2.7" }, repo)).toThrow();
+    } finally {
+      clean();
+    }
+  });
+
+  it("не создаёт тег повторно, если он уже указывает на этот коммит", () => {
+    const { repo, clean } = makeRepo("0.2.6", ["v0.2.6"]);
+    try {
+      run(repo, ["--write", "--ensure-tag"]);
+      const { outputs } = run(repo, ["--write", "--ensure-tag"]);
+      // Версия выросла до 0.2.8, но тег v0.2.8 создан только что — второй
+      // прогон его не пересоздаёт (иначе git отказал бы).
+      expect(outputs).toMatchObject({ version: "0.2.8" });
+      expect(() => run(repo, ["--write", "--ensure-tag"])).not.toThrow();
     } finally {
       clean();
     }

@@ -32,6 +32,8 @@ declare module "*/release-version.mjs" {
     cwd: string,
     options?: { dryRun?: boolean; ref?: string },
   ): { committed: boolean };
+  /** Указывает ли тег на текущий HEAD. */
+  export function tagExistsAtHead(tag: string, cwd: string): boolean;
   /** Создать аннотированный тег и запушить его, если тега ещё нет. */
   export function ensureTag(
     plan: VersionPlan & { tag?: string },
