@@ -86,3 +86,24 @@ describe("id пакета синхронен", () => {
     expect(existsSync(join(app, "java", ...id.split("."), "MainActivity.java"))).toBe(true);
   });
 });
+
+describe("XML ресурсов валиден для aapt2", () => {
+  // aapt2 падает на «--» внутри комментария («The string "--" is not permitted
+  // within comments»). Ловится только сборкой APK, поэтому проверяем заранее:
+  // в комментариях легко написать --accent или --bg по привычке из CSS.
+  const xmlFiles = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return xmlFiles(path);
+      return entry.name.endsWith(".xml") ? [path] : [];
+    });
+
+  it("не содержит двойных дефисов в комментариях", () => {
+    for (const file of xmlFiles(res)) {
+      const text = readFileSync(file, "utf8");
+      for (const match of text.matchAll(/<!--([\s\S]*?)-->/g)) {
+        expect(match[1], `${file}: комментарий содержит "--"`).not.toContain("--");
+      }
+    }
+  });
+});
