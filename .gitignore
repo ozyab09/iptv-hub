@@ -7,6 +7,8 @@ test-results/
 playwright-report/
 
 agent.name
+# Web-сборка, зашитая в APK (создаёт android/scripts/bundle-web.mjs)
+android/app/src/main/assets/www/
 # Локальная папка для release-keystore и его base64 (в репозиторий не попадает)
 .local-signing/
 android/app/build/

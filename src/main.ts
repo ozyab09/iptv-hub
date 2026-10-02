@@ -3452,7 +3452,11 @@ async function bootstrap(): Promise<void> {
 
 // ---------- PWA: service worker + онлайн-статус ----------
 // SW регистрируется только в прод-сборке: в dev он кеширует статику и мешает HMR.
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
+// В Android-приложении ассеты зашиты в APK и открываются с локального origin:
+// service worker там только мешает (кеширует то, что и так лежит рядом), а при
+// первом запуске без сети ещё и нечего отдавать.
+const localOrigin = location.hostname === "appassets.androidplatform.net";
+if ("serviceWorker" in navigator && import.meta.env.PROD && !localOrigin) {
   // Была ли страница уже под старым SW: при первой установке смена
   // контроллера — не обновление, и перезагружать нечего.
   const hadController = navigator.serviceWorker.controller !== null;

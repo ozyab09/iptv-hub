@@ -75,53 +75,29 @@ describe("splash screen Android 12+", () => {
   });
 });
 
-describe("манифест TWA", () => {
+describe("манифест локального приложения", () => {
   const manifest = readFileSync(join(app, "AndroidManifest.xml"), "utf8");
 
-  it("не ставит launchMode: ABH запускает TWA в новой задаче", () => {
-    // LauncherActivity не переопределяет onNewIntent, и в его исходниках
-    // прямо сказано, что singleTask сносит окно Chrome поверх TWA.
+  it("не ставит launchMode и не тянет метаданные Chrome Custom Tabs", () => {
+    // Приложение самостоятельное: web-сборка в assets/www, TWA-метаданные
+    // (DEFAULT_URL, цвета баров, asset_statements) больше не нужны.
     expect(manifest).not.toMatch(/android:launchMode=/);
+    expect(manifest).not.toContain("android.support.customtabs.trusted");
+    expect(manifest).not.toContain("asset_statements");
+    expect(manifest).not.toContain("autoVerify");
   });
 
-  it("задаёт тёмные бары для обеих схем системы", () => {
-    // Дефолт в LauncherActivityMetadata — белый, поэтому без *_DARK бары
-    // уезжали бы в белый в тёмной системной теме.
-    for (const key of [
-      "android.support.customtabs.trusted.STATUS_BAR_COLOR",
-      "android.support.customtabs.trusted.STATUS_BAR_COLOR_DARK",
-      "android.support.customtabs.trusted.NAVIGATION_BAR_COLOR",
-      "android.support.customtabs.trusted.NAVIGATION_BAR_COLOR_DARK",
-      // Опечатка «androix» — в самой библиотеке, ключ должен быть таким.
-      "androix.browser.trusted.NAVIGATION_BAR_DIVIDER_COLOR",
-      "androix.browser.trusted.NAVIGATION_BAR_DIVIDER_COLOR_DARK",
-    ]) {
-      expect(manifest, `нет метаданных ${key}`).toContain(key);
-    }
+  it("объявляет одну launcher-активити", () => {
+    expect(manifest).toContain('android:name=".MainActivity"');
+    expect(manifest).toContain("android.intent.category.LAUNCHER");
+    expect(manifest.match(/<activity/g) ?? []).toHaveLength(1);
   });
 
-  it("объявляет связь приложения с сайтом (asset_statements)", () => {
-    expect(manifest).toContain('android:name="asset_statements"');
-    expect(readFileSync(join(res, "values", "strings.xml"), "utf8")).toContain('name="asset_statements"');
-  });
-});
-
-describe("id пакета синхронен", () => {
-  const id = "io.github.ozyab09.iptvhub";
-
-  it("Gradle, манифест и assetlinks используют один applicationId", () => {
-    const gradle = readFileSync("android/app/build.gradle", "utf8");
-    expect(gradle).toContain(`namespace '${id}'`);
-    expect(gradle).toContain(`applicationId '${id}'`);
-
-    const gen = readFileSync("android/scripts/gen-assetlinks.mjs", "utf8");
-    expect(gen).toContain(`option("--audience", "${id}")`);
-
-    const manifest = readFileSync(join(app, "AndroidManifest.xml"), "utf8");
-    expect(manifest).toContain('android:theme="@style/LauncherTheme"');
-    expect(manifest).toContain('android:icon="@mipmap/ic_launcher"');
-    // Класс активити лежит в пакете applicationId.
-    expect(existsSync(join(app, "java", ...id.split("."), "MainActivity.java"))).toBe(true);
+  it("тема наследует AppCompat (MainActivity — AppCompatActivity)", () => {
+    const base = readFileSync(join(res, "values", "themes.xml"), "utf8");
+    expect(base).toContain('parent="Theme.AppCompat.DayNight.NoActionBar"');
+    const v31 = readFileSync(join(res, "values-v31", "themes.xml"), "utf8");
+    expect(v31).toContain('parent="Theme.AppCompat.DayNight.NoActionBar"');
   });
 });
 

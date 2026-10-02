@@ -10,7 +10,7 @@
   плеера всегда чёрный, светлые иконки баров — единственный читаемый вариант.
 -->
 <resources>
-    <style name="LauncherTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+    <style name="LauncherTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowBackground">@color/splash_background</item>
         <item name="android:statusBarColor">@color/system_bar</item>
         <item name="android:navigationBarColor">@color/system_bar</item>

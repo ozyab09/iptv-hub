@@ -372,17 +372,29 @@ Settings → Pages → Source: **GitHub Actions**.
 сайт отдаёт 404, и TWA теряет trusted fullscreen. Проверять после деплоя:
 `curl -sI https://ozyab09.github.io/iptv-hub/.well-known/assetlinks.json` → 200.
 
-## Android TWA и выпуск APK (#160, #205, #222)
+## Android: локальное приложение (#160, #246)
 
-Android-код уже смержен через PR #167; повторно мержить старую ветку не нужно.
-`android/app` — один Gradle-модуль: Java 17, Gradle 8.7, AGP 8.6.1, SDK 35.
-`MainActivity` наследует стандартный TWA `LauncherActivity`, без WebView-моста.
-CI `.github/workflows/ci.yml` собирает unsigned APK и проверяет подпись
-временным ключом на PR.
-Для trusted fullscreen Asset Links должен быть опубликован в корне origin:
-`https://ozyab09.github.io/.well-known/assetlinks.json`; проектный подпуть
-`/iptv-hub/` недостаточен. Этот workflow не меняет root Pages-репозиторий;
-без отдельной публикации браузер может показывать панель Custom Tab.
+`android/app` — один Gradle-модуль: Java 17, Gradle 8.7, AGP 8.6.1, SDK 35,
+`applicationId io.github.ozyab09.iptvhub`. Приложение **самостоятельное**, не TWA:
+web-сборка зашита в `assets/www` и открывается в `WebView` через
+`WebViewAssetLoader` на локальном https-origin `appassets.androidplatform.net`
+(issue #246). Сеть нужна только видеопотоку провайдера — интерфейс, плейлист,
+EPG, настройки и записи доступны офлайн. Digital Asset Links не нужны, панели
+браузера нет; `androidbrowserhelper` из зависимостей убран.
+
+- `android/scripts/bundle-web.mjs` копирует `dist/` в
+  `android/app/src/main/assets/www/` (каталог в `.gitignore`, артефакт сборки)
+  и пишет туда `version.json` из `android/version.properties`. Запускается в CI
+  после `npm run build` в job'ах `android` и `release`; job `android` проверяет
+  `assets/www/index.html` внутри APK.
+- `src/main.ts` не регистрирует service worker на локальном origin: ассеты и
+  так лежат в APK, а SW только маскировал бы ошибки и мешал первому запуску.
+- `MainActivity` — `AppCompatActivity` с `WebView`: `domStorageEnabled` (данные
+  сохраняются в localStorage локального origin), внешние ссылки уходят в
+  системный браузер, edge-to-edge и нижний inset навигации сохранены.
+  Тема наследует `Theme.AppCompat.DayNight.NoActionBar` (требование AppCompat).
+- Смена origin означает новый `localStorage`: плейлисты/избранное/PIN/записи из
+  TWA-версии переносятся через экспорт-импорт backup JSON (см. README).
 
 **Версии и авто-релиз (#222, #233).** Источник правды по версии — git-тег
 `vX.Y.Z`; руками версию не бампают. На каждый push в `main` job

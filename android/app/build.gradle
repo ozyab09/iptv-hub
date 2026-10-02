@@ -22,10 +22,11 @@ android {
     buildFeatures { buildConfig true }
 }
 dependencies {
-    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
-    // WindowCompat/WindowInsetsControllerCompat для edge-to-edge в MainActivity.
+    // AppCompatActivity: тема LauncherTheme наследует DeviceDefault, но материал
+    // для WebView-активити нужен для корректного edge-to-edge и диалогов.
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    // WindowCompat/WindowInsetsControllerCompat (edge-to-edge) и insets.
     implementation 'androidx.core:core:1.13.1'
-    // CustomTabsCallback явно: MainActivity переопределяет getCustomTabsCallback(),
-    // а у ABH это транзитивная зависимость (не api) — не полагаемся на неё.
-    implementation 'androidx.browser:browser:1.5.0'
+    // WebViewAssetLoader: локальный https-origin для зашитых в APK ассетов.
+    implementation 'androidx.webkit:webkit:1.11.0'
 }
