@@ -48,14 +48,18 @@ describe("Player mirror fallback", () => {
   it.each(["ts", "mp4"])("tracks local %s playback through retry, stop and channel change", (ext) => {
     const { player } = fixture();
     expect(player.isRecordingPlayback).toBe(false);
+    expect(player.recordingDurationSec).toBe(0);
     player.playRecording(new Blob(["fixture"]), ext, 4);
     expect(player.isRecordingPlayback).toBe(true);
+    expect(player.recordingDurationSec).toBe(4);
     const url = player.currentStreamUrl;
     player.retry();
     expect(player.isRecordingPlayback).toBe(true);
+    expect(player.recordingDurationSec).toBe(4);
     expect(player.currentStreamUrl).toBe(url);
     player.stop();
     expect(player.isRecordingPlayback).toBe(false);
+    expect(player.recordingDurationSec).toBe(0);
     player.playRecording(new Blob(["fixture"]), ext, 4);
     player.play({ url: "https://live/stream.m3u8" });
     expect(player.isRecordingPlayback).toBe(false);

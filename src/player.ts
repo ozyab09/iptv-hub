@@ -49,6 +49,7 @@ export class Player {
   private readSettings: () => PlayerSettings;
   /** Файл и локальный манифест живут до закрытия/смены записи, включая перемотку. */
   private recordingUrls: string[] = [];
+  private recordingDuration = 0;
 
   constructor(
     video: HTMLVideoElement,
@@ -267,6 +268,7 @@ export class Player {
     }
     const result = this.play({ url: source }, hls);
     this.recordingUrls = urls;
+    this.recordingDuration = durationSec;
     return result;
   }
 
@@ -391,6 +393,8 @@ export class Player {
   get currentChannelUrl(): string | null { return this.channelUrl; }
 
   get isRecordingPlayback(): boolean { return this.recordingUrls.length > 0; }
+
+  get recordingDurationSec(): number { return this.isRecordingPlayback ? this.recordingDuration : 0; }
 
   /** Таймаут снимка настроек текущего канала, независимо от редактирования UI. */
   get diagnosticsTimeoutMs(): number {
