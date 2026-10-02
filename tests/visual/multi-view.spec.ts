@@ -161,3 +161,26 @@ test("на мобильной ширине — явный отказ без до
   await expect(page.locator(".multi-grid video")).toHaveCount(0);
   await expect(page.locator("#video")).toHaveJSProperty("paused", false);
 });
+
+test("заголовок плеера следует за активным окном, а не за первым каналом (#253)", async ({ page }) => {
+  await openChannels(page, 1440);
+  const title = page.locator("#now-title");
+  await expect(title).toHaveText("Канал 1");
+
+  await page.locator("#btn-multi-view").click();
+  // Выбрано пустое окно — в заголовке не остаётся прежний канал.
+  await page.locator(".multi-select").nth(2).click();
+  await expect(title).toHaveText("");
+  await page.locator(".multi-select").nth(0).click();
+  await expect(title).toHaveText("Канал 1");
+
+  // Смена канала в окне: заголовок — канал активного окна.
+  await page.locator(".multi-select").nth(1).click();
+  await page.locator("#channel-list .channel-card").nth(1).click();
+  await expect(title).toHaveText("Канал 2");
+
+  // Выход возобновляет его же — заголовок не рассинхронизируется.
+  await page.locator("#multi-exit").click();
+  await expect(page.locator("#multi-view")).toBeHidden();
+  await expect(title).toHaveText("Канал 2");
+});
