@@ -1,4 +1,5 @@
 import "./style.css";
+import { createRecordingScheduleUi } from "./recording-schedule-ui";
 import { LANGUAGE_KEY, resolveLanguage, t, translateMessage, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
@@ -335,6 +336,7 @@ let activeCategory: string | null = null;
 let plState: PlaylistsState = loadPlaylists(
   typeof localStorage !== "undefined" ? localStorage : null,
 );
+let scheduleUi: ReturnType<typeof createRecordingScheduleUi> | null = null;
 let favKey: string | null = null; // favoritesKey(id) активного плейлиста (legacy)
 void favKey;
 let favorites = new Set<string>();
@@ -1855,6 +1857,7 @@ function noteRecordingStop(): void {
 }
 
 function renderRecordings(): void {
+  scheduleUi?.render();
   const list = loadRecordings(typeof localStorage !== "undefined" ? localStorage : null);
   // Раздел «Записи» — самостоятельный экран из сайдбара (см. VIEWS).
   const recordingsScreen = $("recordings-screen");
@@ -2374,7 +2377,7 @@ function renderGuide(): void {
  * плеером. Эфир включается, прошедшее с архивом — открывается из архива,
  * прошедшее без архива приглушено, будущее просто подписано.
  */
-function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLButtonElement {
+function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLElement {
   const c = lastPlayed!;
   const cu = { days: c.catchupDays, source: c.catchupSource };
   const start = Date.parse(p.start);
@@ -2435,7 +2438,14 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLBut
         ? "Вне глубины архива"
         : "Архив недоступен на этом канале (нет tvg-rec)";
   }
-  return row;
+  if (stop <= now.getTime()) return row;
+  const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
+  const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
+  record.textContent = tr("schedule.title");
+  const playlistId = plState.activeId;
+  record.addEventListener("click", () => { if (playlistId) scheduleUi?.plan(c, p, playlistId); });
+  wrapper.append(row, record);
+  return wrapper;
 }
 
 /** Передачи текущего канала по телепрограмме, по времени начала. */
@@ -3489,5 +3499,10 @@ window.addEventListener("online", () => showToast(tr("network.online")));
 
 // Навигация рисуется до загрузки плейлиста: пустой таб-бар в первые секунды
 // выглядел бы поломкой.
+scheduleUi = createRecordingScheduleUi({
+  list: $("recording-schedule"), language: () => currentLanguage, fs: () => recordingsFs,
+  protected: (rule) => parseParentalPins(localStorage.getItem(parentalPinsKey(rule.playlistId))).has(rule.group),
+  notify: showToast, onSaved: renderRecordings,
+});
 renderNav();
 bootstrap();
