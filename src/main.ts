@@ -2082,14 +2082,16 @@ window.addEventListener("popstate", () => {
 });
 
 /**
- * Свернуть список каналов рядом с плеером в колонку логотипов: плеер
+ * Скрыть список каналов рядом с плеером: плеер
  * забирает освободившееся место. Выбор запоминается — кто смотрит без
  * списка, тот и в следующий раз хочет без него.
  */
 const LIST_COLLAPSED_KEY = "iptv-hub.list-collapsed.v1";
 
 function setListCollapsed(on: boolean): void {
+  const moveFocus = document.activeElement === btnCollapseList || document.activeElement === btnRestorePanel;
   appEl.classList.toggle("list-collapsed", on);
+  btnRestorePanel.hidden = !on;
   btnCollapseList.setAttribute("aria-expanded", String(!on));
   btnCollapseList.title = on ? "Развернуть список (C)" : "Свернуть список (C)";
   btnCollapseList.setAttribute(
@@ -2099,6 +2101,8 @@ function setListCollapsed(on: boolean): void {
   btnCollapseList
     .querySelector("use")
     ?.setAttribute("href", on ? "#i-panel-open" : "#i-panel-close");
+  if (!on) renderVirtualWindow();
+  if (moveFocus) (on ? btnRestorePanel : btnCollapseList).focus();
   try {
     localStorage.setItem(LIST_COLLAPSED_KEY, on ? "1" : "0");
   } catch {
@@ -2111,14 +2115,14 @@ btnCollapseList.addEventListener("click", () =>
 );
 
 // ---------- Полное скрытие панели (сайдбар + список каналов) ----------
-// Кнопка «Скрыть панель целиком» рядом со сворачиванием: уходит и рельс
+// Кнопка «Скрыть панель целиком» на рельсе навигации: уходит и рельс
 // навигации, и панель каналов — плеер занимает весь экран. Возврат —
 // кнопка на кадре, клавиша C или Escape.
 function setPanelHidden(on: boolean): void {
   if (on && !appEl.classList.contains("list-collapsed")) setListCollapsed(true);
   appEl.classList.toggle("panel-hidden", on);
+  if (!on) setListCollapsed(false);
   btnRestorePanel.hidden = !on;
-  btnRestorePanel.title = on ? "Показать список (C)" : "";
   try {
     localStorage.setItem(PANEL_HIDDEN_KEY, on ? "1" : "0");
   } catch {
