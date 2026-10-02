@@ -5,6 +5,8 @@ export interface PlayerSettings {
 }
 
 export const PLAYER_SETTINGS_KEY = "iptv-hub.player-settings.v1";
+/** Предел локального HLS timeshift; не хранится как пользовательская настройка. */
+export const TIMESHIFT_BUFFER_SECONDS = 600;
 export const DEFAULT_PLAYER_SETTINGS: Readonly<PlayerSettings> = Object.freeze({
   maxBufferLength: 30,
   lowLatencyMode: false,
@@ -38,8 +40,8 @@ export function parsePlayerSettings(raw: string | null): PlayerSettings {
 
 /** Конфигурация обоих путей создания hls-инстанса (новый канал и retry). */
 export function playerHlsConfig(settings: PlayerSettings): {
-  enableWorker: boolean; maxBufferLength: number; lowLatencyMode: boolean;
+  enableWorker: boolean; maxBufferLength: number; lowLatencyMode: boolean; backBufferLength: number;
 } {
   const safe = sanitizePlayerSettings(settings);
-  return { enableWorker: true, maxBufferLength: safe.maxBufferLength, lowLatencyMode: safe.lowLatencyMode };
+  return { enableWorker: true, maxBufferLength: safe.maxBufferLength, lowLatencyMode: safe.lowLatencyMode, backBufferLength: TIMESHIFT_BUFFER_SECONDS };
 }

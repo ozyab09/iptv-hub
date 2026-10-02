@@ -1,7 +1,8 @@
 import Hls from "hls.js";
 import { isMixedContent, isPrivateHost } from "./config";
 import type { Channel } from "./types";
-import { DEFAULT_PLAYER_SETTINGS, playerHlsConfig, sanitizePlayerSettings, type PlayerSettings } from "./player-settings";
+import { DEFAULT_PLAYER_SETTINGS, playerHlsConfig, sanitizePlayerSettings, TIMESHIFT_BUFFER_SECONDS, type PlayerSettings } from "./player-settings";
+import { bufferedSeekTarget } from "./scrub";
 import { recordingManifest } from "./recording-playback";
 import { t } from "./i18n";
 import { createMirrorState, nextMirror, type MirrorState } from "./channel-mirrors";
@@ -66,6 +67,7 @@ export class Player {
     // Нативный playback (mp4/Safari): ошибки <video> — единственный канал
     // фатальных ошибок; через них же спасаем mixed content апгрейдом.
     this.video.addEventListener("error", this.handleVideoError);
+    this.video.addEventListener("pause", () => this.enableTimeshift());
   }
 
   /**
@@ -279,6 +281,33 @@ export class Player {
     }
   }
 
+  /** На паузе и при отставании продолжаем скачивать живые сегменты. */
+  private enableTimeshift(): void {
+    if (this.hls?.latestLevelDetails?.live) {
+      this.hls.config.maxBufferLength = Math.max(this.activeSettings.maxBufferLength, TIMESHIFT_BUFFER_SECONDS);
+    }
+  }
+
+  seekBy(deltaSec: number): void {
+    const live = this.hls?.latestLevelDetails?.live;
+    if (live) this.enableTimeshift();
+    seekBy(this.video, deltaSec, live);
+  }
+
+  get liveEdge(): number {
+    if (this.hls?.latestLevelDetails?.live) return this.hls.latestLevelDetails.edge;
+    const ranges = this.video.seekable;
+    return ranges.length > 0 ? ranges.end(ranges.length - 1) : NaN;
+  }
+
+  goLive(): void {
+    const target = this.hls?.latestLevelDetails?.live ? this.hls.liveSyncPosition : this.liveEdge;
+    if (target === null || !Number.isFinite(target)) return;
+    if (this.hls) this.hls.config.maxBufferLength = this.activeSettings.maxBufferLength;
+    this.video.currentTime = Math.max(0, target - 0.1);
+    this.video.play().catch(() => undefined);
+  }
+
   /** Громкость 0..1 (мьют отдельно). */
   setVolume(v: number): void {
     this.video.volume = Math.min(1, Math.max(0, v));
@@ -425,7 +454,7 @@ export function neighborIndex(
 
 /**
  * Цель перемотки ±сек. Чистая функция с валидацией границ.
- * live-поток не перематывается — возвращает null;
+ * Для live цель ищется отдельно в bufferedSeekTarget; здесь возвращаем null.
  * выход за [0, duration] обрезается к границе.
  */
 export function skipTarget(
@@ -442,8 +471,8 @@ export function skipTarget(
 }
 
 /** Перемотать видео на ±сек (учитывает live-режим). */
-export function seekBy(video: HTMLVideoElement, deltaSec: number): void {
-  const live = !Number.isFinite(video.duration) || video.duration === 0;
-  const target = skipTarget(video.currentTime, deltaSec, video.duration, live);
+export function seekBy(video: HTMLVideoElement, deltaSec: number, live = !Number.isFinite(video.duration) || video.duration === 0): void {
+  const ranges = live ? Array.from({ length: video.buffered.length }, (_, i) => ({ start: video.buffered.start(i), end: video.buffered.end(i) })) : [];
+  const target = live ? bufferedSeekTarget(video.currentTime, deltaSec, ranges) : skipTarget(video.currentTime, deltaSec, video.duration, false);
   if (target !== null) video.currentTime = target;
 }

@@ -102,7 +102,7 @@ import {
   type WakeLockState,
 } from "./wake-lock";
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
-import { neighborIndex, Player, seekBy } from "./player";
+import { neighborIndex, Player } from "./player";
 import {
   applyTheme,
   clearTheme,
@@ -1337,9 +1337,9 @@ window.addEventListener("pagehide", saveCurrentPosition);
 btnPrev.addEventListener("click", () => playNeighbor(-1));
 btnNext.addEventListener("click", () => playNeighbor(1));
 
-// Перемотка ±15 сек (на live заблокирована — skipTarget вернёт null)
-btnSeekBack.addEventListener("click", () => seekBy(videoEl, -15));
-btnSeekFwd.addEventListener("click", () => seekBy(videoEl, 15));
+// Живой эфир перематывается только в пределах локального буфера.
+btnSeekBack.addEventListener("click", () => player.seekBy(-15));
+btnSeekFwd.addEventListener("click", () => player.seekBy(15));
 
 // Ручной перезапуск потока после фатальной ошибки
 btnRetry.addEventListener("click", () => {
@@ -2479,8 +2479,7 @@ window.addEventListener("keydown", (e) => {
 
 /** Край живого буфера или NaN, если поток ещё не начал грузиться. */
 function liveEdge(): number {
-  const r = videoEl.seekable;
-  return r.length > 0 ? r.end(r.length - 1) : NaN;
+  return player.liveEdge;
 }
 
 // ---------- Sleep-таймер (FR-13) ----------
@@ -2697,8 +2696,7 @@ function renderContinue(): void {
 }
 
 btnLive.addEventListener("click", () => {
-  const edge = liveEdge();
-  if (Number.isFinite(edge)) videoEl.currentTime = edge;
+  player.goLive();
   btnLive.hidden = true;
 });
 
@@ -2740,7 +2738,7 @@ videoStage.addEventListener("pointerup", (e) => {
   const side = tapSide(e.clientX - rect.left, rect.width);
   if (side && isDoubleTap(lastTapMs, e.timeStamp)) {
     lastTapMs = null;
-    seekBy(videoEl, side === "left" ? -15 : 15);
+    player.seekBy(side === "left" ? -15 : 15);
     showToast(side === "left" ? "−15 секунд" : "+15 секунд");
     return;
   }
