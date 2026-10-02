@@ -8,7 +8,10 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/visual",
   timeout: 30_000,
-  retries: 0,
+  // Один ретрай в CI: структурные проверки вёрстки иногда ловят
+  // промежуточный layout (статус игрока ещё не ужался до max-width),
+  // и падение такого теста блокировало релиз APK.
+  retries: process.env.CI ? 1 : 0,
   workers: 1,
   use: {
     baseURL: process.env.VISUAL_BASE_URL ?? "http://localhost:4173",
