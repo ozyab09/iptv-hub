@@ -147,6 +147,7 @@ import { applyChannelOverrides, channelOverridesKey, parseChannelOverrides, seri
 import { createPinHash, parentalPinsKey, parseParentalPins, serializeParentalPins, verifyPin, type ParentalPins } from "./parental-pin";
 import { createPinDialog } from "./parental-pin-ui";
 import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
+import { nowHeaderFor } from "./now-header";
 import {
   shouldShowHttpNotice,
   markHttpNoticeShown,
@@ -573,6 +574,9 @@ const multiViewUi = createMultiViewUi({
   toast: showToast,
   select: (channel) => {
     lastPlayed = channel;
+    // Заголовок и звезда следуют за активным окном (#253): раньше здесь
+    // менялся только lastPlayed, и заголовок оставался от первого канала.
+    refreshNowHeader(channel);
     renderChannels(false);
   },
   playback: (playing) => {
@@ -591,8 +595,13 @@ function closeMultiView(resume: boolean): void {
   volumeSlider.value = String(volume * 100);
   refreshMuteIcon();
   $("player-stack").hidden = false;
-  if (resume && selected) playChannel(selected);
-  else { playerBar.hidden = true; setWatching(false); }
+  if (resume && selected) {
+    // Возобновление может быть отклонено (PIN, отказ плеера) — тогда
+    // играть нечего, и заголовок не должен показывать чужой «текущий» (#253).
+    void playChannel(selected).then((played) => {
+      if (!played) refreshNowHeader(null);
+    });
+  } else { playerBar.hidden = true; setWatching(false); }
 }
 
 $("btn-multi-view").addEventListener("click", () => {
@@ -955,8 +964,7 @@ function refreshChannelOverrides(): void {
   };
   if (lastPlayed) {
     lastPlayed.name = nameFor(lastPlayed);
-    nowTitle.textContent = lastPlayed.name;
-    refreshNowFav();
+    refreshNowHeader(lastPlayed);
   }
   multiViewUi.updateNames(nameFor);
   renderCategories();
@@ -1335,12 +1343,9 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
     multiViewUi.play(c);
     return true;
   }
-  nowTitle.textContent = archiveUrl ? `${c.name} · архив` : c.name;
-  nowTitle.title = archiveUrl ?? c.url; // ссылка на поток текущего канала
-  nowCategory.textContent = c.group;
+  refreshNowHeader(c, archiveUrl); // единая точка обновления заголовка (#253)
   playerBar.hidden = false;
   setWatching(true);
-  refreshNowFav();
   setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
@@ -1461,12 +1466,30 @@ videoEl.addEventListener("click", () => {
 
 // Звезда избранного в плеер-баре (синхронизирована со списком)
 function refreshNowFav(): void {
-  if (!lastPlayed) return;
+  if (!lastPlayed) {
+    // Канала нет (пустое окно в мульти-вью, запись) — звезда не должна
+    // помнить прошлый канал (#253).
+    setIcon(nowFav, "star");
+    nowFav.classList.remove("active");
+    nowFav.title = "В избранное";
+    return;
+  }
   const fav = isFavorite(favorites, lastPlayed);
   setIcon(nowFav, fav ? "star-on" : "star");
   nowFav.classList.toggle("active", fav);
   nowFav.title = fav ? "Убрать из избранного" : "В избранное";
 }
+/** Обновить заголовок плеера под текущий канал — одна функция для
+ *  одиночного воспроизведения, архива, алиасов и выбора окна в мульти-вью
+ *  (#253). Вызывающий обязан уже записать канал в lastPlayed. */
+function refreshNowHeader(channel: Channel | null, archiveUrl?: string): void {
+  const header = nowHeaderFor(channel, archiveUrl);
+  nowTitle.textContent = header.title;
+  nowTitle.title = header.href;
+  nowCategory.textContent = header.category;
+  refreshNowFav();
+}
+
 nowFav.addEventListener("click", () => {
   if (!lastPlayed) return;
   favorites = toggleFavorite(favorites, lastPlayed);
@@ -2067,6 +2090,9 @@ function playRecording(file: File, r: RecordingMeta): void {
   }
   playerBar.hidden = false;
   setWatching(true);
+  // Заголовок сейчас про запись, а не про канал: сбрасываем канал,
+  // категорию и звезду, потом пишем своё (#253).
+  refreshNowHeader(null);
   nowTitle.textContent = `${r.channelName} · запись`;
   nowTitle.title = r.programmeTitle ?? "";
   playerStatus.textContent = "Записанный эфир";
