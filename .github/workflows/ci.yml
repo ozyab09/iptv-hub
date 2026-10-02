@@ -108,6 +108,9 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
   visual:
+    # always(): на PR release-check пропущен, а без этого условия зависимый
+    # job тоже пропустился бы — так и случилось в первом прогоне.
+    if: always() && needs.release-check.result != 'failure'
     needs: [release-check]
     runs-on: ubuntu-24.04
     steps:
@@ -130,6 +133,9 @@ jobs:
           retention-days: 7
 
   android:
+    # always(): на PR release-check пропущен, а без этого условия зависимый
+    # job тоже пропустился бы — так и случилось в первом прогоне.
+    if: always() && needs.release-check.result != 'failure'
     needs: [release-check]
     runs-on: ubuntu-24.04
     steps:
