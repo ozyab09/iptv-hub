@@ -369,7 +369,7 @@ npm run build && npm run preview   # http://localhost:4173
 В CI веб-сборка создаётся один раз: Playwright, APK и Pages используют общий
 артефакт `pages-build` этого прогона. Браузеры Playwright кэшируются по
 `package-lock.json`; системные библиотеки устанавливаются на каждой свежей VM.
-Chromium в CI использует два воркера, Firefox — один; локальный запуск
+Chromium в CI использует три воркера, Firefox — один; локальный запуск
 `npm run build && npm run test:visual` остаётся последовательным. Все тесты
 и проверки подписи APK сохраняются; релиз добавляет метаданные в готовый `dist`.
 
