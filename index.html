@@ -326,6 +326,17 @@
             </div>
           </div>
 
+          <!-- Меню sleep-таймера — прямой ребёнок кадра (#227): позиционируется
+               от кадра, а не от .center, поэтому всегда помещается внутри
+               (на десктопе, на телефоне и в мини-плеере). -->
+          <div id="sleep-menu" class="sleep-menu" hidden>
+            <button data-sleep="30">Через 30 мин</button>
+            <button data-sleep="60">Через 60 мин</button>
+            <button data-sleep="90">Через 90 мин</button>
+            <button data-sleep="episode">В конце передачи</button>
+            <button data-sleep="off">Выключить таймер</button>
+          </div>
+
           <div class="bottom">
             <div class="scrub-row">
               <span id="prog-start" class="t-caption vt num"></span>
@@ -353,13 +364,6 @@
                   <button id="btn-seek-fwd" class="vbtn ghost" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-fwd"></use></svg></button>
                   <button id="btn-rec" class="vbtn ghost rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
                   <button id="btn-sleep" class="vbtn ghost" title="Sleep-таймер: выключить позже" aria-label="Sleep-таймер"><span id="sleep-badge" class="sleep-badge" hidden></span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-clock"></use></svg></button>
-                </div>
-                <div id="sleep-menu" hidden>
-                  <button data-sleep="30">Через 30 мин</button>
-                  <button data-sleep="60">Через 60 мин</button>
-                  <button data-sleep="90">Через 90 мин</button>
-                  <button data-sleep="episode">В конце передачи</button>
-                  <button data-sleep="off">Выключить таймер</button>
                 </div>
               </div>
               <div class="video-actions-right">
