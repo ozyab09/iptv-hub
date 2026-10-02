@@ -3,6 +3,7 @@ import {
   loadPlaylists,
   savePlaylists,
   addPlaylist,
+  addLocalPlaylist,
   updatePlaylist,
   removePlaylist,
   activePlaylist,
@@ -24,6 +25,26 @@ const store = () => {
 };
 
 const empty: PlaylistsState = { items: [], activeId: null };
+
+describe("local playlists", () => {
+  it("uses one ID for import, persistence and legacy recovery", () => {
+    const s = store();
+    const imported = addLocalPlaylist(empty, "Local");
+    const pl = imported.items[0]!;
+    expect(pl.playlistUrl).toBe(`local:${pl.id}`);
+    savePlaylists(s, imported);
+    expect(loadPlaylists(s)).toEqual(imported);
+    s.setItem(PLAYLISTS_KEY, JSON.stringify([{ ...pl, playlistUrl: "local:123456" }]));
+    expect(loadPlaylists(s)).toEqual(imported);
+  });
+
+  it("rejects malformed local markers and unsafe protocols", () => {
+    const s = store();
+    const urls = ["local:", "local:../file", "local://host/file", "javascript:alert(1)", "file:///a", "data:text/plain,a"];
+    s.setItem(PLAYLISTS_KEY, JSON.stringify(urls.map((playlistUrl) => ({ id: "abc", name: "Bad", playlistUrl }))));
+    expect(loadPlaylists(s).items).toEqual([]);
+  });
+});
 
 describe("loadPlaylists / migrateLegacy", () => {
   it("migrates the legacy single config into the first playlist", () => {

@@ -367,7 +367,7 @@ describe("createPlaylistUi: удаление", () => {
     ui.renderManager();
     kid(kid(nodes.plList, 0), 2).click();
     // Удаление из OPFS асинхронно: даём микротаскам исполниться
-    await vi.waitFor(() => expect(removed).toEqual(["local:abc", "local:abc:epg"]));
+    await vi.waitFor(() => expect(removed).toEqual(["local:a", "local:a:epg"]));
   });
 });
 

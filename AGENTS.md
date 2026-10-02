@@ -81,7 +81,11 @@ PWA. Версия пакета (`package.json`) синхронна с этим �
   `renderChannelLogo()`; отсутствие URL и ошибка загрузки дают монограмму.
 - Плейлисты: несколько источников (`playlists.v1`), активный — `active-playlist.v1`;
   `?p=`/`?e=` делает **upsert** в список и активирует; избранные и «недавние» —
-  per-плейлист; экспорт/импорт — versioned JSON (`backup.ts`). Не-http(s) URL
+  per-плейлист; экспорт/импорт — versioned JSON (`backup.ts`). Для сетевых
+  источников принимаются только http(s) URL. Локальный импорт использует
+  внутренний `local:<playlist.id>` и файл OPFS под тем же ключом; при чтении
+  сохранённого списка старый `local:<timestamp>` нормализуется по ID записи.
+  При удалении очищаются `local:<id>` и `local:<id>:epg`. Другие схемы
   отклоняются (защита от `javascript:`-инъекций). EPG необязателен.
 - Алиасы и скрытие: `channel-overrides.ts`, ключ
   `iptv-hub.channel-overrides.v1:<playlist-id>`, записи по URL потока.
