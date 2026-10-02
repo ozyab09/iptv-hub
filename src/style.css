@@ -381,11 +381,6 @@ html, body {
   .watch .continue-block { display: none; }
   /* Взамен скрытых категорий — компактный выбор над списком */
   #app.watch #cat-picker:not([hidden]) { display: block; }
-  #app.watch.channel-view.list-collapsed .screens { padding: 0 var(--space-2); }
-  /* Узкая колонка логотипов прокручивается колесом и жестом, но без
-     видимой полосы: 64px не хватает, и полоса ложилась поверх плиток */
-  #app.watch.channel-view.list-collapsed .channel-list { margin: 0; scrollbar-width: none; }
-  #app.watch.channel-view.list-collapsed .channel-list::-webkit-scrollbar { display: none; }
 }
 
 /* ---------- screens ---------- */
@@ -1227,9 +1222,11 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   }
   .watch .player-bar > #player-stack { width: var(--frame-w); margin-block: auto; }
 
-  /* Список сворачивается в колонку логотипов (кнопка в его шапке или C) */
-  #app.watch.channel-view.list-collapsed { --list-w: 64px; }
-  /* Полное скрытие (кнопка в свёрнутом списке): уходит и рельс сайдбара,
+  /* Сворачивание полностью скрывает список, оставляя рельс навигации. */
+  #app.watch.channel-view.list-collapsed { --list-w: 0px; }
+  #app.watch.channel-view.list-collapsed .topbar,
+  #app.watch.channel-view.list-collapsed .screens { display: none; }
+  /* Полное скрытие (кнопка на рельсе): уходит и рельс сайдбара,
      и панель списка — плеер занимает весь экран. Вернуть — C или кнопка
      в углу кадра. */
   #app.watch.channel-view.list-collapsed.panel-hidden { --list-w: 0px; --rail-w: 0px; }
@@ -1237,21 +1234,11 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   #app.watch.channel-view.list-collapsed.panel-hidden .sidebar,
   #app.watch.channel-view.list-collapsed.panel-hidden .screens { display: none; }
   #app.watch.channel-view.list-collapsed.panel-hidden { --player-w: 100vw; }
-  #app.watch .list-toggle { display: inline-flex; }
-  .video .btn-restore-panel { display: inline-flex; position: absolute; top: var(--space-3); left: var(--space-3); z-index: 3; }
+  #app.watch.channel-view .list-toggle { display: inline-flex; }
+  #app.watch.channel-view .sidebar #btn-hide-panel { width: 44px; height: 44px; }
+  #app.watch.channel-view .video .btn-restore-panel { display: inline-flex; position: absolute; top: var(--space-3); left: var(--space-3); z-index: 3; }
   .video .btn-restore-panel[hidden] { display: none; }
-  #app.panel-hidden .video .top { padding-left: calc(44px + var(--space-5)); }
-  #app.watch.channel-view.list-collapsed .topbar,
-  #app.watch.channel-view.list-collapsed .view-title,
-  #app.watch.channel-view.list-collapsed .cat-picker,
-  #app.watch.channel-view.list-collapsed .epg-now,
-  #app.watch.channel-view.list-collapsed .continue-block,
-  #app.watch.channel-view.list-collapsed .row .meta,
-  #app.watch.channel-view.list-collapsed .row .star,
-  #app.watch.channel-view.list-collapsed .row .channel-actions { display: none !important; }
-  #app.watch.channel-view.list-collapsed .view-head { flex-direction: column; justify-content: center; padding-top: var(--space-4); }
-  #app.watch.channel-view.list-collapsed .row { justify-content: center; padding-left: 0; padding-right: 0; }
-  #app.watch.channel-view.list-collapsed .row.on .logo { box-shadow: 0 0 0 2px var(--accent); }
+  #app.watch.channel-view.list-collapsed .video .top { padding-left: calc(44px + var(--space-5)); }
 }
 
 /* ---- узкий экран: мини-плеер и страница плеера ---- */
@@ -1361,6 +1348,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 #player-bar:fullscreen .now-schedule { display: none; }
 
 /* Шапка списка: заголовок раздела и кнопка сворачивания */
+.video .btn-restore-panel { display: none; }
 .view-head { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
 .view-head .view-title { margin: 0; flex: 1; min-width: 0; }
 .list-toggle {
