@@ -22,9 +22,9 @@ Go-пайплайн, который ежедневно фильтрует M3U/EP
 аудио/субтитры, retry, mixed-content-апгрейд), скрытие http-каналов, EPG +
 catchup-архив, запись эфира (HLS — сегментами, остальное — перекодированием),
 PWA. Версию приложения задаёт git-тег (см. «Версии и релизы»): на каждый
-push в main CI вычисляет следующий патч, синхронизирует `package.json`,
-`android/version.properties` и `public/version.json`, ставит тег и выпускает
-APK. Руками версию бампать не нужно.
+push в main CI вычисляет следующий патч, штампует его в `package.json`,
+`android/version.properties` и `public/version.json` своей рабочей копии,
+ставит тег и выпускает APK. Руками версию бампать не нужно.
 
 ---
 
@@ -390,16 +390,24 @@ CI `.github/workflows/ci.yml` собирает unsigned APK и проверяе�
 
 1. `android/scripts/release-version.mjs` (логика покрыта
    `tests/release-version.test.ts`) берёт максимальный semver-тег, прибавляет
-   патч (`0.2.6 → 0.2.7`; без тегов — `0.0.1`), синхронизирует `package.json`,
-   `android/version.properties` (`versionCode = 1000 + major*1000 + minor*100 +
+   патч (`0.2.6 → 0.2.7`; без тегов — `0.0.1`) и штампует его в файлы рабочей
+   копии: `package.json`, `android/version.properties` (`versionCode = 1000 +
    patch`) и `public/version.json`;
-2. коммитит эти файлы в `main` сообщением `chore: версия X [skip ci]` и только
-   **потом** ставит аннотированный тег на этот коммит — так тег и
-   `package.json` всегда совпадают. `[skip ci]` обязателен: без него пуш
-   запустил бы новый прогон и версия уехала бы по кругу;
-3. версия уезжает дальше через outputs: `build` собирает web с
-   `APP_VERSION` (её подставляет `vite.config.ts` в `sw.js` и `dist`), а
-   `release` берёт `versionName`/`versionCode` из `android/version.properties`.
+2. ставит аннотированный тег `vX.Y.Z` на проверяемый коммит и пушит его;
+3. версия уезжает дальше через outputs: `build` собирает web с `APP_VERSION`
+   (её подставляет `vite.config.ts` в `sw.js` и `dist`), а релиз берёт
+   `versionName`/`versionCode` из `android/version.properties` своего
+   checkout'а — репозиторий в `main` при этом не меняется.
+
+**Почему CI не коммитит версию в main.** Ruleset `main-protection` запрещает
+прямой пуш в `main` даже с `GITHUB_TOKEN` («Changes must be made through a pull
+request», «Required status check build is expected») — первая версия этого
+пайплайна падала именно на `git push origin HEAD:main`. Поэтому источник правды
+— тег, а версия в файлах на CI появляется штамповкой перед сборкой. Флаг
+`--sync-main` в скрипте оставлен для локальных запусков (когда пуш в main
+разрешён) и покрыт тестом. Следствие: файлы в репозитории отстают на одну
+версию от последнего тега — это нормально, тесты проверяют их взаимную
+согласованность, а не равенство тегу.
 
 `release` идёт после зелёных `build`, `visual`, `android` и запускается на
 push в `main`, push тега `v*` и `workflow_dispatch` — гарды «релиз уже есть»
