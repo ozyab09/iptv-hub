@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-for (const width of [390, 1440]) {
-  test(`настройки плеера: сохранение, валидация, сброс (${width}px)`, async ({ page }) => {
+for (const [theme, width] of [["light", 390], ["light", 1440], ["dark", 390], ["dark", 1440]] as const) {
+  test(`настройки плеера: оформление, сохранение, валидация, сброс (${theme}, ${width}px)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript((theme) => localStorage.setItem("iptv-hub.theme.v1", theme), theme);
     await page.addInitScript(() => {
       localStorage.setItem("iptv-hub.playlists.v1", JSON.stringify([{
         id: "test", name: "Тест", playlistUrl: "https://fixture.test/playlist.m3u", epgUrl: null,
@@ -19,6 +20,35 @@ for (const width of [390, 1440]) {
     await expect(buffer).toHaveValue("30");
     await expect(latency).not.toBeChecked();
     await expect(timeout).toHaveValue("8");
+    await page.locator("#player-settings-form").screenshot({ path: `test-results/player-settings-${theme}-${width}.png` });
+    for (const field of [buffer, timeout]) {
+      const style = await field.evaluate((el) => {
+        const s = getComputedStyle(el);
+        const parent = getComputedStyle(el.closest(".input")!);
+        return { background: s.backgroundColor, border: s.borderTopWidth, color: s.color, parentColor: parent.color, font: s.fontFamily, bodyFont: getComputedStyle(document.body).fontFamily };
+      });
+      expect(style.background).toBe("rgba(0, 0, 0, 0)");
+      expect(style.border).toBe("0px");
+      expect(style.color).toBe(style.parentColor);
+      expect(style.font).toBe(style.bodyFont);
+    }
+    await buffer.focus();
+    await page.keyboard.press("ArrowUp");
+    await expect(buffer).toHaveValue("31");
+    await page.keyboard.press("ArrowDown");
+    await expect(buffer).toHaveValue("30");
+    await page.keyboard.press("Tab");
+    await expect(latency).toBeFocused();
+    const track = latency.locator("+ .player-switch-track");
+    await expect(track).toBeVisible();
+    expect(await track.evaluate((el) => getComputedStyle(el).outlineWidth)).toBe("2px");
+    const offColor = await track.evaluate((el) => getComputedStyle(el).backgroundColor);
+    await page.keyboard.press("Space");
+    await expect(latency).toBeChecked();
+    await expect.poll(() => track.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(offColor);
+    await page.keyboard.press("Tab");
+    await expect(timeout).toBeFocused();
+    await latency.uncheck();
     await buffer.fill("120");
     await latency.check();
     await timeout.fill("15");
