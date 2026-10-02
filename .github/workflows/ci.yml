@@ -91,6 +91,12 @@ jobs:
           if git fetch origin gh-pages; then
             git show FETCH_HEAD:.well-known/assetlinks.json > public/.well-known/assetlinks.json
           fi
+      # version.json публикуем и обычным деплоем: release может не дойти
+      # (например, упал визуальный тест), а версия на сайте нужна для
+      # клиентского автообновления TWA.
+      - name: Stamp version metadata
+        if: needs.release-check.outputs.version != ''
+        run: node android/scripts/release-metadata.mjs
       - run: npm run build
         env:
           APP_VERSION: ${{ needs.release-check.outputs.version }}
