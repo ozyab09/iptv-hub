@@ -28,6 +28,7 @@ import {
 import {
   activePlaylist,
   addPlaylist,
+  addLocalPlaylist,
   loadPlaylists,
   savePlaylists,
   updatePlaylist,
@@ -3296,7 +3297,7 @@ localFile.addEventListener("change", async () => {
     showSetup(tr("error.m3u"));
     return;
   }
-  const pl = addPlaylist(plState, defaultLocalName(file.name), `local:${Date.now()}`, null);
+  const pl = addLocalPlaylist(plState, defaultLocalName(file.name));
   plState = pl;
   const id = pl.items[pl.items.length - 1]!.id;
   await saveLocalPlaylist(await fs, id, content, null);
