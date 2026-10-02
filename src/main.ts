@@ -1868,23 +1868,27 @@ function renderRecordings(): void {
   row.textContent = "";
   if (activeView !== "recordings") return;
   for (const r of list) {
-    const card = document.createElement("button");
+    const card = document.createElement("div");
     card.className = "recording-card";
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "recording-play";
     const when = new Date(r.startedAt);
     card.title = `${r.channelName} · ${when.toLocaleString("ru")} · ${formatDuration(r.durationSec)}`;
 
     const name = document.createElement("span");
     name.className = "recording-name ellipsis";
     name.textContent = r.programmeTitle ?? r.channelName;
-    card.append(name);
+    play.append(name);
 
     const sub = document.createElement("span");
     sub.className = "recording-sub muted num";
     sub.textContent = `${r.channelName} · ${when.toLocaleDateString("ru")} ${when.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} · ${formatDuration(r.durationSec)} · ${formatBytes(r.sizeBytes)}`;
-    card.append(sub);
+    play.append(sub);
+    card.append(play);
 
     // Клик — воспроизведение из OPFS.
-    card.addEventListener("click", () => {
+    play.addEventListener("click", () => {
       if (!recordingsFs) return;
       void recordingsFs.read(storedRecordingName(r.id, r.ext)).then((file) => {
         if (!file) {
@@ -1895,34 +1899,37 @@ function renderRecordings(): void {
       });
     });
 
+    const actions = document.createElement("div");
+    actions.className = "recording-actions";
     const download = document.createElement("button");
+    download.type = "button";
     download.className = "recording-act";
     download.title = "Скачать файл";
     download.setAttribute("aria-label", "Скачать файл записи");
     download.innerHTML = iconMarkup("download");
-    download.addEventListener("click", (ev) => {
-      ev.stopPropagation();
+    download.addEventListener("click", () => {
       if (!recordingsFs) return;
       void recordingsFs.read(storedRecordingName(r.id, r.ext)).then((file) => {
         if (file) offerDownload(file, recordingFileName(r.channelName, new Date(r.startedAt), r.ext));
       });
     });
-    card.append(download);
+    actions.append(download);
 
     const del = document.createElement("button");
+    del.type = "button";
     del.className = "recording-act";
     del.title = "Удалить запись";
     del.setAttribute("aria-label", "Удалить запись");
     del.innerHTML = iconMarkup("trash");
-    del.addEventListener("click", (ev) => {
-      ev.stopPropagation();
+    del.addEventListener("click", () => {
       if (!recordingsFs) return;
       void recordingsFs.remove(storedRecordingName(r.id, r.ext)).then(() => {
         removeRecording(typeof localStorage !== "undefined" ? localStorage : null, r.id);
         renderRecordings();
       });
     });
-    card.append(del);
+    actions.append(del);
+    card.append(actions);
 
     row.append(card);
   }
