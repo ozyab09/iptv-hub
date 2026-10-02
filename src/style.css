@@ -1148,29 +1148,30 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   background: rgba(255, 255, 255, 0.18); color: #fff; pointer-events: none;
 }
 /* Меню sleep-таймера (#227): прямой ребёнок кадра, привязка к .video —
-   на десктопе и на телефоне попап гарантированно внутри кадра.
-   Нижняя кромка 78px — на 8px выше нижней строки (~70px); max-height от
-   края кадра держит верхнюю кромку на 16px ниже верха кадра (скролл при
-   нехватке высоты). На широком экране (дека слева внизу) меню встаёт над
-   декой. При перекладке деки (#226) поправить отступы. */
+   на десктопе и на телефоне попап гарантированно внутри кадра и НЕ
+   перекрывает транспорт (критерий приёмки), т.е. встаёт над всем нижним
+   блоком .bottom, а не над декой точечно — высота блока зависит от
+   раскладки. Нижняя кромка 112px узкой раскладки (нижний блок ~104px +
+   8px зазора); max-height оставляет 16px от верха кадра, при нехватке
+   высоты пункты прокручиваются. Широкая раскладка задаётся тем же
+   container-запросом, что и перенос деки в одну строку (см. .center). */
 .sleep-menu {
   position: absolute;
   left: 50%;
-  bottom: 78px;
+  bottom: 112px;
   transform: translateX(-50%);
-  max-height: calc(100% - 94px);
+  max-height: calc(100% - 128px);
   overflow-y: auto;
   display: flex; flex-direction: column; min-width: 200px;
   background: rgba(0, 0, 0, 0.92); border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-md); padding: var(--space-2); gap: 2px; z-index: 5;
 }
-@media (min-width: 1024px) {
-  /* Над транспортной декой (левый край — как у .center), не перекрывая её */
+@container player-frame (min-width: 740px) {
+  /* Дека и громкость в одну строку — нижний блок ниже (~70px), меню
+     поднимается ближе к центру кадра, оставаясь над транспортом */
   .video .sleep-menu {
-    left: var(--space-3);
-    transform: none;
-    bottom: 128px; /*76 (низ деки) + 44 (высота) + 8 зазора */
-    max-height: calc(100% - 144px);
+    bottom: 80px;
+    max-height: calc(100% - 96px);
   }
 }
 .sleep-menu[hidden] { display: none; }
