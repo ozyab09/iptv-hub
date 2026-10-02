@@ -81,12 +81,13 @@ function makePlayer(h: HlsLike | null): QualityPlayerAdapter & { setLevelCalls: 
   };
 }
 
-function makeUi(h: HlsLike | null) {
+function makeUi(h: HlsLike | null, isRecordingPlayback = () => false) {
   const nodes = makeNodes();
   const player = makePlayer(h);
   const ui = createQualityMenu({
     player,
     nodes,
+    isRecordingPlayback,
     videoSize: () => ({ width: 1920, height: 1080 }),
     createButton: () => el("button"),
   });
@@ -94,6 +95,24 @@ function makeUi(h: HlsLike | null) {
 }
 
 describe("createQualityMenu: hls есть", () => {
+  it("не включает качество записи после событий HLS и восстанавливает его для эфира", () => {
+    let recording = false;
+    const { ui, nodes, player } = makeUi(hls, () => recording);
+    ui.refreshQualityUi();
+    const staleItem = nodes.qualityMenu.children[1] as HTMLButtonElement;
+    recording = true;
+    nodes.qualityMenu.hidden = false;
+    ui.refreshQualityUi();
+    expect(nodes.qualityBtn.disabled).toBe(true);
+    expect((nodes.qualityBtn as unknown as { attrs: Record<string, string> }).attrs["aria-disabled"]).toBe("true");
+    expect(nodes.qualityMenu.hidden).toBe(true);
+    staleItem.click();
+    expect(player.setLevelCalls).toEqual([]);
+    recording = false;
+    ui.refreshQualityUi();
+    expect(nodes.qualityBtn.disabled).toBe(false);
+    expect((nodes.qualityBtn as unknown as { attrs: Record<string, string> }).attrs["aria-disabled"]).toBe("false");
+  });
   it("кнопка активна, лейбл Auto с текущим тиром", () => {
     const { ui, nodes } = makeUi(hls);
     ui.refreshQualityUi();
