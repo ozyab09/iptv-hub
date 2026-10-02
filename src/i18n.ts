@@ -2,6 +2,7 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "zap.outOfRange": "Нет канала с таким номером в текущем списке",
   "schedule.title": "Запись по расписанию",
   "schedule.note": "Работает только при открытом приложении. Повторы идут по местному времени выбранного слота. Одновременно записывается один слот; просмотр и ручная запись не переключаются.",
   "schedule.start": "Начало",
@@ -205,6 +206,7 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "zap.outOfRange": "No channel with this number in the current list",
   "schedule.title": "Scheduled recording",
   "schedule.note": "Requires the app to stay open. Repeats use the local time of the selected slot. One scheduled slot records at a time; viewing and manual recording stay unchanged.",
   "schedule.start": "Start",
