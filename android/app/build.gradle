@@ -2,10 +2,10 @@ plugins { id 'com.android.application' version '8.6.1' }
 def versionProps = new Properties()
 rootProject.file('../version.properties').withInputStream { versionProps.load(it) }
 android {
-    namespace 'com.izzy.twa'
+    namespace 'io.github.ozyab09.iptvhub'
     compileSdk 35
     defaultConfig {
-        applicationId 'com.izzy.twa'
+        applicationId 'io.github.ozyab09.iptvhub'
         minSdk 24
         targetSdk 35
         versionName versionProps.getProperty('versionName')
@@ -21,4 +21,11 @@ android {
     }
     buildFeatures { buildConfig true }
 }
-dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0' }
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+    // WindowCompat/WindowInsetsControllerCompat для edge-to-edge в MainActivity.
+    implementation 'androidx.core:core:1.13.1'
+    // CustomTabsCallback явно: MainActivity переопределяет getCustomTabsCallback(),
+    // а у ABH это транзитивная зависимость (не api) — не полагаемся на неё.
+    implementation 'androidx.browser:browser:1.5.0'
+}
