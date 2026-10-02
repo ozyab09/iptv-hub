@@ -38,6 +38,6 @@ describe("настройки плеера", () => {
   });
   it("передаёт увеличенный целевой буфер в HLS без таймаута диагностики", () => {
     expect(playerHlsConfig({ maxBufferLength: 300, lowLatencyMode: true, diagnosticsTimeoutMs: 20000 }))
-      .toEqual({ enableWorker: true, maxBufferLength: 300, lowLatencyMode: true });
+      .toEqual({ enableWorker: true, maxBufferLength: 300, lowLatencyMode: true, backBufferLength: 600 });
   });
 });

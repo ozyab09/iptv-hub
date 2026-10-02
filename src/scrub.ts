@@ -46,6 +46,23 @@ export function isBehindLive(
   return behindLiveSeconds(currentTime, liveEdge) > toleranceSec;
 }
 
+/** Цель перемотки только внутри реально загруженных диапазонов, без дыр. */
+export function bufferedSeekTarget(
+  current: number,
+  delta: number,
+  ranges: ReadonlyArray<{ start: number; end: number }>,
+): number | null {
+  if (!Number.isFinite(current) || !Number.isFinite(delta)) return null;
+  const desired = current + delta;
+  let target: number | null = null;
+  for (const { start, end } of ranges) {
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    const candidate = Math.max(start, Math.min(desired, Math.max(start, end - 0.1)));
+    if (target === null || Math.abs(candidate - desired) < Math.abs(target - desired)) target = candidate;
+  }
+  return target;
+}
+
 /** Время в 24-часовом формате для краёв полосы. */
 export function clock(ms: number): string {
   if (!Number.isFinite(ms)) return "";
