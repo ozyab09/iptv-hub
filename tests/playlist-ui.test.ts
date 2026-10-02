@@ -13,6 +13,7 @@ import {
 } from "../src/playlist-ui";
 import { t } from "../src/i18n";
 import { PLAYLISTS_KEY, type Playlist, type PlaylistsState } from "../src/playlists";
+import { xtreamApiUrl, xtreamEpgUrl, readXtreamUrl } from "../src/xtream";
 
 // ---------- Фейковые DOM-узлы ----------
 
@@ -195,6 +196,7 @@ function makeDeps(state: PlaylistsState, lang: () => "ru" | "en" = () => "ru") {
     errors: [] as string[],
     settingsRenders: 0,
     icons: [] as [HTMLElement, string][],
+    changes: [] as PlaylistsState[],
   };
   const deps: PlaylistUiDeps = {
     nodes,
@@ -209,6 +211,7 @@ function makeDeps(state: PlaylistsState, lang: () => "ru" | "en" = () => "ru") {
     showPlayer: () => void calls.showPlayer++,
     activatePlaylist: (id) => calls.activated.push(id),
     renderSettingsMode: () => void calls.settingsRenders++,
+    stateChanged: (next) => calls.changes.push(next),
   };
   const ui = createPlaylistUi(deps);
   ui.sync(state);
@@ -327,6 +330,38 @@ describe("createPlaylistUi: редактирование", () => {
     form.submit();
     expect(ui.getState().items[0]!.name).toBe("Первый");
   });
+
+  it("Xtream: пароль скрыт, изменение обновляет API и XMLTV и активирует источник", () => {
+    const source = { host: "https://provider.test", username: "user", password: "secret" };
+    const { ui, nodes, calls } = makeDeps({ items: [{ ...plA, playlistUrl: xtreamApiUrl(source, "get_live_streams"), epgUrl: xtreamEpgUrl(source) }], activeId: "a" });
+    ui.renderManager();
+    const { form, inputs } = openEdit(nodes);
+    expect(inputs[3]!.type).toBe("password");
+    expect(inputs[4]!.value).toBe("");
+    inputs[3]!.value = "updated";
+    form.submit();
+    expect(readXtreamUrl(ui.getState().items[0]!.playlistUrl)?.password).toBe("updated");
+    expect(ui.getState().items[0]!.epgUrl).toBe(xtreamEpgUrl({ ...source, password: "updated" }));
+    expect(calls.activated).toEqual(["a"]);
+    expect(calls.changes).toEqual([ui.getState()]);
+  });
+
+  it("Xtream: HTTP-сервер и HTTP-EPG отклоняются без сохранения", () => {
+    const source = { host: "https://provider.test", username: "user", password: "secret" };
+    const state = { items: [{ ...plA, playlistUrl: xtreamApiUrl(source, "get_live_streams"), epgUrl: xtreamEpgUrl(source) }], activeId: "a" };
+    const { ui, nodes, calls } = makeDeps(state);
+    ui.renderManager();
+    const { form, inputs } = openEdit(nodes);
+    inputs[1]!.value = "http://provider.test";
+    form.submit();
+    inputs[1]!.value = source.host;
+    inputs[4]!.value = "http://provider.test/epg.xml";
+    form.submit();
+    expect(calls.errors).toEqual([t("error.xtreamInput", "ru"), t("error.xtreamInput", "ru")]);
+    expect(ui.getState()).toEqual(state);
+    expect(calls.activated).toEqual([]);
+    expect(calls.changes).toEqual([]);
+  });
 });
 
 describe("createPlaylistUi: удаление", () => {
@@ -404,6 +439,7 @@ describe("createPlaylistUi: renderSwitcher", () => {
       showPlayer: () => undefined,
       activatePlaylist: () => undefined,
       renderSettingsMode: () => undefined,
+      stateChanged: () => undefined,
     });
     ui.sync(stateAB);
     ui.renderSwitcher();

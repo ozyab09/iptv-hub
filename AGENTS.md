@@ -42,7 +42,7 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts` —
@@ -298,6 +298,17 @@ HLS  ─→ FRAG_LOADED ─→ segment-recorder ─→ OPFS/память ─→ 
 - `NowNext { now, next }`
 
 ### Контракты данных
+
+**Xtream Codes (#173):** `xtream.ts` проверяет HTTPS host/username/password,
+строит `player_api.php?action=get_live_streams|get_live_categories` и `xmltv.php`.
+API-ссылка хранится в существующем `playlistUrl`; формат localStorage/backup
+не меняется, JSON содержит данные доступа. Транспорт использует внедрённый fetch,
+чистый адаптер преобразует live-ответы через общий M3U-парсер. `epg_channel_id`
+становится tvg-id; архив — `tv_archive`/`tv_archive_duration`, максимум 3 дня,
+HLS `timeshift` с UTC `{start_utc}` и `{duration_minutes}`. HTTP-логотипы не грузятся.
+UI редактирует логин/пароль отдельно (password input), синхронизирует состояние
+с main через `stateChanged` и перезагружает активный источник после изменения.
+Только live: VOD/series не запрашиваются. HTTPS и CORS провайдера обязательны.
 
 **Зеркала (#176):** `Channel.mirrors?: string[]` содержит дополнительные URL;
 `url` остаётся основным идентификатором избранного, recents и overrides.

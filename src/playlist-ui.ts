@@ -19,6 +19,7 @@ import { removeLocalPlaylist, type LocalFs } from "./local-playlist";
 import { channelsWord } from "./views";
 import { menuItemClass } from "./ui-classes";
 import { t, type Language, type TranslationKey } from "./i18n";
+import { readXtreamUrl, validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtream";
 
 type KV = import("./playlists").KV;
 /** Откуда взять OPFS для удаления содержимого локального плейлиста. */
@@ -55,6 +56,8 @@ export interface PlaylistUiDeps {
   activatePlaylist(id: string): void;
   /** Вид настроек (первый запуск/настройки) зависит от числа плейлистов. */
   renderSettingsMode(): void;
+  /** Синхронизировать владельца состояния после редактирования/удаления. */
+  stateChanged(state: PlaylistsState): void;
   /** Текущий язык интерфейса — для всех подписей и window.confirm. */
   language(): Language;
   /** Вставить иконку в кнопку (в браузере — setIcon из main.ts). */
@@ -159,8 +162,12 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
           return input;
         };
         const nameIn = mk("playlist.name", p.name);
-        const urlIn = mk("playlist.url", p.playlistUrl, "url");
-        const epgIn = mk("playlist.epgOptional", p.epgUrl ?? "", "url");
+        const source = readXtreamUrl(p.playlistUrl);
+        const urlIn = source ? null : mk("playlist.url", p.playlistUrl, "url");
+        const hostIn = source ? mk("playlist.xtreamHost", source.host, "url") : null;
+        const userIn = source ? mk("playlist.xtreamUser", source.username) : null;
+        const passwordIn = source ? mk("playlist.xtreamPassword", source.password, "password") : null;
+        const epgIn = mk("playlist.epgOptional", source && p.epgUrl === xtreamEpgUrl(source) ? "" : p.epgUrl ?? "", "url");
         const btns = document.createElement("div");
         btns.className = "pl-edit-actions";
         const save = deps.createButton();
@@ -182,8 +189,17 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
         form.addEventListener("submit", (e) => {
           e.preventDefault();
           const newName = nameIn.value.trim();
-          const newUrl = urlIn.value.trim();
-          const newEpg = epgIn.value.trim();
+          let newUrl = urlIn?.value.trim() ?? "";
+          let newEpg = epgIn.value.trim();
+          if (source) {
+            const updated = validateXtream({ host: hostIn!.value, username: userIn!.value, password: passwordIn!.value });
+            if (!updated || (newEpg && !newEpg.startsWith("https://"))) {
+              deps.showSetupError(t("error.xtreamInput", lang()));
+              return;
+            }
+            newUrl = xtreamApiUrl(updated, "get_live_streams");
+            newEpg = newEpg || xtreamEpgUrl(updated);
+          }
           if (!/^https?:\/\//.test(newUrl)) {
             deps.showSetupError(t("error.url", lang()));
             return;
@@ -194,9 +210,11 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
             epgUrl: newEpg || null,
           });
           savePlaylists(storage, state);
+          deps.stateChanged(state);
           deps.showSetupError("");
           renderManager();
           renderSwitcher();
+          if (source && active) deps.activatePlaylist(p.id);
         });
       });
 
@@ -218,6 +236,7 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
         }
         state = removePlaylist(state, p.id);
         savePlaylists(storage, state);
+        deps.stateChanged(state);
         renderManager();
         renderSwitcher();
         deps.renderSettingsMode();
