@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   channelsForView,
+  filterVisibleGroups,
   channelsWord,
   groupDigits,
   DEFAULT_VIEW,
@@ -31,6 +32,25 @@ const a = ch("Первый", "http://a");
 const b = ch("Второй", "http://b");
 const c = ch("Третий", "http://c");
 const all = [a, b, c];
+
+describe("hidden groups", () => {
+  const channels = [ch("News", "a", "News"), ch("Sports", "b", "Sports"), ch("News 2", "c", "News")];
+  it("filters whole groups without modifying channel metadata or order", () => {
+    expect(filterVisibleGroups(channels, new Set(["News"]))).toEqual([channels[1]]);
+    expect(filterVisibleGroups(channels, new Set())).toEqual(channels);
+    expect(channels).toHaveLength(3);
+  });
+  it("removes hidden favorites and recents before selecting a section", () => {
+    const visible = filterVisibleGroups(channels, new Set(["News"]));
+    for (const view of ["channels", "favorites", "recents"] as const) {
+      expect(channelsForView(view, visible, new Set(["a", "b", "c"]), ["c", "a", "b"])).toEqual([channels[1]]);
+    }
+  });
+  it("supports hiding all groups, exact names and unknown groups", () => {
+    expect(filterVisibleGroups(channels, new Set(["News", "Sports"]))).toEqual([]);
+    expect(filterVisibleGroups(channels, new Set(["news", "Unknown"]))).toEqual(channels);
+  });
+});
 
 describe("состав разделов", () => {
   it("пять разделов в порядке дизайн-системы", () => {

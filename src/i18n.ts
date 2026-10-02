@@ -2,6 +2,14 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "groups.title": "Группы каналов",
+  "groups.note": "Выключите группу, чтобы скрыть её каналы. Стрелки меняют порядок категорий текущего плейлиста. Избранное и записи сохраняются.",
+  "groups.showAll": "Показать все",
+  "groups.resetOrder": "Исходный порядок",
+  "groups.visible": "Показывать {group}",
+  "groups.up": "Переместить {group} выше",
+  "groups.down": "Переместить {group} ниже",
+  "groups.hidden": "Группа этого канала скрыта в настройках",
   "zap.outOfRange": "Нет канала с таким номером в текущем списке",
   "schedule.title": "Запись по расписанию",
   "schedule.note": "Работает только при открытом приложении. Повторы идут по местному времени выбранного слота. Одновременно записывается один слот; просмотр и ручная запись не переключаются.",
@@ -206,6 +214,14 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "groups.title": "Channel groups",
+  "groups.note": "Turn a group off to hide its channels. Arrows change category order for the current playlist. Favorites and recordings are kept.",
+  "groups.showAll": "Show all",
+  "groups.resetOrder": "Original order",
+  "groups.visible": "Show {group}",
+  "groups.up": "Move {group} up",
+  "groups.down": "Move {group} down",
+  "groups.hidden": "This channel's group is hidden in settings",
   "zap.outOfRange": "No channel with this number in the current list",
   "schedule.title": "Scheduled recording",
   "schedule.note": "Requires the app to stay open. Repeats use the local time of the selected slot. One scheduled slot records at a time; viewing and manual recording stay unchanged.",

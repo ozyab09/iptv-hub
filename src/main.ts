@@ -1,11 +1,14 @@
 import "./style.css";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
+import { createGroupPreferencesUi } from "./group-preferences-ui";
+import { groupPreferencesKey, parseGroupPreferences, serializeGroupPreferences, orderedGroups, moveGroup, type GroupPreferences } from "./group-preferences";
 import { appendZapDigit, zapChannelIndex, ZAP_DELAY_MS, type NumericZap } from "./numeric-zap";
 import { LANGUAGE_KEY, resolveLanguage, t, translateMessage, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
 import {
   channelsForView,
+  filterVisibleGroups,
   emptyMessage,
   groupDigits,
   parseView,
@@ -349,6 +352,35 @@ const btnTheme = $<HTMLButtonElement>("btn-theme");
 // ---------- Состояние ----------
 let snapshot: PlaylistSnapshot | null = null;
 let channelOverrides: ChannelOverrides = new Map();
+let groupPreferences: GroupPreferences = parseGroupPreferences(null);
+
+function displayChannels(): Channel[] {
+  return filterVisibleGroups(applyChannelOverrides(snapshot?.channels ?? [], channelOverrides), groupPreferences.hidden);
+}
+
+function renderGroupSettings(): void {
+  groupPreferencesUi.render(snapshot?.categories ?? [], groupPreferences);
+}
+
+function refreshGroupPreferences(previousHidden: ReadonlySet<string>): void {
+  playRequest++;
+  pinDialog.cancel();
+  if (activeCategory && groupPreferences.hidden.has(activeCategory)) activeCategory = null;
+  const newlyHidden = [...groupPreferences.hidden].some((group) => !previousHidden.has(group));
+  if ((multiViewUi.isOpen && newlyHidden) || (lastPlayed && groupPreferences.hidden.has(lastPlayed.group))) btnClosePlayer.click();
+  renderGroupSettings();
+  renderCategories();
+  renderChannels();
+  renderPlaylistSwitcher();
+}
+
+function saveGroupPreferences(next: GroupPreferences): void {
+  if (!plState.activeId) return;
+  const previousHidden = groupPreferences.hidden;
+  groupPreferences = next;
+  try { localStorage.setItem(groupPreferencesKey(plState.activeId), serializeGroupPreferences(next)); } catch { /* текущая сессия */ }
+  refreshGroupPreferences(previousHidden);
+}
 let epg: Map<string, import("./types").EpgProgramme[]> | null = null;
 let activeCategory: string | null = null;
 let plState: PlaylistsState = loadPlaylists(
@@ -408,7 +440,7 @@ const playlistUi = createPlaylistUi({
   nodes: playlistUiNodes,
   storage: typeof localStorage !== "undefined" ? localStorage : null,
   // Счётчик как в списке каналов: с учётом скрытых каналов (#206)
-  channelCount: () => (snapshot ? applyChannelOverrides(snapshot.channels, channelOverrides).length : null),
+  channelCount: () => (snapshot ? displayChannels().length : null),
   createButton: () => document.createElement("button"),
   language: () => currentLanguage,
   icon: setIcon,
@@ -420,6 +452,20 @@ const playlistUi = createPlaylistUi({
   activatePlaylist,
   renderSettingsMode,
   stateChanged: (next) => { plState = next; },
+});
+
+const groupPreferencesUi = createGroupPreferencesUi({
+  list: $("group-preferences"), showAll: $<HTMLButtonElement>("groups-show-all"), resetOrder: $<HTMLButtonElement>("groups-reset-order"),
+}, {
+  language: () => currentLanguage,
+  setVisible: (group, visible) => {
+    const hidden = new Set(groupPreferences.hidden);
+    if (visible) hidden.delete(group); else hidden.add(group);
+    saveGroupPreferences({ ...groupPreferences, hidden });
+  },
+  move: (group, step) => saveGroupPreferences({ ...groupPreferences, order: moveGroup(snapshot?.categories ?? [], groupPreferences.order, group, step) }),
+  showAll: () => saveGroupPreferences({ ...groupPreferences, hidden: new Set() }),
+  resetOrder: () => saveGroupPreferences({ ...groupPreferences, order: [] }),
 });
 
 // ---------- Транспорт загрузки плейлистов — playlist-transport.ts (issue #123) ----------
@@ -603,6 +649,7 @@ function applyLanguage(): void {
   // Подписи менеджера плейлистов обновляет playlist-ui.ts (editing-строки
   // не пересоздаются — незавершённое редактирование не теряется).
   playlistUi.applyLanguage();
+  renderGroupSettings();
   renderPlaylistSwitcher();
   renderSettingsMode();
   renderNav();
@@ -792,6 +839,7 @@ function setView(view: View, persist = true): void {
     renderThemeSeg();
     renderRefreshSeg();
     renderPinSettings();
+    renderGroupSettings();
   }
   renderRecordings();
   categoriesNav.hidden = !showsCategories(view);
@@ -872,6 +920,7 @@ pinRemove.addEventListener("click", async () => {
 });
 
 async function selectCategory(value: string | null): Promise<void> {
+  if (value !== null && groupPreferences.hidden.has(value)) return;
   const id = plState.activeId;
   if (!await authorizeGroup(value) || plState.activeId !== id) return;
   activeCategory = value;
@@ -935,7 +984,7 @@ $("channel-overrides-reset").addEventListener("click", () => {
 
 function renderCategories(): void {
   if (!snapshot) return;
-  const channels = applyChannelOverrides(snapshot.channels, channelOverrides);
+  const channels = displayChannels();
   categoriesNav.textContent = "";
   const mk = (label: string, value: string | null, count: number) => {
     const b = document.createElement("button");
@@ -951,7 +1000,7 @@ function renderCategories(): void {
   };
   const entries: Array<[string, string | null, number]> = [
     ["Все", null, channels.length],
-    ...snapshot.categories.map(
+    ...orderedGroups(snapshot.categories, groupPreferences.order).filter((g) => !groupPreferences.hidden.has(g)).map(
       (g) =>
         [g, g, channels.filter((c) => c.group === g).length] as [
           string,
@@ -1056,7 +1105,7 @@ function renderChannels(resetScroll = true): void {
   if (resetScroll) cancelNumericZap();
   if (!snapshot) return;
   const q = searchInput.value.trim().toLowerCase();
-  const inView = channelsForView(activeView, applyChannelOverrides(snapshot.channels, channelOverrides), favorites, recents);
+  const inView = channelsForView(activeView, displayChannels(), favorites, recents);
   const list = inView.filter((c) => {
     if (activeCategory && c.group !== activeCategory) return false;
     if (!q) return true;
@@ -1261,6 +1310,7 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   const request = ++playRequest;
   const id = plState.activeId;
   c = applyChannelOverrides([snapshot?.channels.find((original) => original.url === c.url) ?? c], channelOverrides, true)[0]!;
+  if (groupPreferences.hidden.has(c.group)) { showToast(tr("groups.hidden")); return false; }
   if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
   if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
@@ -2720,7 +2770,7 @@ function renderContinue(): void {
     activeCategory === null &&
     snapshot !== null;
   const items = show
-    ? channelsForView("recents", applyChannelOverrides(snapshot!.channels, channelOverrides), favorites, recents).slice(0, 4)
+    ? channelsForView("recents", displayChannels(), favorites, recents).slice(0, 4)
     : [];
   continueBlock.hidden = items.length === 0;
   continueRow.textContent = "";
@@ -3047,6 +3097,7 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
     if (interesting || !silentOnNoChange) {
       if (interesting) {
         snapshot = fresh;
+        renderGroupSettings();
         renderCategories();
         renderChannels();
         renderPlaylistSwitcher();
@@ -3163,6 +3214,11 @@ function activatePlaylist(id: string): void {
 // storage-событие приходит ТОЛЬКО в табы, которые не писали ключ сами —
 // эха нет. Политика last-write-wins: состояние просто перечитывается.
 window.addEventListener("storage", (e) => {
+  if (plState.activeId && (e.key === null || e.key === groupPreferencesKey(plState.activeId))) {
+    const previousHidden = groupPreferences.hidden;
+    groupPreferences = parseGroupPreferences(localStorage.getItem(groupPreferencesKey(plState.activeId)));
+    refreshGroupPreferences(previousHidden);
+  }
   if (plState.activeId && (e.key === null || e.key === parentalPinsKey(plState.activeId))) {
     parentalPins = parseParentalPins(localStorage.getItem(parentalPinsKey(plState.activeId)));
     // Изменение защиты в другой вкладке отменяет ранее разрешённый просмотр.
@@ -3414,6 +3470,8 @@ function describeFetchFailure(url: string, reason?: string): string {
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   cancelNumericZap();
+  try { groupPreferences = parseGroupPreferences(plState.activeId ? localStorage.getItem(groupPreferencesKey(plState.activeId)) : null); }
+  catch { groupPreferences = parseGroupPreferences(null); }
   playRequest++;
   pinDialog.cancel();
   activeCategory = null;
@@ -3431,6 +3489,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   setWatching(false);
   lastPlayed = null;
   snapshot = null;
+  renderGroupSettings();
   renderPinSettings();
   epg = null;
   showPlayer();
@@ -3450,6 +3509,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   renderChannels();
   renderPinSettings();
   renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
+  renderGroupSettings();
   // Скрытые http-каналы — не потеря каналов при загрузке, а фильтр.
   // Извещаем уведомлением с колокольчиком сверху справа, ровно один раз
   // на плейлист (src/http-notice.ts): длинный текст в трёхсекундном тосте
