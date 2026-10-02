@@ -30,10 +30,12 @@ CI installs Gradle directly; the repository has no complete Gradle wrapper.
 
 ## Versions
 
-Keep `package.json` version and `android/version.properties` versionName equal.
-Increment the integer versionCode for each APK update. `release-metadata.mjs`
-validates both and writes `public/version.json`. A `v*` tag must equal the package
-version. Published metadata uses `{versionCode: 1001, versionName: "0.2.6"}`.
+`package.json` version and `android/version.properties` versionName are always
+equal — CI keeps them in sync. `release-metadata.mjs` validates both and writes
+`public/version.json`. A `v*` tag must equal the package version. The version is
+not edited by hand: CI derives the next patch from the latest git tag,
+synchronizes the three files, commits them with `[skip ci]`, tags that commit
+and builds the release.
 
 ## GitHub Actions
 
