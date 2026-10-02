@@ -1,98 +1,134 @@
 package io.github.ozyab09.iptvhub;
 
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.browser.customtabs.CustomTabsCallback;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
-
-import com.google.androidbrowserhelper.trusted.LauncherActivity;
+import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewClientCompat;
 
 /**
- * TWA-активити IPTV Hub.
+ * IPTV Hub как самостоятельное приложение: web-сборка зашита в APK
+ * (assets/www) и открывается локально, без обращения к GitHub Pages.
  *
- * <p>Библиотека androidbrowserhelper сама проверяет Digital Asset Links и
- * открывает сайт без панели Chrome. Здесь добавлено то, из-за чего окно
- * выглядело веб-страницей: системные бары и защита от падения на quality
- * enforcement.
+ * <p>Раньше это была TWA: она грузила https://ozyab09.github.io/iptv-hub/ и без
+ * сети показывала пустой экран. Теперь интерфейс, плейлист и настройки
+ * доступны офлайн; сеть нужна только самому видеопотоку провайдера.
  *
- * <ul>
- *   <li>edge-to-edge: контент уходит под системные бары, как в нативных
- *       плеерах (сайт учитывает вырезы через viewport-fit=cover и
- *       env(safe-area-inset-*));</li>
- *   <li>иконки баров всегда светлые: кадр видео чёрный в любой теме;</li>
- *   <li>нижний отступ навигации добавляется как padding контейнера — иначе
- *       панель вкладок сайта оказалась бы под кнопками системы;</li>
- *   <li>оформление переприменяется в onResume: система сбрасывает его после
- *       возврата из фона;</li>
- *   <li>quality enforcement логируется, а не роняет приложение: сообщение
- *       quality_enforcement.crash приходит, если Digital Asset Links не
- *       подтвердились или главный документ отдал 404/5xx. Штатный
- *       QualityEnforcer бросает RuntimeException, и приложение падало бы на
- *       запуске; полный экран всё равно зависит от публикации
- *       assetlinks.json в корне origin.</li>
- * </ul>
+ * <p>Origin локальный (appassets.androidplatform.net) и https — значит
+ * сохраняются localStorage (плейлисты, избранное, PIN), OPFS (записи),
+ * MediaRecorder, Wake Lock и PiP. Digital Asset Links для такого origin не
+ * нужны, панели браузера нет по определению.
  */
-public class MainActivity extends LauncherActivity {
+public class MainActivity extends AppCompatActivity {
 
-    private static final String TAG = "IptvHubTwa";
+    /** Домен локального origin: тот же, что отдаёт WebViewAssetLoader. */
+    private static final String LOCAL_HOST = "appassets.androidplatform.net";
+    private static final String START_URL = "https://" + LOCAL_HOST + "/www/index.html";
+
+    private WebView webView;
 
     @Override
-    protected CustomTabsCallback getCustomTabsCallback() {
-        return new CustomTabsCallback() {
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        webView = new WebView(this);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setUseWideViewPort(true);
+        // Ассеты читаются только через WebViewAssetLoader ниже.
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
+
+        final WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/www/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
+
+        webView.setWebViewClient(new WebViewClientCompat() {
             @Override
-            public void extraCallback(@NonNull String callbackName, @Nullable Bundle args) {
-                if (callbackName.startsWith("quality_enforcement")) {
-                    String reason = args == null ? "" : String.valueOf(args.get("crash_reason"));
-                    Log.w(TAG, "quality enforcement: " + callbackName + " " + reason);
-                    return;
-                }
-                Log.d(TAG, "extraCallback: " + callbackName);
+            public WebResourceResponse shouldInterceptRequest(
+                    @NonNull WebView view, @NonNull WebResourceRequest request) {
+                return assetLoader.shouldInterceptRequest(request.getUrl());
             }
-        };
+
+            @Override
+            public boolean shouldOverrideUrlLoading(
+                    @NonNull WebView view, @NonNull WebResourceRequest request) {
+                return openExternally(request.getUrl());
+            }
+        });
+
+        FrameLayout root = new FrameLayout(this);
+        root.addView(webView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
+
+        applyEdgeToEdge();
+        reserveNavigationInset(root);
+        webView.loadUrl(START_URL);
+    }
+
+    /**
+     * Всё, что не наш локальный origin, открываем в системном браузере: внутри
+     * приложения нет ни адресной строки, ни внешних страниц.
+     */
+    private boolean openExternally(@NonNull Uri uri) {
+        if (LOCAL_HOST.equals(uri.getHost())) return false;
+        String scheme = uri.getScheme();
+        if (scheme == null || !(scheme.equals("http") || scheme.equals("https"))) return true;
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, uri));
+        } catch (ActivityNotFoundException ignored) {
+            // Браузера нет — нажатие просто не имеет последствий.
+        }
+        return true;
     }
 
     private void applyEdgeToEdge() {
-        View decor = getWindow().getDecorView();
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-
-        // Иконки баров всегда светлые: кадр плеера чёрный в любой теме
-        // приложения. Сеттеры помечены deprecated в новых core, но в 1.13.1
-        // это единственный переносимый способ и он полностью поддерживается.
         WindowInsetsControllerCompat controller =
-                WindowCompat.getInsetsController(getWindow(), decor);
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        // Иконки баров всегда светлые: кадр плеера тёмный в любой теме.
         controller.setAppearanceLightStatusBars(false);
         controller.setAppearanceLightNavigationBars(false);
         controller.show(WindowInsetsCompat.Type.systemBars());
     }
 
-    /**
-     * Контент TWA живёт внутри {@code android.R.id.content}. Паддим его
-     * снизу на высоту навигации: сайт уже резервирует место под статус-бар
-     * своей вёрсткой, но у навигационной панели нет соответствующего
-     * CSS-отступа в ландшафте.
-     */
-    private void reserveNavigationInset() {
-        View content = findViewById(android.R.id.content);
-        ViewCompat.setOnApplyWindowInsetsListener(content, (view, insets) -> {
+    /** Сайт уже резервирует место под статус-бар; снизу паддим под навигацию. */
+    private void reserveNavigationInset(@NonNull View root) {
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             view.setPadding(0, 0, 0, bars.bottom);
             return insets;
         });
-        ViewCompat.requestApplyInsets(content);
+        ViewCompat.requestApplyInsets(root);
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        applyEdgeToEdge();
-        reserveNavigationInset();
+    protected void onDestroy() {
+        if (webView != null) {
+            webView.loadUrl("about:blank");
+            webView.destroy();
+            webView = null;
+        }
+        super.onDestroy();
     }
 }

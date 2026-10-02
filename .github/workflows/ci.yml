@@ -141,6 +141,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+      # Web-сборка зашивается в APK, значит нужны node и зависимости.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -153,7 +159,18 @@ jobs:
           packages: 'platform-tools'
       - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - run: node android/scripts/release-metadata.mjs
+      # Web-сборка зашивается в APK: приложение запускается локально, без Pages.
+      - run: npm run build
+        env:
+          APP_VERSION: ${{ needs.release-check.outputs.version }}
+      - run: node android/scripts/bundle-web.mjs
       - run: gradle -p android/app clean assembleRelease --no-daemon
+      - name: Проверить, что ассеты попали в APK
+        run: |
+          set -euo pipefail
+          unzip -l android/app/build/outputs/apk/release/*-unsigned.apk | grep -q "assets/www/index.html"
+          echo "assets/www/index.html на месте"
+
       - name: Verify signing and Asset Links with a temporary key
         run: |
           node android/scripts/test-assetlinks.mjs
@@ -226,6 +243,8 @@ jobs:
       - run: npm run build
         env:
           APP_VERSION: ${{ needs.release-check.outputs.version }}
+      # Web-сборка зашивается в APK: релизный APK тоже работает без сети.
+      - run: node android/scripts/bundle-web.mjs
       # Тот же include-hidden-files, что и в build: релизный деплой обязан
       # опубликовать .well-known/assetlinks.json с отпечатком keystore.
       - uses: actions/upload-pages-artifact@v5
