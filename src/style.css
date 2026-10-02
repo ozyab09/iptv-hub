@@ -992,7 +992,8 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   flex-direction: column;
   gap: var(--space-4);
 }
-#video-stage { width: 100%; aspect-ratio: 16 / 9; flex: none; }
+#video-stage { width: 100%; aspect-ratio: 16 / 9; flex: none; container: player-frame / inline-size; overflow: visible; }
+.video > video { border-radius: inherit; }
 /* Группа «кадр + прогресс + программа» — единственный центрируемый ребёнок
    плеера: воздух делится вокруг группы, а не между детьми по отдельности,
    иначе программа отрывается от кадра (#86). В мини-плеере растворяется
@@ -1062,20 +1063,22 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 }
 .live.on-video::before { background: #ff4fa3; }
 
-/* Сверху небольшой отступ: транспортная дека перенесена в свой ряд (#89) */
-.video .bottom { gap: 6px; padding: var(--space-2) var(--space-3); }
+/* Нижняя панель: контролы над прогрессом, число рядов зависит от кадра. */
+.video .bottom { gap: 6px; padding: 0 var(--space-3) var(--space-2); }
+.video .bottom .video-actions { order: -1; }
 .scrub-row { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-1); }
 .scrub-row .scrub { flex: 1; }
 .scrub-row .num:empty { display: none; }
 /* При нехватке ширины flex сжимал всё, кроме инпута: у range сильный
    min-content, и ползунок наезжал на правую группу (#93). min-width: 0
    разрешает ему сжиматься, clamp держит разумный минимум. */
-.video-actions { display: flex; align-items: center; gap: 2px; min-height: 44px; min-width: 0; }
-.video .volume { display: flex; align-items: center; gap: var(--space-1); min-width: 0; flex: 0 1 auto; }
+.video-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px; min-height: 44px; min-width: 0; }
+.video .center { position: relative; inset: auto; grid-column: 1 / -1; grid-row: 1; min-width: 0; }
+.video .volume { display: flex; align-items: center; gap: var(--space-1); min-width: 0; flex: 0 1 auto; grid-column: 1; grid-row: 2; }
 /* Сжимаемый ползунок: без flex-shrink при узком мини-плеере он наезжал
    на правую группу (issue #155); clamp держит разумный минимум. */
 #volume-slider { width: clamp(36px, 7vw, 72px); min-width: 0; flex: 0 1 auto; accent-color: #fff; }
-.video-actions-right { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; min-width: 0; }
+.video-actions-right { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; min-width: 0; grid-column: 2; grid-row: 2; }
 /* Статус — единственное, что в деке может уступать место: длинная строка
    разрешения/скорости выталкивала правую группу на ползунок (issue #155). */
 .video .player-status { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1118,9 +1121,18 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 
 /* Транспортная дека: все кнопки воспроизведения в одном ряду —
    «как на магнитофоне» (#89): ◀◀ · ◀ · ▶/⏸ · ▶ · ▶▶ · ⏺.
-   Пауза крупнее остальных, запись краснеет при записи. */
-.video .transport { display: inline-flex; align-items: center; gap: var(--space-3); }
-.video .transport .vbtn.big { width: 64px; height: 64px; }
+   Пауза в центре, запись краснеет при записи. */
+.video .transport { display: inline-flex; align-items: center; gap: 2px; }
+.video .transport .vbtn.big { width: 44px; height: 44px; }
+@container player-frame (min-width: 740px) {
+  .video .bottom { padding-top: var(--space-2); }
+  .video-actions { display: flex; }
+  .video .center { flex: 1; min-width: 320px; }
+}
+@container player-frame (max-width: 739px) {
+  /* Меню ниже прогресса: в компактной раскладке верхний ряд занят декой. */
+  .video .quality-menu { bottom: auto; top: calc(100% + 32px); }
+}
 /* Sleep-таймер: бейдж с остатком на кнопке, меню — белым по чёрному
    (контролы на видео всегда светлые на тёмном, в любой теме). */
 .sleep-badge {
@@ -1150,6 +1162,8 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 /* Верх кадра: канал, передача и навигация по каналам.
    Нижний отступ небольшой: транспорт переехал в деку (#89). */
 .video .top { align-items: flex-start; padding: var(--space-4) var(--space-3) var(--space-3); }
+.now-meta { display: flex; align-items: center; gap: 2px; flex: none; }
+.now-meta .player-status { max-width: 120px; }
 .now-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
 .now-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: 13px; line-height: 18px; }
 .now-title { flex: 0 0 auto; max-width: 70%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1201,22 +1215,6 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   }
   .watch .player-bar > #player-stack { width: var(--frame-w); margin-block: auto; }
 
-  /* Все контролы — НАД полосой хода передачи (issue #163): ряд громкости
-     и настроек поднимается над scrub-row, дека — ещё выше, своим рядом.
-     bottom деки = padding(8) + scrub-row(до 18) + gap(6) + actions(44). */
-  .video .bottom .video-actions { order: -1; }
-  .video .center {
-    inset: auto;
-    left: var(--space-3);
-    bottom: calc(var(--space-2) + 68px);
-    justify-content: flex-start;
-    z-index: 2;
-  }
-  .video .transport { gap: 2px; }
-  .video .transport .vbtn,
-  .video .transport .vbtn.big { width: 44px; height: 44px; background: transparent; }
-  .video .transport .vbtn:hover { background: rgba(255, 255, 255, 0.12); }
-
   /* Список сворачивается в колонку логотипов (кнопка в его шапке или C) */
   #app.watch.channel-view.list-collapsed { --list-w: 64px; }
   /* Полное скрытие (кнопка в свёрнутом списке): уходит и рельс сайдбара,
@@ -1265,7 +1263,11 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   .player-bar:not(.open) #video-stage { display: contents; }
   .player-bar:not(.open) #player-stack { display: contents; }
   .player-bar:not(.open) video { width: 72px; height: 40px; border-radius: 8px; flex: none; }
-  .player-bar:not(.open) .bottom,
+  .player-bar:not(.open) .scrub-row,
+  .player-bar:not(.open) .volume,
+  .player-bar:not(.open) .video-actions-right,
+  .player-bar:not(.open) .now-meta,
+  .player-bar:not(.open) #btn-sleep,
   .player-bar:not(.open) #btn-seek-back,
   .player-bar:not(.open) #btn-seek-fwd,
   .player-bar:not(.open) #btn-prev,
@@ -1279,7 +1281,9 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
      растворяются, чтобы порядок задавался здесь, а не разметкой. Цвет —
      темы, а не белый: мини лежит не на видео, а на поверхности. */
   .player-bar:not(.open) .top,
-  .player-bar:not(.open) .top-actions { display: contents; }
+  .player-bar:not(.open) .top-actions,
+  .player-bar:not(.open) .bottom,
+  .player-bar:not(.open) .video-actions { display: contents; }
   .player-bar:not(.open) .now-info { order: 1; padding: 0; color: var(--text); }
   .player-bar:not(.open) .center { order: 2; position: static; inset: auto; gap: 0; }
   .player-bar:not(.open) #btn-close-player { order: 3; color: var(--text); }
@@ -1312,11 +1316,6 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
     border-radius: 0;
   }
 
-  /* Меню качества/дорожек открывается вверх от кнопки и на телефоне не
-     влезает в невысокий кадр: overflow: hidden резал его (#87). На
-     странице плеера кадр без скруглений, и скрытие ему не нужно —
-     разрешаем меню выходить наружу кадра. */
-  .player-bar.open #video-stage { overflow: visible; }
   /* На узком кадре название передачи в одну строку помельче */
   .player-bar.open .now-show { font-size: 16px; line-height: 22px; }
   #btn-expand { display: inline-flex; }
@@ -1329,11 +1328,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   .player-status { display: none; }
 }
 @media (max-width: 479px) {
-  /* Семь кнопок помещаются даже в 320px; нижние 76px занимает панель
-     прогресса и настроек. Дека стоит над ней с зазором 4px (#229). */
-  .player-bar.open .bottom { padding-top: 0; }
-  .player-bar.open .center { inset: auto 0 80px; }
-  .player-bar.open .transport { gap: 2px; }
+  /* Семь кнопок помещаются даже в 320px (#229). */
   .player-bar.open .transport .vbtn,
   .player-bar.open .transport .vbtn.big { width: 40px; height: 40px; }
 }

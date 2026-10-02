@@ -198,12 +198,8 @@ describe("группа плеера и выход меню за кадр (issues
     expect(css).not.toMatch(/\.player-bar[^{]*> \* \{[^}]*margin-block:\s*auto/);
   });
 
-  it("на странице плеера меню качества не режется overflow: hidden кадра", () => {
-    const narrow = css.slice(
-      css.indexOf("/* ---- узкий экран: мини-плеер"),
-      css.indexOf("/* ---- нативный полный экран"),
-    );
-    expect(narrow).toMatch(/\.player-bar\.open #video-stage \{[^}]*overflow:\s*visible;[^}]*\}/);
+  it("меню качества не режется overflow: hidden кадра", () => {
+    expect(css).toMatch(/#video-stage \{[^}]*overflow:\s*visible;[^}]*\}/);
   });
 
   it("в фуллскрине стек растягивается на высоту, кадр — на ширину", () => {

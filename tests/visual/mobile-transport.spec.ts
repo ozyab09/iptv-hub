@@ -35,8 +35,10 @@ for (const width of [320, 390, 480]) {
       expect(transport.y).toBeGreaterThanOrEqual(frame.y);
       const topActions = (await page.locator(".video .top-actions").boundingBox())!;
       expect(topActions.y + topActions.height).toBeLessThanOrEqual(transport.y);
-      const bottom = (await page.locator(".video .bottom").boundingBox())!;
+      const bottom = (await page.locator(".video .volume").boundingBox())!;
       expect(transport.y + transport.height).toBeLessThanOrEqual(bottom.y);
+      const scrub = (await page.locator(".scrub-row").boundingBox())!;
+      expect(transport.y + transport.height).toBeLessThanOrEqual(scrub.y);
       const buttons = page.locator(".transport button");
       await expect(buttons).toHaveCount(7);
       for (const button of await buttons.all()) {

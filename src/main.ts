@@ -2799,9 +2799,9 @@ videoEl.addEventListener("pause", wakeControls);
 videoEl.addEventListener("loadedmetadata", () => refreshPlayerStatus());
 videoEl.addEventListener("durationchange", () => refreshPlayerStatus());
 videoEl.addEventListener("play", wakeControls);
-videoStage.addEventListener("pointerleave", () => {
-  if (!videoEl.paused) videoStage.classList.add("idle");
-});
+// Меню компактного кадра выходит за его границы: после выбора пункта
+// оставляем обычные 3 секунды, чтобы вернуться к кнопке качества (#226).
+videoStage.addEventListener("pointerleave", wakeControls);
 
 /**
  * Узкая ширина (телефон и планшет в портрете): плеер живёт мини-плеером и
