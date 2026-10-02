@@ -1,13 +1,12 @@
-# Android TWA
+# Android application
 
-IPTV Hub opens the PWA in a compatible browser through Android Browser Helper's
-`LauncherActivity`. It does not embed a WebView or inject a JavaScript bridge.
-A valid signing certificate in Asset Links enables trusted fullscreen; otherwise
-the browser may show a Custom Tab toolbar. Device playback still depends on the
-browser and provider's streams.
+IPTV Hub bundles the web build in `assets/www` and opens it in Android WebView
+at `https://appassets.androidplatform.net/www/index.html`. The interface starts
+without GitHub Pages or internet access. Remote playlists, EPG and media streams
+still require a network connection and the provider's CORS support.
 
 Application id and namespace: `io.github.ozyab09.iptvhub`. `MainActivity`
-extends `LauncherActivity` and only adds system-bar handling: edge-to-edge
+extends `AppCompatActivity`, configures WebView and adds system-bar handling: edge-to-edge
 layout, light bar icons, and a bottom navigation inset. Window background,
 status/navigation bar colors and the Android 12+ splash live in
 `res/values/themes.xml` and `res/values-v31/themes.xml`; the adaptive icon
@@ -21,12 +20,26 @@ Use Java 17, Gradle 8.7, Android SDK platform 35 and build-tools 35.0.0.
 The single-module project is `android/app`, with Android Gradle Plugin 8.6.1.
 
 ```sh
+npm run build
+node android/scripts/bundle-web.mjs
 gradle -p android/app clean assembleRelease --no-daemon
 ```
 
 The unsigned APK is in `android/app/build/outputs/apk/release/`.
 Set `ANDROID_HOME` or an ignored `android/app/local.properties` with `sdk.dir`.
 CI installs Gradle directly; the repository has no complete Gradle wrapper.
+Always bundle `dist/` before building the APK. `WebViewAssetLoader` removes the
+registered `/www/` URL prefix; the handler restores `www/` to resolve files inside
+the assets directory. An empty path serves `www/index.html` for the home link.
+
+With a connected Android device, run the real WebView regression tests:
+
+```sh
+gradle -p android/app connectedDebugAndroidTest --no-daemon
+```
+
+They check startup with network loads blocked in WebView, bundled JS/CSS and
+navigation to `/www/`. The debug application has a separate `.debug` package.
 
 ## Versions
 
@@ -41,6 +54,7 @@ release from that same commit.
 ## GitHub Actions
 
 `.github/workflows/ci.yml` builds an unsigned APK for PRs, main and releases.
+It also compiles the device regression tests; running them requires a device.
 It tests signing with a temporary CI key and checks Asset Links against that
 certificate. This test key never signs a published release.
 
@@ -57,24 +71,34 @@ and writes the standard Asset Links array with `target.namespace=android_app`.
 The signed APK is uploaded as artifact `android-signed` and as `iptv-hub.apk`
 on GitHub Releases. Version and Asset Links metadata are saved to `gh-pages`;
 Pages itself remains configured for GitHub Actions and deploys the built `dist/`
-artifact. Later main builds restore this metadata to preserve TWA verification.
+artifact. Later main builds restore this metadata for older TWA installations.
 Release builds stamp the service-worker cache version with the commit hash.
 The `gh-pages` branch is a metadata store, not a separate deployment source.
 
 ## Install and verify
 
-Asset Links must also be served at the origin root:
-`https://ozyab09.github.io/.well-known/assetlinks.json` (HTTP 200, JSON).
-The project Pages path `/iptv-hub/.well-known/assetlinks.json` is insufficient
-for browser verification. Copy the generated file to the root Pages site
-(`ozyab09.github.io` repository), or deploy the app on a custom origin where
-you control this root URL. This workflow does not modify another repository.
-See the [Chrome integration guide](https://developer.chrome.com/docs/android/trusted-web-activity/integration-guide).
-
 Download the signed APK from GitHub Releases and allow installation from the
-chosen download app, or use `adb install -r iptv-hub.apk`. Check fullscreen TWA
-and media playback on a real device. Updates are downloaded manually from
-Releases; automatic APK installation and native update prompts are not implemented.
-The previous WebView/update scaffolding was incomplete and has been removed.
+chosen download app, or use `adb install -r iptv-hub.apk`. Verify startup both
+online and offline on a real device. WebView does not require Chrome or Digital
+Asset Links. Updates are downloaded manually from Releases; automatic APK
+installation and native update prompts are not implemented.
+Older TWA versions use a different storage origin: export playlists/favorites
+to JSON before updating, then import them in the local app. Download recordings
+separately; backup JSON does not include recording files.
 Publishing requires the four signing secrets; a green PR validates compilation
 and temporary-key signing, not release publication or physical-device behavior.
+
+## Diagnose a startup error
+
+Record the installed version and capture logs while opening the app:
+
+```sh
+adb shell dumpsys package io.github.ozyab09.iptvhub
+adb logcat -s chromium WebViewAssetLoader AndroidRuntime
+```
+
+For `ERR_INVALID_RESPONSE`, include the failing URL and any asset-loader error.
+In #257, a real device reported `FileNotFoundException: index.html`: the APK
+contained `www/index.html`, but the handler looked in the assets root.
+Install a release containing the path fix; clearing app data is unnecessary.
+Debug builds enable WebView inspection; release builds keep it disabled.

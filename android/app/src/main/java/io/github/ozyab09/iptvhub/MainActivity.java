@@ -58,8 +58,12 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowContentAccess(false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
 
+        final WebViewAssetLoader.AssetsPathHandler assets =
+                new WebViewAssetLoader.AssetsPathHandler(this);
         final WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
-                .addPathHandler("/www/", new WebViewAssetLoader.AssetsPathHandler(this))
+                // AssetLoader strips /www/; files are stored under assets/www/.
+                .addPathHandler("/www/", path -> assets.handle("www/" +
+                        (path.isEmpty() ? "index.html" : path)))
                 .build();
 
         webView.setWebViewClient(new WebViewClientCompat() {
