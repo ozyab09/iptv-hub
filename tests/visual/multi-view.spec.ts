@@ -124,6 +124,33 @@ test("смена плейлиста закрывает все окна", async (
   })).toBe(true);
 });
 
+test("повторный вход восстанавливает сетку; после смены канала — одно окно (#254)", async ({ page }) => {
+  await openChannels(page, 1440);
+  await fillGrid(page);
+  // Активное окно 2 («Канал 2»), выходим: одиночный плеер возобновляет его.
+  await page.locator(".multi-select").nth(1).click();
+  await page.locator("#multi-exit").click();
+  await expect(page.locator("#now-title")).toHaveText("Канал 2");
+  // Повторный вход: та же сетка из четырёх каналов и то же активное окно.
+  await page.locator("#btn-multi-view").click();
+  await expect.poll(() => page.locator(".multi-grid video").evaluateAll((els) => els.filter((el) => (el as HTMLVideoElement).videoWidth === 160 && !(el as HTMLVideoElement).paused).length)).toBe(4);
+  await expect(page.locator(".multi-select").nth(1)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".multi-select").nth(0)).toContainText("Канал 1");
+  await expect(page.locator(".multi-select").nth(3)).toContainText("Канал 4");
+  await page.locator("#multi-exit").click();
+  await expect(page.locator("#now-title")).toHaveText("Канал 2");
+  // После выхода включён другой канал — вход начинается только с него.
+  await page.locator("#channel-list .channel-card").nth(2).click();
+  await expect(page.locator("#now-title")).toHaveText("Канал 3");
+  await page.locator("#btn-multi-view").click();
+  await expect.poll(() => page.locator(".multi-grid video").evaluateAll((els) => els.filter((el) => (el as HTMLVideoElement).videoWidth === 160 && !(el as HTMLVideoElement).paused).length)).toBe(1);
+  await expect(page.locator(".multi-select").nth(0)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".multi-select").nth(0)).toContainText("Канал 3");
+  await expect(page.locator(".multi-select").nth(1)).toContainText("Выберите канал");
+  await page.locator("#multi-exit").click();
+  await expect(page.locator("#now-title")).toHaveText("Канал 3");
+});
+
 test("на мобильной ширине — явный отказ без дополнительных потоков", async ({ page }) => {
   await openChannels(page, 390);
   await page.locator("#now-title").click();
