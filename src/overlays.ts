@@ -11,6 +11,7 @@ export type OverlayName =
   | "guide"
   | "manager"
   | "quality"
+  | "sleep"
   | "notifications";
 
 /**

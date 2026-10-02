@@ -1692,13 +1692,11 @@ window.addEventListener("keydown", (e) => {
       player.setVolume(Number(volumeSlider.value) / 100);
       refreshMuteIcon();
       break;
-    case "Escape":
-      if (!sleepMenu.hidden) {
-        sleepMenu.hidden = true;
-        break;
-      }
-      if (!qualityMenu.hidden) {
-        closeOverlay("quality");
+    case "Escape": {
+      const top = topOverlay(overlayStack);
+      if (top !== null) {
+        e.preventDefault();
+        closeOverlay(top);
         break;
       }
       if (playerBar.classList.contains("open")) {
@@ -1706,6 +1704,7 @@ window.addEventListener("keydown", (e) => {
         togglePlayerPage(false);
       }
       break;
+    }
     case "g":
     case "п": // ru-раскладка
       e.preventDefault();
@@ -2252,6 +2251,10 @@ function applyOverlay(name: OverlayName, on: boolean): void {
   } else if (name === "quality") {
     qualityMenu.hidden = !on;
     qualityBtn.setAttribute("aria-expanded", String(on));
+  } else if (name === "sleep") {
+    sleepMenu.hidden = !on;
+    btnSleep.setAttribute("aria-expanded", String(on));
+    if (on) positionSleepMenu();
   }
 }
 
@@ -2287,7 +2290,15 @@ qualityMenu.addEventListener("click", (event) => {
   if ((event.target as HTMLElement).closest(".menu-item")) closeOverlay("quality");
 });
 document.addEventListener("click", (event) => {
-  if (!qualityMenu.hidden && !qualityWrap.contains(event.target as Node)) closeOverlay("quality");
+  const top = topOverlay(overlayStack);
+  for (const [name, menu, trigger] of [
+    ["quality", qualityMenu, qualityBtn],
+    ["sleep", sleepMenu, btnSleep],
+  ] as const) {
+    if (top === name && !menu.contains(event.target as Node) && !trigger.contains(event.target as Node)) {
+      closeOverlay(name);
+    }
+  }
 });
 
 /** Системный «назад»: закрываем верхний оверлей без повторного history.back(). */
@@ -2738,7 +2749,7 @@ function refreshPlaybackControls(): void {
   btnLive.hidden = recording || !isBehindLive(videoEl.currentTime, liveEdge());
   if (recording) {
     if (overlayStack.includes("quality")) closeOverlay("quality");
-    sleepMenu.hidden = true;
+    if (overlayStack.includes("sleep")) closeOverlay("sleep");
     sleepState = sleepCancel(sleepState);
     videoStage.classList.remove("sleep-dim");
   }
@@ -2761,9 +2772,20 @@ function sleepRender(): void {
         sleepRemainderMin(sleepState, Date.now()) !== null &&
         Math.abs((sleepState.mode.kind === "duration" ? sleepState.mode.endsAt : 0) -
           (Date.now() + Number(v) * 60_000)) < 60_000);
-    b.classList.toggle("on", on);
+    b.className = menuItemClass(on);
+    b.setAttribute("aria-selected", String(on));
   }
 }
+
+/** Попап привязан к кнопке; CSS ограничивает его краями кадра и высотой. */
+function positionSleepMenu(): void {
+  if (sleepMenu.hidden || (isCompact() && !playerBar.classList.contains("open"))) return;
+  const stage = videoStage.getBoundingClientRect();
+  const trigger = btnSleep.getBoundingClientRect();
+  sleepMenu.style.setProperty("--sleep-left", `${trigger.right - stage.left - sleepMenu.offsetWidth}px`);
+}
+
+new ResizeObserver(positionSleepMenu).observe(videoStage);
 
 function sleepApplyFired(): void {
   if (!sleepState.fired) return;
@@ -2780,15 +2802,9 @@ function sleepApplyFired(): void {
 btnSleep.addEventListener("click", (e) => {
   e.stopPropagation();
   if (player.isRecordingPlayback) return;
-  sleepMenu.hidden = !sleepMenu.hidden;
+  if (sleepMenu.hidden) openOverlay("sleep");
+  else closeOverlay("sleep");
   sleepRender();
-});
-
-document.addEventListener("click", (e) => {
-  if (sleepMenu.hidden) return;
-  if (!sleepMenu.contains(e.target as Node) && !btnSleep.contains(e.target as Node)) {
-    sleepMenu.hidden = true;
-  }
 });
 
 sleepMenu.addEventListener("click", (e) => {
@@ -2812,7 +2828,7 @@ sleepMenu.addEventListener("click", (e) => {
   } else {
     sleepState = sleepStart(sleepState, Number(v), Date.now());
   }
-  sleepMenu.hidden = true;
+  closeOverlay("sleep");
   sleepRender();
 });
 
