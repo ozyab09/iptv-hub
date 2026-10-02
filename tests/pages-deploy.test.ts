@@ -95,7 +95,10 @@ it("проверки и релиз используют один dist текущ
     expect(job).not.toContain("npm run build");
     if (name !== "visual") expect(job).not.toContain("npm ci");
   }
-  expect(jobSection(text, "visual")).toContain("npx playwright test");
+  const visual = jobSection(text, "visual");
+  expect(visual).toContain("project: [chromium, firefox-media]");
+  expect(visual).toContain("fail-fast: false");
+  expect(visual).toContain("npx playwright test --project=${{ matrix.project }}");
   const android = jobSection(text, "android");
   expect(android).toContain("node android/scripts/bundle-web.mjs");
   expect(android).toContain('"$tools/apksigner" verify');

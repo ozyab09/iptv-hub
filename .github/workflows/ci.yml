@@ -124,6 +124,10 @@ jobs:
     if: always() && needs.build.result == 'success'
     needs: [release-check, build]
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox-media]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -147,11 +151,11 @@ jobs:
       - name: Install system dependencies for cached browsers
         if: steps.browsers.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium firefox
-      - run: npx playwright test
+      - run: npx playwright test --project=${{ matrix.project }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: playwright-report/
           retention-days: 7
 

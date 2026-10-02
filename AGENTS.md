@@ -416,8 +416,9 @@ Settings → Pages → Source: **GitHub Actions**.
 копирует новые `version.json` и `.well-known/assetlinks.json` в готовый dist.
 Кэш браузеров привязан к ОС, архитектуре, образу Ubuntu и lockfile;
 системные зависимости устанавливаются и при попадании в кэш.
-Playwright: в CI четыре воркера (три Chromium, один `firefox-media`);
-проекты идут одновременно, Firefox последовательно. Локально один воркер.
+Playwright: CI-матрица `chromium`/`firefox-media` с `fail-fast: false`:
+три воркера Chromium, один Firefox на отдельных VM, чтобы декодирование
+не конкурировало с UI-тестами. Локально один воркер; общий лимит CI — четыре.
 
 `concurrency` больше не отменяет прогоны (`cancel-in-progress` снят): push в
 `main` может запускать релиз, и отмена оставила бы GitHub Release полупустым.
