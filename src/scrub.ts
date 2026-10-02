@@ -1,5 +1,5 @@
 /**
- * Полоса перемотки живого эфира.
+ * Полоса эфира и локальной записи.
  *
  * У прямого потока нет конечной длительности, поэтому полоса показывает не
  * положение в файле, а ход ТЕКУЩЕЙ ПЕРЕДАЧИ по телепрограмме: от её начала
@@ -71,4 +71,20 @@ export function clock(ms: number): string {
     minute: "2-digit",
     hour12: false,
   }).format(ms);
+}
+
+/** Шкала файла: до загрузки длительности используем метаданные записи. */
+export function mediaScrub(currentTime: number, duration: number, fallbackDuration = 0) {
+  const total = Number.isFinite(duration) && duration > 0 ? duration
+    : Number.isFinite(fallbackDuration) && fallbackDuration > 0 ? fallbackDuration : 0;
+  const position = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
+  const format = (seconds: number): string => {
+    const whole = Math.floor(seconds);
+    return `${String(Math.floor(whole / 60)).padStart(2, "0")}:${String(whole % 60).padStart(2, "0")}`;
+  };
+  return {
+    position: format(position),
+    duration: format(total),
+    progress: total > 0 ? Math.min(1, position / total) : 0,
+  };
 }

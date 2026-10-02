@@ -58,7 +58,7 @@ import {
   computeWindow,
   spacerHeight,
 } from "./virtual-list";
-import { clock, isBehindLive, programmeProgress } from "./scrub";
+import { clock, isBehindLive, mediaScrub, programmeProgress } from "./scrub";
 import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
 import {
   loadPosition,
@@ -2171,6 +2171,7 @@ function playRecording(file: File, r: RecordingMeta): void {
   playerStatus.textContent = "Записанный эфир";
   btnRetry.hidden = true;
   liveBadge.hidden = true;
+  refreshScrub();
   showToast(`Запись от ${new Date(r.startedAt).toLocaleString("ru")}`);
 }
 
@@ -2747,7 +2748,7 @@ function refreshPlaybackControls(): void {
   qualityMenuUi.refreshQualityAvailability();
 }
 
-videoEl.addEventListener("emptied", refreshPlaybackControls);
+videoEl.addEventListener("emptied", refreshScrub);
 
 function sleepRender(): void {
   refreshPlaybackControls();
@@ -2835,7 +2836,7 @@ for (const ev of ["click", "keydown"] as const) {
 }
 
 /**
- * Полоса перемотки: ход текущей передачи по телепрограмме.
+ * Полоса: позиция локальной записи или ход передачи по телепрограмме.
  *
  * У прямого эфира нет длительности, поэтому положение в потоке показывать
  * нечем — зато есть программа, и зрителю важно именно «сколько осталось
@@ -2847,11 +2848,25 @@ function refreshScrub(): void {
   // а отстать от эфира на них можно ровно так же.
   refreshPlaybackControls();
 
+  if (player.isRecordingPlayback) {
+    const timeline = mediaScrub(videoEl.currentTime, videoEl.duration, player.recordingDurationSec);
+    const pct = `${(timeline.progress * 100).toFixed(1)}%`;
+    scrubFill.style.width = pct;
+    miniProgFill.style.width = pct;
+    progStart.textContent = timeline.position;
+    progEnd.textContent = timeline.duration;
+    nowShow.textContent = "";
+    nowTimeLeft.textContent = "";
+    if (scheduleKey) renderSchedule();
+    return;
+  }
+
   const prog =
     epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null;
   if (!prog) {
     if (scheduleKey) renderSchedule();
     scrubFill.style.width = "0%";
+    miniProgFill.style.width = "0%";
     progStart.textContent = "";
     progEnd.textContent = "";
     nowShow.textContent = "";
