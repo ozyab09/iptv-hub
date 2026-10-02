@@ -346,6 +346,13 @@ Settings → Pages → Source: **GitHub Actions**.
 `concurrency` больше не отменяет прогоны (`cancel-in-progress` снят): push в
 `main` может запускать релиз, и отмена оставила бы GitHub Release полупустым.
 
+**Dot-файлы в Pages-артефакте.** `actions/upload-pages-artifact` с v4 по
+умолчанию архивирует с `--exclude=.[^/]*` и выбрасывает скрытые файлы, поэтому
+`include-hidden-files: true` обязателен в **обоих** вызовах (build и release).
+Без него `public/.well-known/assetlinks.json` не попадает в деплой, живой
+сайт отдаёт 404, и TWA теряет trusted fullscreen. Проверять после деплоя:
+`curl -sI https://ozyab09.github.io/iptv-hub/.well-known/assetlinks.json` → 200.
+
 ## Android TWA и выпуск APK (#160, #205, #222)
 
 Android-код уже смержен через PR #167; повторно мержить старую ветку не нужно.
