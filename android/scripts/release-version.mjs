@@ -23,7 +23,7 @@ import { pathToFileURL } from "node:url";
 const SEMVER = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 const FILES = ["package.json", "android/version.properties", "public/version.json"];
 
-// Личность для служебного коммита и тега задаётся через env: на чистом
+// Личность для коммита-синхронизации и тега задаётся через env: на чистом
 // CI-раннере user.name/user.email не настроены, а глобальный git config
 // трогать не хочется.
 const BOT = {
@@ -156,9 +156,32 @@ export function commitVersion({ version }, cwd, { dryRun = false, ref = "HEAD:ma
   return { committed: true };
 }
 
-/** Аннотированный тег версии: создаётся, только если его ещё нет. */
+/**
+ * Тег версии указывает на текущий HEAD? Тег уже может существовать (повторный
+ * прогон того же коммита) — тогда создавать его нельзя, git откажет.
+ */
+export function tagExistsAtHead(tag, cwd) {
+  try {
+    const tagCommit = git(["rev-parse", `refs/tags/${tag}^{commit}`], cwd);
+    return tagCommit === git(["rev-parse", "HEAD"], cwd);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Аннотированный тег версии.
+ *
+ * Если тег уже указывает на этот коммит — ничего не делаем (повторный прогон).
+ * Если тег указывает на другой коммит — это конфликт версий: молча
+ * переиспользовать чужой тег нельзя, иначе релиз уедет не туда.
+ */
 export function ensureTag({ version, tag = `v${version}` }, cwd, { dryRun = false } = {}) {
-  if (localTags(cwd, false).includes(tag)) return { created: false, tag };
+  const tags = localTags(cwd, true);
+  if (tags.includes(tag)) {
+    if (tagExistsAtHead(tag, cwd)) return { created: false, tag };
+    throw new Error(`тег ${tag} уже существует и указывает на другой коммит`);
+  }
   if (dryRun) return { created: true, tag };
   git(["tag", "-a", tag, "-m", `IPTV Hub ${version}`], cwd, BOT);
   git(["push", "origin", `refs/tags/${tag}`], cwd);
@@ -190,6 +213,8 @@ export function run({ cwd = process.cwd(), argv = process.argv.slice(2), outputF
   if (argv.includes("--write")) {
     const written = writeVersion(plan, cwd);
     changed = written.changed;
+    // --sync-main оставлен для локальных запусков и тестов: на CI пуш в main
+    // запрещён ruleset'ом, поэтому workflow его не использует.
     if (changed && argv.includes("--sync-main")) commitVersion(plan, cwd, { dryRun, ref });
   }
 
@@ -198,10 +223,9 @@ export function run({ cwd = process.cwd(), argv = process.argv.slice(2), outputF
     tagCreated = ensureTag(plan, cwd, { dryRun }).created;
   }
 
-  // Коммит синхронизации уже отправлен в main и помечен тегом: остальные job'ы
-  // обязаны собирать именно этот коммит, иначе протестируют другой код и
-  // отдадут в релиз не то, что протестировано.
-  const commit = changed ? git(["rev-parse", "HEAD"], cwd) : "";
+  // SHA HEAD: нужен локальным сценариям и тестам, где коммит синхронизации
+  // действительно создаётся (--sync-main).
+  const commit = git(["rev-parse", "HEAD"], cwd);
 
   const outputs = {
     version: plan.version,
