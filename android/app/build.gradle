@@ -25,4 +25,7 @@ dependencies {
     implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
     // WindowCompat/WindowInsetsControllerCompat для edge-to-edge в MainActivity.
     implementation 'androidx.core:core:1.13.1'
+    // CustomTabsCallback явно: MainActivity переопределяет getCustomTabsCallback(),
+    // а у ABH это транзитивная зависимость (не api) — не полагаемся на неё.
+    implementation 'androidx.browser:browser:1.5.0'
 }

@@ -5,8 +5,11 @@
   который рисует сама платформа: наш знак на тёмном фоне приложения.
   Файл только для v31+, чтобы не тянуть атрибуты API 31 в minSdk 24.
 
-  postSplashScreenTheme указывает на базовую тему (не на себя) — после
-  сплэша система возвращает окну обычный фон и бары.
+  «Пост-темы» здесь нет намеренно: соответствующий атрибут принадлежит
+  библиотеке androidx.core:core-splashscreen и пишется без префикса android:.
+  В платформенной теме его не существует, и aapt2 падает на линковке
+  ресурсов. Отдельная тема и не нужна: у LauncherTheme уже правильный
+  windowBackground.
 -->
 <resources>
     <style name="LauncherTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
@@ -17,7 +20,5 @@
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_splash</item>
-        <item name="android:windowSplashScreenAnimationDuration">200</item>
-        <item name="android:postSplashScreenTheme">@style/PostSplashTheme</item>
     </style>
 </resources>

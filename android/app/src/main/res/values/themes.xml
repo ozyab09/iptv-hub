@@ -17,8 +17,4 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>
-
-    <!-- Тема, к которой система возвращается после системного сплэша
-         (values-v31 ссылается сюда из postSplashScreenTheme). -->
-    <style name="PostSplashTheme" parent="LauncherTheme" />
 </resources>

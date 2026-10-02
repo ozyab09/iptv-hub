@@ -53,18 +53,56 @@ describe("splash screen Android 12+", () => {
     expect(v31).toContain('android:windowSplashScreenBackground">@color/splash_background');
   });
 
-  it("возвращается к PostSplashTheme, а не к самому себе", () => {
-    expect(v31).toContain('android:postSplashScreenTheme">@style/PostSplashTheme');
-    const base = readFileSync(join(res, "values", "themes.xml"), "utf8");
-    expect(base, "PostSplashTheme должен наследовать LauncherTheme").toContain(
-      '<style name="PostSplashTheme" parent="LauncherTheme" />',
-    );
+  it("не тянет атрибуты библиотеки core-splashscreen в платформенную тему", () => {
+    // postSplashScreenTheme есть только в androidx.core:core-splashscreen и без
+    // префикса android:. С префиксом aapt2 падает на линковке ресурсов.
+    expect(v31).not.toContain("android:postSplashScreenTheme");
+    expect(readFileSync(join(res, "values", "themes.xml"), "utf8")).not.toContain("PostSplashTheme");
+  });
+
+  it("знак splash нарисован под холст 288 dp, а не 108 dp", () => {
+    // Платформа маскирует треть знака и растягивает растр: сетка 108 dp
+    // превратилась бы в мыло. 288 dp — требование Android 12+.
+    const png = readFileSync(join(res, "mipmap-mdpi", "ic_splash.png"));
+    const size = png.readUInt32BE(16); // ширина в IHDR
+    expect(size).toBeGreaterThanOrEqual(288);
   });
 
   it("знак splash есть во всех плотностях", () => {
     for (const density of densities) {
       expect(existsSync(join(res, `mipmap-${density}`, "ic_splash.png")), density).toBe(true);
     }
+  });
+});
+
+describe("манифест TWA", () => {
+  const manifest = readFileSync(join(app, "AndroidManifest.xml"), "utf8");
+
+  it("не ставит launchMode: ABH запускает TWA в новой задаче", () => {
+    // LauncherActivity не переопределяет onNewIntent, и в его исходниках
+    // прямо сказано, что singleTask сносит окно Chrome поверх TWA.
+    expect(manifest).not.toMatch(/android:launchMode=/);
+  });
+
+  it("задаёт тёмные бары для обеих схем системы", () => {
+    // Дефолт в LauncherActivityMetadata — белый, поэтому без *_DARK бары
+    // уезжали бы в белый в тёмной системной теме.
+    for (const key of [
+      "android.support.customtabs.trusted.STATUS_BAR_COLOR",
+      "android.support.customtabs.trusted.STATUS_BAR_COLOR_DARK",
+      "android.support.customtabs.trusted.NAVIGATION_BAR_COLOR",
+      "android.support.customtabs.trusted.NAVIGATION_BAR_COLOR_DARK",
+      // Опечатка «androix» — в самой библиотеке, ключ должен быть таким.
+      "androix.browser.trusted.NAVIGATION_BAR_DIVIDER_COLOR",
+      "androix.browser.trusted.NAVIGATION_BAR_DIVIDER_COLOR_DARK",
+    ]) {
+      expect(manifest, `нет метаданных ${key}`).toContain(key);
+    }
+  });
+
+  it("объявляет связь приложения с сайтом (asset_statements)", () => {
+    expect(manifest).toContain('android:name="asset_statements"');
+    expect(readFileSync(join(res, "values", "strings.xml"), "utf8")).toContain('name="asset_statements"');
   });
 });
 

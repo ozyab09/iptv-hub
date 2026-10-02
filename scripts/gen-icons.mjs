@@ -196,6 +196,9 @@ const densities = [
   ["xxhdpi", 324],
   ["xxxhdpi", 432],
 ];
+// Слой знака splash рисуется на холсте 288 dp: платформа маскирует треть
+// (круг 192 dp) и растянула бы 108 dp втрое — знак был бы мыльным.
+const splashDensities = densities.map(([density, size]) => [density, Math.round(size * (288 / 108))]);
 for (const [density, size] of densities) {
   const dir = join(resDir, `mipmap-${density}`);
   mkdirSync(dir, { recursive: true });
@@ -206,9 +209,9 @@ for (const [density, size] of densities) {
 for (const [density, size] of [["mdpi", 48], ["hdpi", 72], ["xhdpi", 96], ["xxhdpi", 144], ["xxxhdpi", 192]]) {
   writeFileSync(join(resDir, `mipmap-${density}`, "ic_launcher.png"), render(size, appMark({ scale: 0.78 })));
 }
-// Splash Android 12+: знак крупнее, потому что маски лаунчера здесь нет.
-for (const [density, size] of densities) {
-  writeFileSync(join(resDir, `mipmap-${density}`, "ic_splash.png"), render(size, appMark({ scale: 0.68 })));
+// Splash Android 12+: своя сетка 288 dp и полный знак (маски лаунчера нет).
+for (const [density, size] of splashDensities) {
+  writeFileSync(join(resDir, `mipmap-${density}`, "ic_splash.png"), render(size, appMark({ scale: 0.86 })));
 }
 mkdirSync(join(resDir, "mipmap-anydpi-v26"), { recursive: true });
 writeFileSync(
