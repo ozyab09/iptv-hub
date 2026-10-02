@@ -1112,11 +1112,31 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   font-size: 9px; line-height: 1; padding: 2px 4px; border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.18); color: #fff; pointer-events: none;
 }
+/* Меню sleep-таймера (#227): прямой ребёнок кадра, привязка к .video —
+   на десктопе и на телефоне попап гарантированно внутри кадра.
+   Нижняя кромка 78px — на 8px выше нижней строки (~70px); max-height от
+   края кадра держит верхнюю кромку на 16px ниже верха кадра (скролл при
+   нехватке высоты). На широком экране (дека слева внизу) меню встаёт над
+   декой. При перекладке деки (#226) поправить отступы. */
 .sleep-menu {
-  position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%);
+  position: absolute;
+  left: 50%;
+  bottom: 78px;
+  transform: translateX(-50%);
+  max-height: calc(100% - 94px);
+  overflow-y: auto;
   display: flex; flex-direction: column; min-width: 200px;
   background: rgba(0, 0, 0, 0.92); border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-md); padding: var(--space-2); gap: 2px; z-index: 5;
+}
+@media (min-width: 1024px) {
+  /* Над транспортной декой (левый край — как у .center), не перекрывая её */
+  .video .sleep-menu {
+    left: var(--space-3);
+    transform: none;
+    bottom: 128px; /*76 (низ деки) + 44 (высота) + 8 зазора */
+    max-height: calc(100% - 144px);
+  }
 }
 .sleep-menu[hidden] { display: none; }
 .sleep-menu button {
@@ -1266,6 +1286,13 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   .player-bar:not(.open) .top-actions { display: contents; }
   .player-bar:not(.open) .now-info { order: 1; padding: 0; color: var(--text); }
   .player-bar:not(.open) .center { order: 2; position: static; inset: auto; gap: 0; }
+  /* Мини-плеер: кадр растворяется (display: contents), контекстом позиционирования
+     становится фикс-бар — меню всплывает над ним, max-height считается от
+     вьюпорта, иначе calc от высоты бара (~60px) схлопнул бы его (#227). */
+  .player-bar:not(.open) .sleep-menu {
+    bottom: calc(100% + 8px);
+    max-height: min(45vh, 320px);
+  }
   .player-bar:not(.open) #btn-close-player { order: 3; color: var(--text); }
   .player-bar:not(.open) #btn-pause { width: 44px; height: 44px; background: transparent; color: var(--text); }
   .player-bar:not(.open) .now-line { flex-direction: column; align-items: stretch; gap: 0; }

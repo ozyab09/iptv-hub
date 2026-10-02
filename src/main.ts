@@ -1485,6 +1485,10 @@ window.addEventListener("keydown", (e) => {
       refreshMuteIcon();
       break;
     case "Escape":
+      if (!sleepMenu.hidden) {
+        sleepMenu.hidden = true;
+        break;
+      }
       if (!qualityMenu.hidden) {
         closeOverlay("quality");
         break;
