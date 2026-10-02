@@ -28,7 +28,7 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },
-    { name: "firefox-media", testMatch: /(recording-playback|multi-view|channel-mirrors|timeshift|scheduled-recordings|xtream)\.spec\.ts/, use: { browserName: "firefox" } },
+    { name: "firefox-media", testMatch: /(recording-playback|multi-view|channel-mirrors|timeshift|scheduled-recordings|xtream|numeric-zap)\.spec\.ts/, use: { browserName: "firefox" } },
   ],
   reporter: [["list"]],
 });

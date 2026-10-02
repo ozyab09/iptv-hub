@@ -1004,6 +1004,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   gap: var(--space-4);
 }
 #video-stage { width: 100%; aspect-ratio: 16 / 9; flex: none; container: player-frame / inline-size; overflow: visible; }
+.numeric-zap { position: absolute; top: 72px; right: 16px; z-index: 5; max-width: calc(100% - 32px); overflow-wrap: anywhere; padding: 8px 16px; border-radius: var(--radius-sm); background: rgba(0, 0, 0, .75); color: #fff; font-size: 32px; line-height: 1.2; pointer-events: none; }
 .video > video { border-radius: inherit; }
 /* Группа «кадр + прогресс + программа» — единственный центрируемый ребёнок
    плеера: воздух делится вокруг группы, а не между детьми по отдельности,

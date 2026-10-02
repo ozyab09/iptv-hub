@@ -1,5 +1,6 @@
 import "./style.css";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
+import { appendZapDigit, zapChannelIndex, ZAP_DELAY_MS, type NumericZap } from "./numeric-zap";
 import { LANGUAGE_KEY, resolveLanguage, t, translateMessage, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { installDebugLog } from "./debug-log";
 import { iconMarkup, spriteMarkup } from "./icons";
@@ -363,6 +364,24 @@ let activeView: View = parseView(
 );
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
+let numericZap: NumericZap | null = null;
+let zapTimer: ReturnType<typeof setTimeout> | null = null;
+const zapOverlay = $("numeric-zap");
+
+function cancelNumericZap(): void {
+  if (zapTimer !== null) clearTimeout(zapTimer);
+  zapTimer = null;
+  numericZap = null;
+  zapOverlay.hidden = true;
+}
+
+function canNumericZap(): boolean {
+  const focused = document.activeElement as HTMLElement | null;
+  const dialogOpen = [...document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"], [role="menu"], [role="listbox"]')].some((el) => el.getClientRects().length > 0);
+  return !playerBar.hidden && showsChannelList(activeView) &&
+    (!isCompact() || playerBar.classList.contains("open")) &&
+    !focused?.closest("input, textarea, select, [contenteditable]:not([contenteditable=false])") && !dialogOpen;
+}
 let visibleResults: (Channel | ProgrammeMatch)[] = [];
 /**
  * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
@@ -749,6 +768,7 @@ function renderNav(): void {
  * пользователь выбрал сам, иначе выбор теряется при каждом пустом старте.
  */
 function setView(view: View, persist = true): void {
+  cancelNumericZap();
   activeView = view;
   // Сворачивание относится только к списку; выбор сохраняется между разделами.
   appEl.classList.toggle("channel-view", showsChannelList(view));
@@ -1033,6 +1053,7 @@ window.addEventListener("resize", () => {
 });
 
 function renderChannels(resetScroll = true): void {
+  if (resetScroll) cancelNumericZap();
   if (!snapshot) return;
   const q = searchInput.value.trim().toLowerCase();
   const inView = channelsForView(activeView, applyChannelOverrides(snapshot.channels, channelOverrides), favorites, recents);
@@ -1236,6 +1257,7 @@ function renderChannelCard(c: Channel): HTMLElement {
 
 // ---------- Плеер ----------
 async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
+  cancelNumericZap();
   const request = ++playRequest;
   const id = plState.activeId;
   c = applyChannelOverrides([snapshot?.channels.find((original) => original.url === c.url) ?? c], channelOverrides, true)[0]!;
@@ -1296,6 +1318,7 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
+  cancelNumericZap();
   playRequest++;
   pinDialog.cancel();
   closeMultiView(false);
@@ -1463,8 +1486,29 @@ window.addEventListener("keydown", (e) => {
 
 // Горячие клавиши (когда фокус не в инпуте)
 window.addEventListener("keydown", (e) => {
-  const t = e.target as HTMLElement | null;
-  const typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA";
+  if (e.key === "Escape" && numericZap) {
+    e.preventDefault();
+    cancelNumericZap();
+    return;
+  }
+  if (/^[0-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && canNumericZap()) {
+    e.preventDefault();
+    if (zapTimer !== null) clearTimeout(zapTimer);
+    numericZap = appendZapDigit(numericZap, e.key, Date.now());
+    zapOverlay.textContent = numericZap!.digits;
+    zapOverlay.hidden = false;
+    zapTimer = setTimeout(() => {
+      const allowed = canNumericZap();
+      const index = allowed ? zapChannelIndex(numericZap!.digits, visibleChannels.length) : null;
+      cancelNumericZap();
+      if (!allowed) return;
+      if (index === null) showToast(t("zap.outOfRange", currentLanguage));
+      else if (visibleChannels[index]!.url !== lastPlayed?.url) void playChannel(visibleChannels[index]!);
+    }, ZAP_DELAY_MS);
+    return;
+  }
+  const target = e.target as HTMLElement | null;
+  const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
 
   // «/» — поиск. Проверяем code, а не key: в русской раскладке на этой
   // клавише другой символ, а палец жмёт ту же кнопку.
@@ -1820,6 +1864,8 @@ try {
 
 /** Момент старта текущей записи (мс эпохи) — выставляется в startRecording. */
 let recordingStartedAt = 0;
+let recordingChannel: Channel | null = null;
+let recordingProgrammeTitle: string | null = null;
 
 /** Передача, идущая в момент записи (для подписи в библиотеке). */
 function currentProgrammeTitle(): string | null {
@@ -1834,15 +1880,15 @@ function currentProgrammeTitle(): string | null {
 async function saveToLibrary(blob: Blob, ext: string, _mime: string): Promise<void> {
   if (!recordingsFs) {
     // OPFS нет — прежнее поведение: сразу скачивание.
-    offerDownload(blob, recordingFileName(lastPlayed?.name ?? "recording"));
+    offerDownload(blob, recordingFileName(recordingChannel?.name ?? "recording"));
     return;
   }
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const meta: RecordingMeta = {
     id,
-    channelName: lastPlayed?.name ?? "Запись",
-    channelUrl: lastPlayed?.url ?? "",
-    programmeTitle: currentProgrammeTitle(),
+    channelName: recordingChannel?.name ?? "Запись",
+    channelUrl: recordingChannel?.url ?? "",
+    programmeTitle: recordingProgrammeTitle,
     startedAt: recordingStartedAt || Date.now(),
     durationSec: recordedDurationSec,
     sizeBytes: blob.size,
@@ -1865,6 +1911,8 @@ async function saveToLibrary(blob: Blob, ext: string, _mime: string): Promise<vo
 /** Секунды фактической записи: от старта до остановки. */
 let recordedDurationSec = 0;
 function noteRecordingStart(): void {
+  recordingChannel = lastPlayed;
+  recordingProgrammeTitle = currentProgrammeTitle();
   recordingStartedAt = Date.now();
   recordedDurationSec = 0;
 }
@@ -2846,6 +2894,7 @@ function isCompact(): boolean {
 /** Развернуть мини-плеер в страницу или свернуть обратно. */
 function togglePlayerPage(open?: boolean): void {
   const next = open ?? !playerBar.classList.contains("open");
+  if (!next) cancelNumericZap();
   playerBar.classList.toggle("open", next);
 }
 
@@ -3098,6 +3147,7 @@ function saveFavoritesFor(id: string): void {
 
 /** Активировать плейлист по id: перезагрузить его избранное и список. */
 function activatePlaylist(id: string): void {
+  cancelNumericZap();
   plState = { ...plState, activeId: id };
   savePlaylists(localStorage, plState);
   renderSettingsMode();
@@ -3363,6 +3413,7 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  cancelNumericZap();
   playRequest++;
   pinDialog.cancel();
   activeCategory = null;
