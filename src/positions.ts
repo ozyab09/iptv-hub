@@ -13,28 +13,32 @@ export const POSITIONS_KEY = "iptv-hub.positions.v1";
 /** Позиции старше 7 дней забываем. */
 export const POSITIONS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-interface PositionEntry {
+export interface PositionEntry {
   t: number; // секунды
   at: number; // мс эпохи, когда сохранено
 }
 
-type PositionMap = Record<string, PositionEntry>;
+export type PositionMap = Record<string, PositionEntry>;
+
+/** Shared validation for stored positions and backup sections. */
+export function parsePositions(raw: string | null): PositionMap {
+  try {
+    const parsed: unknown = JSON.parse(raw ?? "null");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).flatMap(([url, value]) => {
+      if (!value || typeof value !== "object") return [];
+      const entry = value as Partial<PositionEntry>;
+      if (typeof entry.t !== "number" || !Number.isFinite(entry.t) || entry.t <= 0 ||
+          typeof entry.at !== "number" || !Number.isFinite(entry.at) || entry.at < 0) return [];
+      return [[url, { t: entry.t, at: entry.at }]];
+    }));
+  } catch { return {}; }
+}
 
 function load(storage: PositionKV): PositionMap {
   if (!storage) return {};
   try {
-    const raw = storage.getItem(POSITIONS_KEY);
-    if (!raw) return {};
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const out: PositionMap = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      const e = v as { t?: unknown; at?: unknown };
-      if (typeof e.t === "number" && typeof e.at === "number") {
-        out[k] = { t: e.t, at: e.at };
-      }
-    }
-    return out;
+    return parsePositions(storage.getItem(POSITIONS_KEY));
   } catch {
     return {};
   }

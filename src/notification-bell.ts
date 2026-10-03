@@ -13,6 +13,7 @@ import {
   saveNotifications,
   unreadCount,
   type Notification,
+  type NotificationWatch,
 } from "./notifications";
 import { t, translateMessage, type Language } from "./i18n";
 
@@ -28,6 +29,7 @@ export interface NotifBellOptions {
   onClose: () => void;
   now?: () => number;
   language?: () => Language;
+  onWatch?: (target: NotificationWatch) => void;
 }
 
 /** Подпись времени уведомления: «12 фев, 09:41». Чистая функция. */
@@ -66,6 +68,13 @@ export function createNotificationBell(opts: NotifBellOptions) {
       const text = document.createElement("span");
       text.textContent = translateMessage(item.text, language); // только textContent
       row.append(time, text);
+      if (item.watch && opts.onWatch) {
+        const watch = document.createElement("button");
+        watch.type = "button"; watch.className = "btn btn-sm notification-watch";
+        watch.textContent = t("reminder.watch", language);
+        watch.addEventListener("click", () => opts.onWatch!(item.watch!));
+        row.append(watch);
+      }
       opts.list.append(row);
     }
   }
@@ -73,12 +82,16 @@ export function createNotificationBell(opts: NotifBellOptions) {
   function persist(): void {
     saveNotifications(items, opts.storage);
   }
+  window.addEventListener("storage", (event) => {
+    if (event.key === null || event.key === "iptv-hub.notifications.v1") { items = loadNotifications(opts.storage); render(); }
+  });
 
   return {
     /** Положить уведомление в колокольчик (данные + бейдж). */
-    push(message: string): void {
+    push(message: string, watch?: NotificationWatch): void {
       const now = opts.now ?? Date.now;
-      items = addNotification(items, nextId(items), message, now());
+      if (opts.storage) items = loadNotifications(opts.storage);
+      items = addNotification(items, nextId(items), message, now(), watch);
       persist();
       render();
     },

@@ -4,6 +4,7 @@ import {
   loadPosition,
   savePosition,
   POSITIONS_TTL_MS,
+  parsePositions,
 } from "../src/positions";
 import type { PositionKV } from "../src/positions";
 
@@ -23,6 +24,11 @@ const NOW = 1_000_000_000_000;
 const URL = "https://vod/example.mp4";
 
 describe("positions", () => {
+  it("backup parsing keeps valid entries beside malformed fields", () => {
+    const valid = { t: 123.5, at: NOW };
+    expect(parsePositions(JSON.stringify({ [URL]: valid, bad: null, text: "bad", negative: { t: -1, at: NOW }, invalid: { t: 5, at: "bad" } }))).toEqual({ [URL]: valid });
+    for (const raw of [null, "broken", "[]", '{"a":{"t":1e400,"at":1}}']) expect(parsePositions(raw)).toEqual({});
+  });
   it("save → load: позиция возвращается", () => {
     const { store } = kv();
     savePosition(store, URL, 123.5, NOW);

@@ -3,8 +3,12 @@
  * Чистые функции: валидация и сборка JSON без localStorage — тестируются в node.
  */
 
-export interface Backup {
-  version: 1;
+import { parseBackupSections, type BackupSections } from "./backup-sections";
+import { loadPlaylists, PLAYLISTS_KEY } from "./playlists";
+export type { BackupSections } from "./backup-sections";
+
+export interface Backup extends BackupSections {
+  version: 1 | 2;
   exportedAt: string;
   theme: string;
   playlists: { id: string; name: string; playlistUrl: string; epgUrl: string | null }[];
@@ -14,7 +18,7 @@ export interface Backup {
   recents?: Record<string, string[]>;
 }
 
-export interface BackupInput {
+export interface BackupInput extends BackupSections {
   theme: string;
   playlists: { id: string; name: string; playlistUrl: string; epgUrl: string | null }[];
   activeId: string | null;
@@ -51,20 +55,21 @@ export function sanitizeRecents(raw: unknown): Record<string, string[]> | null {
 
 export function buildBackup(input: BackupInput): Backup {
   const backup: Backup = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
-    theme: input.theme === "light" ? "light" : "dark",
+    theme: input.theme === "system" ? "system" : input.theme === "light" ? "light" : "dark",
     playlists: input.playlists,
     activeId: input.activeId,
     favorites: input.favorites,
   };
   const recents = sanitizeRecents(input.recents);
   if (recents) backup.recents = recents;
+  Object.assign(backup, parseBackupSections(input as unknown as Record<string, unknown>, input.playlists.map((p) => p.id)).sections);
   return backup;
 }
 
 export type ParseResult =
-  | { ok: true; data: Backup }
+  | { ok: true; data: Backup; warnings: string[] }
   | { ok: false; error: string };
 
 /** Валидация импортируемого JSON. Возвращает ошибку по-русски для тоста. */
@@ -79,9 +84,9 @@ export function parseBackup(raw: string): ParseResult {
     return { ok: false, error: "Неверная структура файла" };
   }
   const b = parsed as Record<string, unknown>;
-  if (b.version !== 1) return { ok: false, error: "Неподдерживаемая версия бэкапа" };
+  if (b.version !== 1 && b.version !== 2) return { ok: false, error: "Неподдерживаемая версия бэкапа" };
   if (!Array.isArray(b.playlists)) return { ok: false, error: "В файле нет списка плейлистов" };
-  const playlists = b.playlists.filter(
+  let playlists = b.playlists.filter(
     (p): p is Backup["playlists"][number] =>
       !!p &&
       typeof p === "object" &&
@@ -90,6 +95,10 @@ export function parseBackup(raw: string): ParseResult {
       typeof (p as { playlistUrl?: unknown }).playlistUrl === "string" &&
       /^https?:\/\//.test((p as { playlistUrl: string }).playlistUrl),
   );
+  if (b.version === 2) playlists = loadPlaylists({
+    getItem: (key) => key === PLAYLISTS_KEY ? JSON.stringify(b.playlists) : null,
+    setItem: () => {}, removeItem: () => {},
+  }).items;
   if (playlists.length === 0) {
     return { ok: false, error: "В бэкапе нет ни одного валидного плейлиста" };
   }
@@ -103,16 +112,22 @@ export function parseBackup(raw: string): ParseResult {
     }
   }
   const data: Backup = {
-    version: 1,
+    version: b.version,
     exportedAt: typeof b.exportedAt === "string" ? b.exportedAt : new Date().toISOString(),
-    theme: b.theme === "light" ? "light" : "dark",
+    theme: b.version === 2 && b.theme === "system" ? "system" : b.theme === "light" ? "light" : "dark",
     playlists,
-    activeId: typeof b.activeId === "string" ? b.activeId : (playlists[0]!.id),
+    activeId: typeof b.activeId === "string" && playlists.some((p) => p.id === b.activeId) ? b.activeId : (playlists[0]!.id),
     favorites,
   };
   const recents = sanitizeRecents(b.recents);
   if (recents) data.recents = recents;
-  return { ok: true, data };
+  const extra = b.version === 2 ? parseBackupSections(b, playlists.map((p) => p.id)) : { sections: {}, warnings: [] };
+  if (b.version === 2 && (playlists.length !== b.playlists.length || playlists.some((p, i) => {
+    const raw = b.playlists as Record<string, unknown>[];
+    return raw[i]?.playlistUrl !== p.playlistUrl || (raw[i]?.epgUrl !== undefined && raw[i]?.epgUrl !== p.epgUrl);
+  }))) extra.warnings.unshift("playlists");
+  Object.assign(data, extra.sections);
+  return { ok: true, data, warnings: extra.warnings };
 }
 
 // ---------- Recents ----------
