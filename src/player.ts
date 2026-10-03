@@ -7,6 +7,7 @@ import { recordingManifest } from "./recording-playback";
 import { t } from "./i18n";
 import { createMirrorState, nextMirror, type MirrorState } from "./channel-mirrors";
 import { mobileQualityCap, needsMobileQualityCap, type ConnectionInfo } from "./mobile-quality";
+import { createAudioGraph, volumePlan } from "./audio-graph";
 
 export type NetworkConnection = EventTarget & ConnectionInfo;
 export function getNetworkConnection(): NetworkConnection | null {
@@ -64,6 +65,10 @@ export class Player {
   /** Файл и локальный манифест живут до закрытия/смены записи, включая перемотку. */
   private recordingUrls: string[] = [];
   private recordingDuration = 0;
+  private audioGraph: ReturnType<typeof createAudioGraph>;
+  private requestedVolume = 1;
+  private boostEnabled = false;
+  private boostWarningUrl: string | null = null;
 
   constructor(
     video: HTMLVideoElement,
@@ -74,15 +79,20 @@ export class Player {
     onMirrorChange?: () => void,
   ) {
     this.video = video;
+    this.audioGraph = createAudioGraph(video);
     this.toast = toast;
     this.onHlsState = onHlsState ?? null;
     this.onFatalError = onFatalError ?? null;
     this.readSettings = readSettings;
+    const volumeSettings = sanitizePlayerSettings(readSettings());
+    this.requestedVolume = volumeSettings.volumePercent / 100;
+    this.boostEnabled = volumeSettings.volumeBoost;
     this.onMirrorChange = onMirrorChange ?? null;
     // Нативный playback (mp4/Safari): ошибки <video> — единственный канал
     // фатальных ошибок; через них же спасаем mixed content апгрейдом.
     this.video.addEventListener("error", this.handleVideoError);
     this.video.addEventListener("pause", () => this.enableTimeshift());
+    this.video.addEventListener("loadeddata", () => this.applyVolume());
   }
 
   /**
@@ -249,6 +259,7 @@ export class Player {
     }
 
     this.currentUrl = url;
+    this.applyVolume();
     this.video.play().catch(() => {
       // автоплей с звуком может быть заблокирован — юзер нажмёт play вручную
     });
@@ -296,6 +307,7 @@ export class Player {
   /** Пауза/продолжить. Возвращает true после вызова — на паузе или играет. */
   togglePause(): void {
     if (this.video.paused) {
+      this.applyVolume();
       this.video.play().catch(() => {
         // автоплей заблокирован — юзер повторит клик
       });
@@ -331,18 +343,46 @@ export class Player {
     this.video.play().catch(() => undefined);
   }
 
-  /** Громкость 0..1 (мьют отдельно). */
+  setBoostEnabled(enabled: boolean, volume = this.requestedVolume): void {
+    this.boostEnabled = enabled;
+    this.requestedVolume = volumePlan(volume, enabled).volume;
+    this.applyVolume();
+  }
+
+  get canBoostVolume(): boolean { return this.boostEnabled && this.hls !== null; }
+
+  private applyVolume(): void {
+    const plan = volumePlan(this.requestedVolume, this.canBoostVolume);
+    if (plan.gain > 1 && this.video.readyState < 2) {
+      this.video.volume = 1;
+      return;
+    }
+    if (!this.audioGraph.volume(plan.volume, this.video.muted, this.canBoostVolume) && plan.gain > 1) {
+      this.requestedVolume = 1;
+      this.audioGraph.volume(1, this.video.muted, false);
+      if (this.boostWarningUrl !== this.currentUrl) {
+        this.boostWarningUrl = this.currentUrl;
+        this.toast(t("error.volumeBoost"));
+      }
+    }
+  }
+
+  captureAudioTrack(): { track: MediaStreamTrack; release: () => void } | null { return this.audioGraph.capture(); }
+
+  /** Громкость 0..2 при усилении HLS (мьют отдельно). */
   setVolume(v: number): void {
-    this.video.volume = Math.min(1, Math.max(0, v));
-    if (this.video.muted && this.video.volume > 0) this.video.muted = false;
+    this.requestedVolume = volumePlan(v, this.canBoostVolume).volume;
+    if (this.video.muted && this.requestedVolume > 0) this.video.muted = false;
+    this.applyVolume();
   }
 
   getVolume(): number {
-    return this.video.muted ? 0 : this.video.volume;
+    return this.video.muted ? 0 : volumePlan(this.requestedVolume, this.canBoostVolume).volume;
   }
 
   toggleMute(): void {
     this.video.muted = !this.video.muted;
+    this.applyVolume();
   }
 
   /** Picture-in-Picture. False — API недоступен или отказано. */
@@ -372,6 +412,8 @@ export class Player {
   }
 
   private stopMedia(): void {
+    this.audioGraph.teardown();
+    this.video.volume = Math.min(1, this.requestedVolume);
     this.connection?.removeEventListener("change", this.refreshMobileQuality);
     this.connection = null;
     if (this.hls) {

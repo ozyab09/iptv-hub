@@ -530,6 +530,7 @@ const playerDiagnosticsTimeout = $<HTMLInputElement>("player-diagnostics-timeout
 const playerMobileQuality = $<HTMLInputElement>("player-mobile-quality");
 const playerMobileHeight = $<HTMLSelectElement>("player-mobile-height");
 const playerAutoplayLast = $<HTMLInputElement>("player-autoplay-last");
+const playerVolumeBoost = $<HTMLInputElement>("player-volume-boost");
 const mobileQualitySupported = getNetworkConnection() !== null;
 $("player-mobile-quality-row").hidden = !mobileQualitySupported;
 $("player-mobile-height-row").hidden = !mobileQualitySupported;
@@ -542,9 +543,12 @@ function renderPlayerSettings(): void {
   playerMobileQuality.checked = playerSettings.limitMobileQuality;
   playerMobileHeight.value = String(playerSettings.mobileMaxHeight);
   playerAutoplayLast.checked = playerSettings.autoplayLastChannel;
+  playerVolumeBoost.checked = playerSettings.volumeBoost;
 }
 function persistPlayerSettings(): void {
   renderPlayerSettings();
+  player.setBoostEnabled(playerSettings.volumeBoost, playerSettings.volumePercent / 100);
+  refreshPlayerVolume();
   try {
     localStorage.setItem(PLAYER_SETTINGS_KEY, JSON.stringify(playerSettings));
     setSystemText(playerSettingsStatus, t("settings.saved"));
@@ -563,6 +567,8 @@ playerSettingsForm.addEventListener("submit", (event) => {
     limitMobileQuality: playerMobileQuality.checked,
     mobileMaxHeight: Number(playerMobileHeight.value),
     autoplayLastChannel: playerAutoplayLast.checked,
+    volumeBoost: playerVolumeBoost.checked,
+    volumePercent: Math.min(playerVolumeBoost.checked ? 200 : 100, playerSettings.volumePercent),
   });
   persistPlayerSettings();
 });
@@ -1538,13 +1544,26 @@ btnRetry.addEventListener("click", () => {
 
 btnMute.addEventListener("click", () => {
   player.toggleMute();
-  refreshMuteIcon();
-  volumeSlider.value = String(Math.round(player.getVolume() * 100));
+  refreshPlayerVolume();
 });
 volumeSlider.addEventListener("input", () => {
-  player.setVolume(Number(volumeSlider.value) / 100);
-  refreshMuteIcon();
+  setPlayerVolume(Number(volumeSlider.value) / 100);
 });
+
+function refreshPlayerVolume(): void {
+  volumeSlider.max = player.canBoostVolume ? "200" : "100";
+  volumeSlider.value = String(Math.round(player.getVolume() * 100));
+  volumeSlider.setAttribute("aria-valuetext", `${volumeSlider.value}%`);
+  volumeSlider.title = `${volumeSlider.value}%`;
+  volumeSlider.classList.toggle("volume-boosting", player.getVolume() > 1);
+  refreshMuteIcon();
+}
+function setPlayerVolume(value: number): void {
+  player.setVolume(value);
+  playerSettings = sanitizePlayerSettings({ ...playerSettings, volumePercent: Math.round(player.getVolume() * 100) });
+  try { localStorage.setItem(PLAYER_SETTINGS_KEY, JSON.stringify(playerSettings)); } catch { /* приватный режим */ }
+  refreshPlayerVolume();
+}
 
 btnPip.addEventListener("click", () => void player.togglePip());
 
@@ -1700,18 +1719,16 @@ window.addEventListener("keydown", (e) => {
     case "ArrowUp":
       e.preventDefault();
       volumeSlider.value = String(
-        Math.min(100, Number(volumeSlider.value) + 10),
+        Math.min(Number(volumeSlider.max), Number(volumeSlider.value) + 10),
       );
-      player.setVolume(Number(volumeSlider.value) / 100);
-      refreshMuteIcon();
+      setPlayerVolume(Number(volumeSlider.value) / 100);
       break;
     case "ArrowDown":
       e.preventDefault();
       volumeSlider.value = String(
         Math.max(0, Number(volumeSlider.value) - 10),
       );
-      player.setVolume(Number(volumeSlider.value) / 100);
-      refreshMuteIcon();
+      setPlayerVolume(Number(volumeSlider.value) / 100);
       break;
     case "Escape": {
       const top = topOverlay(overlayStack);
@@ -1852,12 +1869,6 @@ function captureFromVideo(): RecordingSource | null {
   }
 }
 
-// AudioContext и узел источника создаются один раз на весь сеанс:
-// createMediaElementSource можно вызвать на элементе только однажды, повторный
-// вызов бросает InvalidStateError.
-let audioCtx: AudioContext | null = null;
-let audioSourceNode: MediaElementAudioSourceNode | null = null;
-
 /**
  * Аудиодорожка текущего видео через Web Audio — так звук добывается там, где
  * захват элемента не работает (мобильный Firefox).
@@ -1867,32 +1878,7 @@ let audioSourceNode: MediaElementAudioSourceNode | null = null;
  * не проблема: источник элемента — свой blob: от MediaSource.
  */
 function captureAudioTrack(): { track: MediaStreamTrack; release: () => void } | null {
-  if (typeof AudioContext === "undefined") return null;
-  try {
-    if (!audioCtx) {
-      audioCtx = new AudioContext();
-      // Звук обязательно возвращается в вывод: без этого соединения элемент
-      // замолчит, потому что его аудио уходит в граф целиком.
-      audioSourceNode = audioCtx.createMediaElementSource(videoEl);
-      audioSourceNode.connect(audioCtx.destination);
-    }
-    if (!audioSourceNode) return null;
-    void audioCtx.resume(); // клик по ⏺ — валидный user gesture
-    const dest = audioCtx.createMediaStreamDestination();
-    audioSourceNode.connect(dest);
-    const [track] = dest.stream.getAudioTracks();
-    if (!track) {
-      audioSourceNode.disconnect(dest);
-      return null;
-    }
-    return {
-      track,
-      release: () => audioSourceNode?.disconnect(dest),
-    };
-  } catch (e) {
-    console.debug("[iptv-hub] rec: Web Audio недоступен:", e);
-    return null;
-  }
+  return player.captureAudioTrack();
 }
 
 /**
@@ -2762,6 +2748,7 @@ function liveEdge(): number {
 let sleepState: SleepState = initialSleepState;
 
 function refreshPlaybackControls(): void {
+  refreshPlayerVolume();
   const recording = player.isRecordingPlayback;
   btnPrev.hidden = recording;
   btnNext.hidden = recording;

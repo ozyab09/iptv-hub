@@ -4,7 +4,7 @@ import { DEFAULT_PLAYER_SETTINGS, parsePlayerSettings, playerHlsConfig, sanitize
 
 describe("настройки плеера", () => {
   it("сохраняет прежние дефолты hls.js и диагностики", () => {
-    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ maxBufferLength: Hls.DefaultConfig.maxBufferLength, lowLatencyMode: false, diagnosticsTimeoutMs: 8000, limitMobileQuality: false, mobileMaxHeight: 720, autoplayLastChannel: false });
+    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ maxBufferLength: Hls.DefaultConfig.maxBufferLength, lowLatencyMode: false, diagnosticsTimeoutMs: 8000, limitMobileQuality: false, mobileMaxHeight: 720, autoplayLastChannel: false, volumeBoost: false, volumePercent: 100 });
   });
   it.each([null, "", "{", "null", "[]", "42", '"text"'])("испорченный JSON %s даёт дефолты", (raw) => {
     expect(parsePlayerSettings(raw)).toEqual(DEFAULT_PLAYER_SETTINGS);
