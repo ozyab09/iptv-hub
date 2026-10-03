@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { canHotkey } from "../src/hotkey-guard";
 
-// Гард горячих клавиш (src/main.ts): отлавливает S (скриншот) и ←/→ (перемотка),
-// при этом не срабатывает в поле ввода, в диалоге/меню, на настройках и записи
-// и не перехватывает Ctrl+S. Код разделён в одном месте: `canHotkey()` + паттерн
-// ключа в обработчике keydown.
+// Гард горячих клавиш (срез 1: S — скриншот, ←/→ — перемотка ±15 с):
+// отлавливает клавиши, не ломая набор в полях ввода, модальных диалогах/меню,
+// на настройках и во время записи.
 describe("hotkey guard", () => {
-  it("export canHotkey всегда доступен", () => {
-    expect(typeof (globalThis as unknown as { canHotkey: unknown }).canHotkey).toBe("function");
+  it("canHotkey — чистая функция, экспортируется", () => {
+    expect(typeof canHotkey).toBe("function");
   });
 });
-EOF
-echo created

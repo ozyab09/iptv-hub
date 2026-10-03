@@ -109,6 +109,7 @@ import {
   type WakeLockState,
 } from "./wake-lock";
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
+import { canHotkey } from "./hotkey-guard";
 import { neighborIndex, Player } from "./player";
 import {
   applyTheme,
@@ -467,35 +468,7 @@ function canNumericZap(): boolean {
  * диалоге/меню, не на настройках/записях (там свои контролы), не на
  * мини-плеере и не когда панель скрыта.
  */
-export function canHotkey(): boolean {
-  const focused = document.activeElement as HTMLElement | null;
-  const dialogOpen = [...document.querySelectorAll<HTMLElement>(
-    'dialog[open], [role="dialog"], [role="menu"], [role="listbox"]
-  ')].some((el) => el.getClientRects().length > 0);
-  return !playerBar.hidden && showsChannelList(activeView) &&
-    (!isCompact() || playerBar.classList.contains("open")) &&
-    !focused?.closest(
-      "input, textarea, select, [contenteditable]:not([contenteditable=false])"
-    ) && !dialogOpen;
-}
-let visibleResults: (Channel | ProgrammeMatch)[] = [];
-/**
- * Можно ли обрабатывать горячие клавиши (S — скриншот, ←/→ — перемотка,
- * остальные ниже) в текущем интерфейсе: не в поле ввода, не в модальном
- * диалоге/меню, не на настройках/записях (там свои контролы), не на
- * мини-плеере и не когда панель скрыта.
- */
-export function canHotkey(): boolean {
-  const focused = document.activeElement as HTMLElement | null;
-  const dialogOpen = [...document.querySelectorAll<HTMLElement>(
-    'dialog[open], [role="dialog"], [role="menu"], [role="listbox"]
-  ')].some((el) => el.getClientRects().length > 0);
-  return !playerBar.hidden && showsChannelList(activeView) &&
-    (!isCompact() || playerBar.classList.contains("open")) &&
-    !focused?.closest(
-      "input, textarea, select, [contenteditable]:not([contenteditable=false])"
-    ) && !dialogOpen;
-}
+export let visibleResults: (Channel | ProgrammeMatch)[] = [];
 
 /**
  * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
@@ -503,6 +476,7 @@ export function canHotkey(): boolean {
  * прокрутку. Тест сверяет оба значения.
  */
 const CHANNEL_ROW_HEIGHT = 72;
+
 /** Список каналов — одна колонка строк, как требует дизайн-система. */
 const CHANNEL_COLUMNS = 1;
 
