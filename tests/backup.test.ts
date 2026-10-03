@@ -8,6 +8,8 @@ import {
   recentsKey,
   RECENTS_MAX,
 } from "../src/backup";
+import { readBackupSections, restoreBackup } from "../src/backup-storage";
+import { DEFAULT_PLAYER_SETTINGS } from "../src/player-settings";
 
 const valid = {
   version: 1,
@@ -18,6 +20,102 @@ const valid = {
   favorites: { a: ["https://a/s1"] },
 };
 
+const sections = {
+  channelOverrides: { a: [{ url: "https://a/s1", alias: "Alias", hidden: false }] },
+  groupPreferences: { a: { hidden: ["Hidden"], order: ["Sports", "News"] } },
+  parentalPins: { a: [{ group: "Locked", salt: "0".repeat(32), hash: "1".repeat(64) }] },
+  channelHealth: { a: { version: 1 as const, failures: [{ url: "https://a/s1", failedAt: 123, kind: "http" as const, status: 503 }] } },
+  favoritesOrder: { a: ["https://a/s1"] },
+  playerSettings: { ...DEFAULT_PLAYER_SETTINGS, maxBufferLength: 60, volumePercent: 75 },
+  language: "en" as const, refreshInterval: 360 as const,
+  positions: { "https://a/movie.mp4": { t: 45, at: 123 } },
+  recordingSchedule: { a: [{ id: "rec", playlistId: "a", channelUrl: "https://a/live.m3u8", channelName: "A", group: "News", title: "Film", start: 1_000, stop: 2_000, repeat: "daily" as const, revision: 1, lastStart: null, status: "scheduled" as const }] },
+  reminders: { a: [{ channelUrl: "https://a/s1", channelName: "A", title: "Film", start: 1000, stop: 2000, leadMinutes: 5, notified: false }] },
+  reminderSettings: { minutes: 10, desktop: false },
+};
+
+function storageKV() {
+  const map = new Map<string, string>();
+  return { map, getItem: (key: string) => map.get(key) ?? null, setItem: (key: string, value: string) => { map.set(key, value); }, removeItem: (key: string) => { map.delete(key); } };
+}
+
+describe("backup v2", () => {
+  it("uses playlist validation for v2, including local identity and optional EPG", () => {
+    const result = parseBackup(JSON.stringify({ ...valid, version: 2, playlists: [
+      { ...valid.playlists[0], epgUrl: "javascript:bad" },
+      { id: "local", name: "File", playlistUrl: "local:old-timestamp", epgUrl: null },
+    ] }));
+    if (!result.ok) throw new Error(result.error);
+    expect(result.data.playlists[0]!.epgUrl).toBeNull();
+    expect(result.data.playlists[1]!.playlistUrl).toBe("local:local");
+    expect(result.warnings).toContain("playlists");
+  });
+  it("round-trips every section through clean storage using the owning parsers", () => {
+    const backup = buildBackup({ ...valid, ...sections, theme: "system" });
+    const result = parseBackup(JSON.stringify(backup));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings).toEqual([]);
+    const storage = storageKV();
+    restoreBackup(storage, result.data);
+    expect(readBackupSections(storage, ["a"])).toEqual(sections);
+    expect(storage.getItem("iptv-hub.theme.v1")).toBe("system");
+    expect(storage.getItem("iptv-hub.active-playlist.v1")).toBe("a");
+    expect(JSON.parse(storage.getItem("iptv-hub.parental-pins.v1:a")!)[0]).toEqual(sections.parentalPins.a[0]);
+  });
+  it("drops malformed structures, repairs individual fields and reports section names", () => {
+    const result = parseBackup(JSON.stringify({ ...valid, version: 2, channelOverrides: { a: [null, sections.channelOverrides.a[0]], unknown: [] },
+      parentalPins: "bad", groupPreferences: { a: { hidden: ["Hidden", 123], order: ["News"] } },
+      playerSettings: { ...sections.playerSettings, maxBufferLength: -1 }, language: "wrong", refreshInterval: 7,
+      positions: { ...sections.positions, broken: null }, recordingSchedule: { a: [{ ...sections.recordingSchedule.a[0], playlistId: "unknown" }] } }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.channelOverrides).toEqual(sections.channelOverrides);
+    expect(result.data.parentalPins).toBeUndefined();
+    expect(result.data.language).toBeUndefined();
+    expect(result.data.refreshInterval).toBeUndefined();
+    expect(result.data.playerSettings!.maxBufferLength).toBe(30);
+    expect(result.data.positions).toEqual(sections.positions);
+    expect(result.data.recordingSchedule).toEqual({ a: [] });
+    expect(result.warnings).toEqual(expect.arrayContaining(["channelOverrides:a", "channelOverrides:unknown", "parentalPins", "language", "refreshInterval", "playerSettings", "positions", "recordingSchedule:a"]));
+  });
+  it("does not migrate a running recording, but retains its rule and deduplication marker", () => {
+    const rule = { ...sections.recordingSchedule.a[0]!, status: "recording" as const, lastStart: 1000 };
+    const backup = buildBackup({ ...valid, recordingSchedule: { a: [rule] } });
+    expect(backup.recordingSchedule!.a).toEqual([{ ...rule, status: "missed" }]);
+  });
+  it("v1 keeps settings absent from its format and still restores its original data", () => {
+    const result = parseBackup(JSON.stringify(valid));
+    if (!result.ok) throw new Error(result.error);
+    const storage = storageKV();
+    storage.setItem("iptv-hub.language.v1", "en");
+    storage.setItem("iptv-hub.parental-pins.v1:a", "existing");
+    restoreBackup(storage, result.data);
+    expect(storage.getItem("iptv-hub.language.v1")).toBe("en");
+    expect(storage.getItem("iptv-hub.parental-pins.v1:a")).toBe("existing");
+    expect(storage.getItem("iptv-hub.favorites.v1:a")).toBe(JSON.stringify(valid.favorites.a));
+  });
+  it("restores empty sections and leaves unrelated playlist keys intact", () => {
+    const storage = storageKV();
+    storage.setItem("iptv-hub.parental-pins.v1:a", "old");
+    storage.setItem("iptv-hub.parental-pins.v1:other", "other");
+    restoreBackup(storage, buildBackup({ ...valid, parentalPins: { a: [] }, favorites: {} }));
+    expect(storage.getItem("iptv-hub.parental-pins.v1:a")).toBe("[]");
+    expect(storage.getItem("iptv-hub.parental-pins.v1:other")).toBe("other");
+    expect(storage.getItem("iptv-hub.favorites.v1:a")).toBe("[]");
+  });
+  it("rolls back touched keys after a failed write", () => {
+    const storage = storageKV();
+    storage.setItem("iptv-hub.playlists.v1", "old playlists");
+    const snapshot = new Map(storage.map);
+    expect(() => restoreBackup({ ...storage, setItem: (key, value) => {
+      if (key === "iptv-hub.language.v1") throw new Error("Quota exceeded");
+      storage.setItem(key, value);
+    } }, buildBackup({ ...valid, ...sections }))).toThrow("Quota exceeded");
+    expect(storage.map).toEqual(snapshot);
+  });
+});
+
 describe("buildBackup", () => {
   it("stamps version and date", () => {
     const b = buildBackup({
@@ -26,7 +124,7 @@ describe("buildBackup", () => {
       activeId: "a",
       favorites: {},
     });
-    expect(b.version).toBe(1);
+    expect(b.version).toBe(2);
     expect(b.theme).toBe("light");
     expect(b.exportedAt).toBeTruthy();
   });
@@ -44,7 +142,7 @@ describe("parseBackup", () => {
   });
 
   it("rejects wrong version", () => {
-    expect(parseBackup(JSON.stringify({ ...valid, version: 2 })).ok).toBe(false);
+    expect(parseBackup(JSON.stringify({ ...valid, version: 3 })).ok).toBe(false);
   });
 
   it("rejects when no valid playlists", () => {

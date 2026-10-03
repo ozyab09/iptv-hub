@@ -148,6 +148,7 @@ import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
 import { createTimelineGuide } from "./timeline-guide-ui";
 import { createProgrammeReminders } from "./reminder-ui";
+import { readBackupSections, restoreBackup } from "./backup-storage";
 import type { NotificationWatch } from "./notifications";
 import { applyChannelOverrides, channelOverridesKey, parseChannelOverrides, serializeChannelOverrides, setChannelOverride, type ChannelOverrides } from "./channel-overrides";
 import { createPinHash, parentalPinsKey, parseParentalPins, serializeParentalPins, verifyPin, type ParentalPins } from "./parental-pin";
@@ -3677,6 +3678,7 @@ function renderPlaylistManager(): void {
 
 // ---------- Экспорт / импорт настроек ----------
 btnExport.addEventListener("click", () => {
+  saveCurrentPosition();
   const favs: Record<string, string[]> = {};
   for (const p of plState.items) {
     const list = loadFavoritesFor(p.id);
@@ -3694,11 +3696,13 @@ btnExport.addEventListener("click", () => {
     } catch { /* битые данные — пропускаем */ }
   }
   const backup = buildBackup({
-    theme: document.documentElement.dataset.theme ?? "dark",
+    theme: themeChoice(localStorage),
     playlists: plState.items,
     activeId: plState.activeId,
     favorites: favs,
     recents: recentsBackup,
+    ...readBackupSections(localStorage, plState.items.map((p) => p.id)),
+    language: currentLanguage,
   });
   const blob = new Blob([JSON.stringify(backup, null, 2)], {
     type: "application/json",
@@ -3742,41 +3746,26 @@ importFile.addEventListener("change", () => {
   if (!file) return;
   file
     .text()
-    .then((text) => {
+    .then(async (text) => {
       const result = parseBackup(text);
       if (!result.ok) {
         showToast(tr("backup.importFailed", { reason: translateMessage(result.error, currentLanguage) }));
         return;
       }
       const data = result.data;
-      // темы
-      if (data.theme !== document.documentElement.dataset.theme) {
-        btnTheme.click();
-      }
-      // плейлисты + избранное (замена целиком)
-      plState = { items: data.playlists, activeId: data.activeId };
-      savePlaylists(localStorage, plState);
-      for (const [plId, urls] of Object.entries(data.favorites)) {
-        try {
-          localStorage.setItem(favoritesKey(plId), JSON.stringify(urls));
-        } catch { /* приватный режим */ }
-      }
-      // «Недавние» — только для плейлистов из бэкапа (существующие ключи
-      // других плейлистов не трогаем).
-      if (data.recents) {
-        for (const [plId, urls] of Object.entries(data.recents)) {
-          try {
-            localStorage.setItem(recentsKey(plId), JSON.stringify(urls));
-          } catch { /* приватный режим */ }
-        }
-      }
-      // Сразу отражаем recents активного плейлиста в UI.
-      if (data.activeId) loadRecentsFor(data.activeId);
-      renderPlaylistManager();
-      renderPlaylistSwitcher();
-      showToast(tr("backup.imported", { count: data.playlists.length }));
-      const active = activePlaylist(plState);
-      if (active) void openPlaylist(active.playlistUrl, active.epgUrl);
+      stopIfRecording();
+      await scheduleUi?.prepareImport();
+      closeMultiView(false);
+      lastPlayed = null;
+      archivePlayback = null;
+      player.stop(); // A late pause/pagehide must not overwrite imported positions.
+      let error = false;
+      try { restoreBackup(localStorage, data); } catch { error = true; }
+      try { sessionStorage.setItem("iptv-hub.backup-result", JSON.stringify({ count: data.playlists.length, warnings: result.warnings, error })); } catch { /* Storage unavailable. */ }
+      const url = new URL(location.href);
+      for (const key of ["p", "e", "ch"]) url.searchParams.delete(key);
+      history.replaceState(null, "", url);
+      location.reload();
     })
     .catch(() => showToast(tr("error.readFile")))
     .finally(() => {
@@ -4084,4 +4073,13 @@ scheduleUi = createRecordingScheduleUi({
   notify: showToast, onSaved: renderRecordings,
 });
 renderNav();
-bootstrap();
+void bootstrap().then(() => {
+  try {
+    const raw = sessionStorage.getItem("iptv-hub.backup-result");
+    sessionStorage.removeItem("iptv-hub.backup-result");
+    if (!raw) return;
+    const result = JSON.parse(raw) as { count: number; warnings: string[]; error: boolean };
+    showToast(tr(result.error ? "backup.writeFailed" : "backup.imported", { count: result.count }));
+    if (!result.error && result.warnings.length) pushNotification(tr("backup.normalized", { sections: result.warnings.join(", ") }));
+  } catch { /* No pending import report. */ }
+});
