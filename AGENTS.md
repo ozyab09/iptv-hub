@@ -349,6 +349,16 @@ HLS  ─→ FRAG_LOADED ─→ segment-recorder ─→ OPFS/память ─→ 
 
 ### Контракты данных
 
+**Порядок избранного (#288):** `favorites-order.ts`, массив URL по ключу
+`iptv-hub.favorites-order.v1:<playlist-id>`. `applyFavoritesOrder()` сохраняет
+порядок доступных избранных, пропускает исчезнувшие, дописывает новые в конец.
+Ручной порядок применяется к карточкам `visibleResults` только в «Избранном»;
+`visibleChannels` для prev/next и ZAP и recents для «Продолжить» не меняются.
+Drag/drop и Alt+↑/↓ сохраняют порядок без запуска канала; фокус следует за
+перемещённой строкой. Удаление из избранного убирает позицию; удаление плейлиста
+чистит ключ. Storage-событие перечитывает порядок активного плейлиста.
+Порядок пока не входит в backup JSON.
+
 **Проблемные каналы (#252):** чистый `channel-health.ts`, ключ
 `iptv-hub.channel-health.v1:<playlist-id>`, JSON `{ version: 1, failures: [{ url,
 failedAt, kind, status? }] }`. URL — основной идентификатор канала, в том числе

@@ -3,6 +3,7 @@ import { createRecordingScheduleUi } from "./recording-schedule-ui";
 import { channelHealthKey, parseChannelHealth, serializeChannelHealth, markChannelFailure, clearChannelFailure, type ChannelHealth, type ChannelFailure } from "./channel-health";
 import { createGroupPreferencesUi } from "./group-preferences-ui";
 import { groupPreferencesKey, parseGroupPreferences, serializeGroupPreferences, orderedGroups, moveGroup, type GroupPreferences } from "./group-preferences";
+import { applyFavoritesOrder, favoritesOrderKey, moveFavorite, parseFavoritesOrder } from "./favorites-order";
 import { appendZapDigit, zapChannelIndex, ZAP_DELAY_MS, type NumericZap } from "./numeric-zap";
 import { LANGUAGE_KEY, resolveLanguage, t, translateMessage, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { installDebugLog } from "./debug-log";
@@ -441,6 +442,7 @@ let scheduleUi: ReturnType<typeof createRecordingScheduleUi> | null = null;
 let favKey: string | null = null; // favoritesKey(id) активного плейлиста (legacy)
 void favKey;
 let favorites = new Set<string>();
+let favoritesOrder: string[] = [];
 const VIEW_KEY = "iptv-hub.view.v1";
 let activeView: View = parseView(
   typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null,
@@ -1211,7 +1213,7 @@ function renderChannels(resetScroll = true): void {
   const sorted =
     activeView === "recents" ? list : applyFavorites(list, favorites, false);
   const programmes = searchProgrammes(inView.filter((c) => !activeCategory || c.group === activeCategory), epg, q);
-  visibleResults = [...sorted, ...programmes];
+  visibleResults = [...(activeView === "favorites" ? applyFavoritesOrder(sorted, favorites, favoritesOrder) : sorted), ...programmes];
   visibleChannels = [...new Map([...sorted, ...programmes.map((m) => m.channel)].map((c) => [c.url, c])).values()];
   viewCount.textContent = groupDigits(visibleResults.length);
   emptyState.textContent = emptyMessage(activeView, q !== "");
@@ -1276,6 +1278,44 @@ function renderChannelCard(c: Channel): HTMLElement {
   card.className = channelRowClass(lastPlayed?.url === c.url);
   card.setAttribute("role", "listitem");
   card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
+  if (activeView === "favorites") {
+    card.draggable = true;
+    card.title = tr("favorites.reorderHint");
+    card.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
+    card.addEventListener("keydown", (event) => {
+      if (event.target !== card || !event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const channels = visibleResults.filter((row): row is Channel => !("programme" in row));
+      const index = channels.findIndex((channel) => channel.url === c.url);
+      const target = channels[index + (event.key === "ArrowUp" ? -1 : 1)];
+      if (target) reorderFavorite(c.url, target.url);
+    });
+    card.addEventListener("dragstart", (event) => {
+      if (!event.dataTransfer || event.target !== card) { event.preventDefault(); return; }
+      event.dataTransfer.setData("application/x-iptv-favorite", JSON.stringify({ playlistId: plState.activeId, url: c.url }));
+      event.dataTransfer.effectAllowed = "move";
+      cancelNumericZap();
+    });
+    card.addEventListener("dragover", (event) => {
+      if (!event.dataTransfer?.types.includes("application/x-iptv-favorite")) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      card.classList.add("favorite-drop-target");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("favorite-drop-target"));
+    card.addEventListener("drop", (event) => {
+      event.preventDefault();
+      card.classList.remove("favorite-drop-target");
+      try {
+        const data = JSON.parse(event.dataTransfer?.getData("application/x-iptv-favorite") ?? "null");
+        if (data?.playlistId === plState.activeId && typeof data.url === "string") reorderFavorite(data.url, c.url);
+      } catch { /* Чужой drag payload. */ }
+    });
+    card.addEventListener("dragend", () => {
+      channelList.querySelectorAll(".favorite-drop-target").forEach((row) => row.classList.remove("favorite-drop-target"));
+    });
+  }
   const failure = channelHealth.get(c.url);
   card.classList.toggle("has-failure", failure !== undefined);
 
@@ -3458,11 +3498,28 @@ function loadFavoritesFor(id: string): Set<string> {
 
 /** Сохранить избранное по ключу плейлиста (best-effort). */
 function saveFavoritesFor(id: string): void {
+  favoritesOrder = applyFavoritesOrder(snapshot?.channels ?? [], favorites, favoritesOrder).map((channel) => channel.url);
   try {
     localStorage.setItem(favoritesKey(id), JSON.stringify([...favorites]));
+    localStorage.setItem(favoritesOrderKey(id), JSON.stringify(favoritesOrder));
   } catch {
     // приватный режим / quota
   }
+}
+
+function loadFavoritesOrderFor(id: string): string[] {
+  try { return parseFavoritesOrder(localStorage.getItem(favoritesOrderKey(id))).filter((url) => favorites.has(url)); }
+  catch { return []; }
+}
+
+function reorderFavorite(url: string, target: string): void {
+  if (activeView !== "favorites" || !plState.activeId || !snapshot || !favorites.has(url) || !favorites.has(target)) return;
+  const order = applyFavoritesOrder(snapshot.channels, favorites, favoritesOrder).map((channel) => channel.url);
+  favoritesOrder = moveFavorite(order, url, target);
+  try { localStorage.setItem(favoritesOrderKey(plState.activeId), JSON.stringify(favoritesOrder)); } catch { /* текущая сессия */ }
+  renderChannels(false);
+  const index = visibleResults.findIndex((row) => !("programme" in row) && row.url === url);
+  if (index >= 0) focusChannelAt(index);
 }
 
 /** Активировать плейлист по id: перезагрузить его избранное и список. */
@@ -3512,8 +3569,9 @@ window.addEventListener("storage", (e) => {
   }
   if (d.favorites) {
     const activeId = plState.activeId;
-    if (activeId && (e.key === null || e.key === favoritesKey(activeId))) {
+    if (activeId && (e.key === null || e.key === favoritesKey(activeId) || e.key === favoritesOrderKey(activeId))) {
       favorites = loadFavoritesFor(activeId);
+      favoritesOrder = loadFavoritesOrderFor(activeId);
       refreshNowFav();
       if (showsChannelList(activeView)) renderChannels();
     }
@@ -3738,6 +3796,7 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  favoritesOrder = plState.activeId ? loadFavoritesOrderFor(plState.activeId) : [];
   healthAttempt = null;
   try { channelHealth = parseChannelHealth(plState.activeId ? localStorage.getItem(channelHealthKey(plState.activeId)) : null); }
   catch { channelHealth = new Map(); }
