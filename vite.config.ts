@@ -41,8 +41,27 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
   },
+  build: {
+    // hls.js + транзитивные полилибы весят ~775 КБ — выносим в vendor-чанк,
+    // чтобы приложение и браузер не ждали миллионов строк из одного файла.
+    // Не влияет на строгий типчек, только на размер бандла и кэш.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["hls.js"],
+        },
+      },
+    },
+  },
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // node-окружение + независимые тесты: параллельные процессы без jsdom,
+    // чтобы `npm test` не держал целую машину под один файл.
+    concurrency: true,
+    pool: "forks",
+    poolOptions: {
+      forks: { singleFork: true },
+    },
   },
 });
