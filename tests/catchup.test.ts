@@ -4,6 +4,7 @@ import {
   buildCatchupUrl,
   canWatchPast,
   programmeStartUrl,
+  hourlyFallbackProgrammes,
   dayWindows,
   programmesInDay,
   MAX_CATCHUP_DAYS,
@@ -129,5 +130,39 @@ describe("programmesInDay", () => {
     const yesterday: EpgProgramme = { ...prog, start: "2026-09-27T09:00:00.000Z", stop: "2026-09-27T09:30:00.000Z" };
     const out = programmesInDay([b, yesterday, a], wins[0]!);
     expect(out.map((p) => p.start)).toEqual([a.start, b.start]);
+  });
+});
+
+describe("hourlyFallbackProgrammes", () => {
+  const now = new Date("2026-09-28T15:30:00.000Z");
+
+  it("создаёт 168 часовых слотов на неделю назад", () => {
+    expect(hourlyFallbackProgrammes(now)).toHaveLength(7 * 24);
+  });
+
+  it("последний слот — текущий час (его конец на границе часа), остальные раньше", () => {
+    const out = hourlyFallbackProgrammes(now);
+    const last = out[out.length - 1]!;
+    expect(last.stop).toBe("2026-09-28T15:00:00.000Z");
+    expect(last.start).toBe("2026-09-28T14:00:00.000Z");
+    for (const p of out) expect(Date.parse(p.stop)).toBeLessThanOrEqual(now.getTime());
+  });
+
+  it("слоты идут от старых к новым и стыкуются без наложений", () => {
+    const out = hourlyFallbackProgrammes(now);
+    for (let i = 1; i < out.length; i++) {
+      expect(Date.parse(out[i]!.start) - Date.parse(out[i - 1]!.start)).toBe(3_600_000);
+      expect(out[i]!.start).toBe(out[i - 1]!.stop);
+    }
+  });
+
+  it("название и пустое описание — как у передач без EPG", () => {
+    const out = hourlyFallbackProgrammes(now);
+    expect(out[0]!.title).toBe("Без названия");
+    expect(out[0]!.desc).toBeNull();
+  });
+
+  it("горизонт настраивается (3 дня для MAX_CATCHUP_DAYS)", () => {
+    expect(hourlyFallbackProgrammes(now, 3)).toHaveLength(3 * 24);
   });
 });

@@ -139,10 +139,12 @@ import {
   buildCatchupUrl,
   canWatchPast,
   programmeStartUrl,
+  hourlyFallbackProgrammes,
   dayWindows,
   programmesInDay,
   type DayWindow,
 } from "./catchup";
+import { downloadProgramme } from "./programme-downloader";
 import { createQualityMenu } from "./quality-menu";
 import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
@@ -2734,7 +2736,16 @@ function renderGuide(): void {
   guideList.textContent = "";
   const window: DayWindow = wins[guideDayIdx]!;
   if (guideGridOn) { timelineGuideUi!.render(window); return; }
-  const progs = epg ? programmesInDay(channelProgrammes(), window) : [];
+  const now = new Date();
+  let progs = programmesInDay(channelProgrammes(), window);
+  // Канал без телепрограммы, но с архивом: показываем часовые слоты «без
+  // названия» на неделю назад (#314) — клик открывает catchup.
+  if (progs.length === 0) {
+    const cu = { days: lastPlayed.catchupDays, source: lastPlayed.catchupSource };
+    if (cu.days > 0 && cu.source) {
+      progs = programmesInDay(hourlyFallbackProgrammes(now), window);
+    }
+  }
   if (progs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "muted";
@@ -2743,7 +2754,6 @@ function renderGuide(): void {
     return;
   }
 
-  const now = new Date();
   for (const p of progs) {
     guideList.append(programmeRow(p, now, () => (guideOverlay.hidden = true)));
   }
@@ -2817,6 +2827,32 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
   }
   if (stop <= now.getTime()) return row;
   const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
+  // Скачивание доступной из архива передачи (#315) — рядом с записью.
+  if (state === "past" && watchable && cu.source) {
+    const dl = document.createElement("button");
+    dl.type = "button";
+    dl.className = "btn btn-sm programme-download";
+    dl.textContent = tr("download.title");
+    dl.title = tr("download.title");
+    dl.addEventListener("click", () => {
+      const url = buildCatchupUrl(cu, p, new Date());
+      if (!url) {
+        showToast(tr("error.noArchive"));
+        return;
+      }
+      void downloadProgramme({
+        channelName: c.name,
+        channelUrl: c.url,
+        programme: p,
+        url,
+        fs: recordingsFs,
+        storage: localStorage,
+        notify: showToast,
+        onSaved: renderRecordings,
+      });
+    });
+    wrapper.append(dl);
+  }
   const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
   record.textContent = tr("schedule.title");
   const playlistId = plState.activeId;
