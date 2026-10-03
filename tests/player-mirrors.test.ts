@@ -31,7 +31,7 @@ afterEach(() => { vi.unstubAllGlobals(); instances.length = 0; });
 function fixture() {
   const handlers = new Map<string, () => void>();
   const media = {
-    paused: false, src: "", error: null as { code: number; message: string } | null,
+    paused: false, currentTime: 0, src: "", error: null as { code: number; message: string } | null,
     addEventListener: (name: string, handler: () => void) => handlers.set(name, handler),
     removeAttribute: vi.fn(), load: vi.fn(), play: vi.fn(() => Promise.resolve()),
   };
@@ -45,6 +45,27 @@ function fixture() {
 }
 
 describe("Player mirror fallback", () => {
+  it.each(["m3u8", "mp4"])("resumes the paused current %s channel without rebuilding its source", (ext) => {
+    const { player, media } = fixture();
+    const channel = { url: `https://live/current.${ext}` };
+    player.play(channel);
+    media.currentTime = 148;
+    media.paused = true;
+    media.play.mockClear();
+    media.load.mockClear();
+    media.removeAttribute.mockClear();
+    const count = instances.length;
+    expect(player.play(channel)).toBeNull();
+    expect(media.play).toHaveBeenCalledOnce();
+    expect(media.currentTime).toBe(148);
+    expect(media.load).not.toHaveBeenCalled();
+    expect(media.removeAttribute).not.toHaveBeenCalled();
+    expect(instances).toHaveLength(count);
+    if (count) expect(instances[0]!.destroy).not.toHaveBeenCalled();
+    media.paused = false;
+    player.play(channel);
+    expect(media.play).toHaveBeenCalledOnce();
+  });
   it.each(["ts", "mp4"])("tracks local %s playback through retry, stop and channel change", (ext) => {
     const { player } = fixture();
     expect(player.isRecordingPlayback).toBe(false);
@@ -82,6 +103,13 @@ describe("Player mirror fallback", () => {
     expect(instances).toHaveLength(2); // позднее событие старого источника
     f.player.play({ url: "https://bad/live.m3u8", mirrors: ["https://good/live.m3u8"] });
     expect(instances).toHaveLength(2); // основной URL остаётся идентификатором
+    f.media.paused = true;
+    f.media.play.mockClear();
+    f.player.play({ url: "https://bad/live.m3u8", mirrors: ["https://good/live.m3u8"] });
+    expect(f.media.play).toHaveBeenCalledOnce();
+    expect(f.player.currentStreamUrl).toBe("https://good/live.m3u8");
+    expect(instances).toHaveLength(2);
+    expect(instances[1]!.destroy).not.toHaveBeenCalled();
   });
   it("ignores nonfatal errors and reports exhaustion without cycling", () => {
     const f = fixture();

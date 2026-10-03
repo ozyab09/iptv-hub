@@ -174,7 +174,10 @@ export class Player {
    * не наслаивались).
    */
   play(channel: Pick<Channel, "url" | "mirrors">, forceHls = false): string | null {
-    if (this.channelUrl === channel.url && this.currentUrl && !this.video.paused) return null;
+    if (this.channelUrl === channel.url && this.currentUrl) {
+      if (this.video.paused) this.togglePause();
+      return null;
+    }
     this.activeSettings = sanitizePlayerSettings(this.readSettings());
     this.stop();
     this.manualQuality = false;

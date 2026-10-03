@@ -39,7 +39,9 @@ test("live HLS retains a three-minute pause and returns to live", async ({ page 
   await page.keyboard.press("ArrowLeft");
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeCloseTo(pausedAt, 1);
   await expect(page.locator("#now-title")).toHaveText("Live");
-  await page.locator("#btn-pause").click();
+  const source = await video.evaluate((el: HTMLVideoElement) => el.src);
+  await page.locator("#channel-list .channel-card").click();
+  expect(await video.evaluate((el: HTMLVideoElement) => el.src)).toBe(source);
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(false);
   const resumedAt = await video.evaluate((el: HTMLVideoElement) => el.currentTime);
   expect(resumedAt).toBeLessThan(pausedAt + 5);
@@ -77,7 +79,7 @@ test("native MP4 keeps pause, resume and finite seeking", async ({ page }) => {
   await page.locator("#btn-pause").click();
   await expect(video).toHaveJSProperty("paused", true);
   const time = await video.evaluate((el: HTMLVideoElement) => el.currentTime);
-  await page.locator("#btn-pause").click();
+  await page.locator("#channel-list .channel-card").click();
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeGreaterThan(time + 0.2);
   await page.locator("#btn-seek-back").click();
   expect(await video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeLessThan(0.5);
