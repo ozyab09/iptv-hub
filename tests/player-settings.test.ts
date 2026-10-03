@@ -4,14 +4,14 @@ import { DEFAULT_PLAYER_SETTINGS, parsePlayerSettings, playerHlsConfig, sanitize
 
 describe("настройки плеера", () => {
   it("сохраняет прежние дефолты hls.js и диагностики", () => {
-    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ maxBufferLength: Hls.DefaultConfig.maxBufferLength, lowLatencyMode: false, diagnosticsTimeoutMs: 8000 });
+    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ maxBufferLength: Hls.DefaultConfig.maxBufferLength, lowLatencyMode: false, diagnosticsTimeoutMs: 8000, limitMobileQuality: false, mobileMaxHeight: 720, autoplayLastChannel: false });
   });
   it.each([null, "", "{", "null", "[]", "42", '"text"'])("испорченный JSON %s даёт дефолты", (raw) => {
     expect(parsePlayerSettings(raw)).toEqual(DEFAULT_PLAYER_SETTINGS);
   });
   it("загружает сохранённые поля и отбрасывает лишние", () => {
     expect(parsePlayerSettings(JSON.stringify({ maxBufferLength: 120, lowLatencyMode: true, diagnosticsTimeoutMs: 15000, other: 1 })))
-      .toEqual({ maxBufferLength: 120, lowLatencyMode: true, diagnosticsTimeoutMs: 15000 });
+      .toEqual({ ...DEFAULT_PLAYER_SETTINGS, maxBufferLength: 120, lowLatencyMode: true, diagnosticsTimeoutMs: 15000 });
   });
   it.each([5, 600])("принимает границу буфера %s", (maxBufferLength) => {
     expect(sanitizePlayerSettings({ maxBufferLength }).maxBufferLength).toBe(maxBufferLength);
@@ -36,8 +36,13 @@ describe("настройки плеера", () => {
     expect(input.maxBufferLength).toBe(30);
     expect(DEFAULT_PLAYER_SETTINGS.maxBufferLength).toBe(30);
   });
+  it("autoplay is opt-in and accepts only a boolean", () => {
+    expect(sanitizePlayerSettings({ autoplayLastChannel: true }).autoplayLastChannel).toBe(true);
+    expect(sanitizePlayerSettings({ autoplayLastChannel: "true" }).autoplayLastChannel).toBe(false);
+    expect(parsePlayerSettings(null).autoplayLastChannel).toBe(false);
+  });
   it("передаёт увеличенный целевой буфер в HLS без таймаута диагностики", () => {
-    expect(playerHlsConfig({ maxBufferLength: 300, lowLatencyMode: true, diagnosticsTimeoutMs: 20000 }))
+    expect(playerHlsConfig({ ...DEFAULT_PLAYER_SETTINGS, maxBufferLength: 300, lowLatencyMode: true, diagnosticsTimeoutMs: 20000 }))
       .toEqual({ enableWorker: true, maxBufferLength: 300, lowLatencyMode: true, backBufferLength: 600 });
   });
 });

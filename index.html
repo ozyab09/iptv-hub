@@ -179,6 +179,24 @@
                         <label for="player-diagnostics-timeout" data-i18n="settings.timeout">Таймаут диагностики, секунды</label>
                         <div class="input"><input id="player-diagnostics-timeout" type="number" min="1" max="60" step="1" required /></div>
                       </div>
+                      <div id="player-mobile-quality-row" class="item">
+                        <label for="player-mobile-quality" data-i18n="settings.mobileQuality">Ограничивать качество в мобильной сети</label>
+                        <span class="player-switch">
+                          <input id="player-mobile-quality" type="checkbox" />
+                          <span class="player-switch-track" aria-hidden="true"></span>
+                        </span>
+                      </div>
+                      <div class="item">
+                        <label for="player-autoplay-last" data-i18n="settings.autoplayLast">Продолжать с последнего канала при открытии</label>
+                        <span class="player-switch">
+                          <input id="player-autoplay-last" type="checkbox" />
+                          <span class="player-switch-track" aria-hidden="true"></span>
+                        </span>
+                      </div>
+                      <div id="player-mobile-height-row" class="item">
+                        <label for="player-mobile-height" data-i18n="settings.mobileHeight">Максимальное качество</label>
+                        <div class="input"><select id="player-mobile-height"><option value="360">360p</option><option value="480">480p</option><option value="720">720p</option><option value="1080">1080p</option></select></div>
+                      </div>
                       <div class="item">
                         <button type="submit" class="btn" data-i18n="common.save">Сохранить</button>
                         <button id="player-settings-reset" type="button" class="btn" data-i18n="settings.defaults">По умолчанию</button>
@@ -187,6 +205,8 @@
                   </form>
                   <p class="set-note muted" data-i18n="settings.playerNote">Применяются к следующему запуску канала. Буфер: 5–600 с, диагностика: 1–60 с. Больший буфер требует больше памяти; доступная пауза зависит от потока. Низкая задержка работает с поддерживающими её HLS-потоками.</p>
                   <p id="player-settings-status" class="set-note muted" role="status"></p>
+                  <p class="set-note muted" data-i18n="settings.mobileNote">Для HLS в Auto. Если тип сети неизвестен, ограничение включается для медленного соединения 2G/3G. Ручной выбор качества имеет приоритет; если нет уровня ниже порога, используется самый низкий доступный.</p>
+                  <p id="player-mobile-unsupported" class="set-note muted" data-i18n="settings.mobileUnsupported">Браузер не сообщает тип сети — автоматическое ограничение качества недоступно.</p>
                 </section>
 
                 <section class="set-group refresh-group">

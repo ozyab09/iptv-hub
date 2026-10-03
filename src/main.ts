@@ -109,7 +109,7 @@ import {
   type WakeLockState,
 } from "./wake-lock";
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
-import { neighborIndex, Player } from "./player";
+import { getNetworkConnection, neighborIndex, Player } from "./player";
 import {
   applyTheme,
   clearTheme,
@@ -527,11 +527,21 @@ const playlistTransport: Transport = createTransport({
 const playerBuffer = $<HTMLInputElement>("player-buffer");
 const playerLowLatency = $<HTMLInputElement>("player-low-latency");
 const playerDiagnosticsTimeout = $<HTMLInputElement>("player-diagnostics-timeout");
+const playerMobileQuality = $<HTMLInputElement>("player-mobile-quality");
+const playerMobileHeight = $<HTMLSelectElement>("player-mobile-height");
+const playerAutoplayLast = $<HTMLInputElement>("player-autoplay-last");
+const mobileQualitySupported = getNetworkConnection() !== null;
+$("player-mobile-quality-row").hidden = !mobileQualitySupported;
+$("player-mobile-height-row").hidden = !mobileQualitySupported;
+$("player-mobile-unsupported").hidden = mobileQualitySupported;
 const playerSettingsStatus = $("player-settings-status");
 function renderPlayerSettings(): void {
   playerBuffer.value = String(playerSettings.maxBufferLength);
   playerLowLatency.checked = playerSettings.lowLatencyMode;
   playerDiagnosticsTimeout.value = String(playerSettings.diagnosticsTimeoutMs / 1000);
+  playerMobileQuality.checked = playerSettings.limitMobileQuality;
+  playerMobileHeight.value = String(playerSettings.mobileMaxHeight);
+  playerAutoplayLast.checked = playerSettings.autoplayLastChannel;
 }
 function persistPlayerSettings(): void {
   renderPlayerSettings();
@@ -550,6 +560,9 @@ playerSettingsForm.addEventListener("submit", (event) => {
     maxBufferLength: playerBuffer.valueAsNumber,
     lowLatencyMode: playerLowLatency.checked,
     diagnosticsTimeoutMs: playerDiagnosticsTimeout.valueAsNumber * 1000,
+    limitMobileQuality: playerMobileQuality.checked,
+    mobileMaxHeight: Number(playerMobileHeight.value),
+    autoplayLastChannel: playerAutoplayLast.checked,
   });
   persistPlayerSettings();
 });
@@ -2750,6 +2763,10 @@ let sleepState: SleepState = initialSleepState;
 
 function refreshPlaybackControls(): void {
   const recording = player.isRecordingPlayback;
+  btnPrev.hidden = recording;
+  btnNext.hidden = recording;
+  btnPrev.disabled = recording;
+  btnNext.disabled = recording;
   btnRec.hidden = recording;
   btnSleep.hidden = recording;
   btnLive.disabled = recording;
@@ -3820,7 +3837,9 @@ async function bootstrap(): Promise<void> {
   }
   favorites = loadFavoritesFor(active.id);
   loadRecentsFor(active.id);
-  await openPlaylist(active.playlistUrl, active.epgUrl);
+  const opening = openPlaylist(active.playlistUrl, active.epgUrl);
+  const bootPlayRequest = playRequest;
+  await opening;
 
   // Диплинк на канал (FR-12): ?ch=<url> — после загрузки плейлиста
   // включить канал. Работает и вместе с ?p= (тот же заход).
@@ -3833,6 +3852,10 @@ async function bootstrap(): Promise<void> {
     } else {
       showToast(tr("error.deepLink"));
     }
+  } else if (playerSettings.autoplayLastChannel && !params.has("p") && !params.has("ch") &&
+    !lastPlayed && playRequest === bootPlayRequest && plState.activeId === active.id) {
+    const target = displayChannels().find((channel) => channel.url === recents[0]);
+    if (target) await playChannel(target);
   }
 }
 
