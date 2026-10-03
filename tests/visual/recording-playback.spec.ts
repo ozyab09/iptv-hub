@@ -111,6 +111,15 @@ for (const { kind, width } of [
     await expect(page.locator("#now-time-left")).toBeEmpty();
     await expect(page.locator("#now-show")).toBeEmpty();
     await expect(page.locator("#now-schedule")).toBeHidden();
+    const recordingSource = await video.getAttribute("src");
+    await page.locator("#btn-pause").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(video).toHaveJSProperty("currentTime", 0);
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => Math.abs(el.currentTime - el.duration))).toBeLessThan(0.1);
+    await expect(video).toHaveAttribute("src", recordingSource!);
+    await expect(page.locator("#quality-btn")).toBeDisabled();
+    await video.evaluate((el: HTMLVideoElement) => { el.currentTime = 2; });
     // Native files use their real duration; before metadata they use the saved estimate.
     await video.evaluate((el) => { Object.defineProperty(el, "duration", { value: NaN, configurable: true }); el.dispatchEvent(new Event("timeupdate")); });
     await expect(page.locator("#prog-end")).toHaveText(ext === "ts" ? "00:04" : "01:39");

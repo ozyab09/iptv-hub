@@ -1675,10 +1675,12 @@ window.addEventListener("keydown", (e) => {
       player.togglePause();
       break;
     case "ArrowRight":
-      playNeighbor(1);
+      e.preventDefault();
+      player.seekBy(15);
       break;
     case "ArrowLeft":
-      playNeighbor(-1);
+      e.preventDefault();
+      player.seekBy(-15);
       break;
     case "ArrowUp":
       e.preventDefault();

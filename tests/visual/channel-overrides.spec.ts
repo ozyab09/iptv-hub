@@ -40,9 +40,9 @@ for (const theme of ["light", "dark"]) {
       await expect(rows.first()).toContainText("News bulletin");
       await expect(page.locator("#now-title")).toHaveText("Мой канал");
       await expect(page.locator("#video")).toHaveAttribute("src", source!);
-      await page.keyboard.press("ArrowRight");
+      await page.locator("#btn-next").dispatchEvent("click");
       await expect(page.locator("#now-title")).toHaveText("Beta");
-      await page.keyboard.press("ArrowLeft");
+      await page.locator("#btn-prev").dispatchEvent("click");
       await expect(page.locator("#now-title")).toHaveText("Мой канал");
       await page.locator("#search").fill("мой канал");
       await expect(rows).toHaveCount(1);
