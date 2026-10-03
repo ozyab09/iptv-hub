@@ -70,6 +70,7 @@ for (const width of [390, 1440]) {
 test("M3U query upsert preserves Xtream and backup credentials", async ({ page }) => {
   const xtreamUrl = "https://provider.test/player_api.php?username=user&password=secret&action=get_live_streams";
   await page.addInitScript((xtreamUrl) => {
+    if (localStorage.getItem("iptv-hub.playlists.v1")) return;
     localStorage.setItem("iptv-hub.language.v1", "en");
     localStorage.setItem("iptv-hub.playlists.v1", JSON.stringify([{ id: "xc", name: "Xtream", playlistUrl: xtreamUrl, epgUrl: null }]));
     localStorage.setItem("iptv-hub.active-playlist.v1", "xc");

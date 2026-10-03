@@ -108,6 +108,13 @@ export function createRecordingScheduleUi(deps: {
   render();
   return {
     render,
+    async prepareImport(): Promise<void> {
+      closed = true;
+      window.clearInterval(refresh);
+      dialog.close();
+      release?.();
+      await scheduler.dispose();
+    },
     plan(channel: Channel, programme: EpgProgramme, playlistId: string) {
       const rule: RecordingRule = { id: crypto.randomUUID(), playlistId, channelUrl: channel.url, channelName: channel.name, group: channel.group,
         title: programme.title, start: Date.parse(programme.start), stop: Date.parse(programme.stop), repeat: "once", revision: Date.now(), lastStart: null, status: "scheduled" };
