@@ -71,6 +71,31 @@ test("a PIN added before start prevents automatic playback and recording", async
   expect(await page.evaluate(() => localStorage.getItem("iptv-hub.recordings.v1"))).toBeNull();
 });
 
+test("backup import finishes an active recording before replacing rules and reloading", async ({ page }) => {
+  await setup(page);
+  await page.locator(".schedule-editor").getByRole("button", { name: "Save", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.clock.fastForward(120000);
+  await expect.poll(() => page.locator(".scheduled-recording-video").evaluate((el: HTMLVideoElement) => el.videoWidth)).toBe(160);
+  await page.locator("#side-nav button, #tabbar button").filter({ hasText: "Settings", visible: true }).first().click();
+  const download = page.waitForEvent("download");
+  await page.locator("#btn-export").click();
+  const backup = JSON.parse(readFileSync((await (await download).path())!, "utf8"));
+  expect(backup.recordingSchedule.p[0].status).toBe("missed");
+  const previousStart = backup.recordingSchedule.p[0].lastStart;
+  backup.recordingSchedule.p[0].title = "Imported rule";
+  await page.locator("#import-file").setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(backup)) });
+  await expect(page.locator("#toast")).toContainText("Playlists imported: 1");
+  await expect(page.locator(".scheduled-recording-video")).toHaveCount(0);
+  const rule = await page.evaluate(() => JSON.parse(localStorage.getItem("iptv-hub.recording-schedule.v1")!)[0]);
+  expect(rule.title).toBe("Imported rule");
+  expect(rule.status).toBe("missed");
+  expect(rule.lastStart).toBe(previousStart);
+  const records = await page.evaluate(() => JSON.parse(localStorage.getItem("iptv-hub.recordings.v1")!));
+  expect(records).toHaveLength(1);
+  expect(records[0].sizeBytes).toBeGreaterThan(0);
+});
+
 test("deleting an active schedule saves its partial recording and removes its player", async ({ page }) => {
   await setup(page);
   await page.locator(".schedule-editor").getByRole("button", { name: "Save", exact: true }).click();
