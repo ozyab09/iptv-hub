@@ -111,7 +111,7 @@ jobs:
       # include-hidden-files обязателен: без него dot-файлы отбрасываются,
       # и public/.well-known/assetlinks.json не доезжает до живого сайта —
       # Android Asset Links отдают 404, TWA теряет fullscreen.
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: pages-build
           path: dist
@@ -135,7 +135,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: pages-build
           path: dist
@@ -162,7 +162,7 @@ jobs:
           pactl set-default-sink iptv_tests
           pactl info
       - run: npx playwright test --project=${{ matrix.project }}
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report-${{ matrix.project }}
@@ -181,7 +181,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: pages-build
           path: dist
@@ -218,7 +218,7 @@ jobs:
           "$tools/zipalign" -p -f 4 android/app/build/outputs/apk/release/*-unsigned.apk "$RUNNER_TEMP/aligned.apk"
           "$tools/apksigner" sign --ks "$RUNNER_TEMP/test-signing.jks" --ks-key-alias test --ks-pass pass:test-password --key-pass pass:test-password --out "$RUNNER_TEMP/test.apk" "$RUNNER_TEMP/aligned.apk"
           "$tools/apksigner" verify --verbose "$RUNNER_TEMP/test.apk"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: android-unsigned
           path: android/app/build/outputs/apk/release/*-unsigned.apk
@@ -245,7 +245,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: pages-build
           path: dist
@@ -257,7 +257,7 @@ jobs:
         with:
           packages: 'platform-tools'
       - run: sdkmanager 'build-tools;35.0.0'
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: android-unsigned
           path: unsigned
@@ -289,7 +289,7 @@ jobs:
           node android/scripts/release-version.mjs --write
           cp public/version.json dist/version.json
           cp public/.well-known/assetlinks.json dist/.well-known/assetlinks.json
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: android-signed
           path: iptv-hub.apk
@@ -358,7 +358,7 @@ jobs:
       # второй с тем же именем сломал бы deploy-pages.
       - name: Pack build artifact for Pages
         if: needs.release.result != 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: pages-build
           path: dist
