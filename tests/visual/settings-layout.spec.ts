@@ -29,8 +29,14 @@ async function checkSettings(page: Page): Promise<void> {
   expect(bounds!.width).toBeGreaterThan(250);
   const flags = await page.locator("#app").getAttribute("class");
   for (const key of ["c", "с"]) {
-    if (key === "c") await page.keyboard.press(key);
-    else await setup.dispatchEvent("keydown", { key, code: "KeyC", bubbles: true });
+    const press = () => key === "c" ? page.keyboard.press(key)
+      : setup.dispatchEvent("keydown", { key, code: "KeyC", bubbles: true });
+    await press();
+    if (page.viewportSize()!.width >= 1024) {
+      await expect(setup).toBeHidden();
+      await press();
+      await expect(setup).toBeVisible();
+    }
     expect(await page.locator("#app").getAttribute("class")).toBe(flags);
     expect((await setup.boundingBox())!.width).toBe(bounds!.width);
   }
@@ -63,8 +69,8 @@ for (const theme of ["light", "dark"]) {
       await navigate(page, "Настройки");
       await checkSettings(page);
       await navigate(page, "Каналы");
-      await expect(page.locator("#app")).toHaveClass(/channel-view.*list-collapsed|list-collapsed.*channel-view/);
-      await expect(page.locator(".screens")).toBeHidden();
+      await expect(page.locator("#app")).not.toHaveClass(/list-collapsed/);
+      await expect(page.locator(".screens")).toBeVisible();
       await expect(page.locator(".sidebar")).toBeVisible();
       await page.locator("#btn-hide-panel").click();
       await expect(page.locator(".screens")).toBeHidden();

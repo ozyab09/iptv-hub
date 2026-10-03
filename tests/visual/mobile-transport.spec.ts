@@ -41,6 +41,10 @@ for (const width of [320, 390, 480]) {
       expect(transport.y + transport.height).toBeLessThanOrEqual(scrub.y);
       const buttons = page.locator(".transport button");
       await expect(buttons).toHaveCount(7);
+      const order = ["btn-prev", "btn-seek-back", "btn-pause", "btn-seek-fwd", "btn-next"];
+      expect(await buttons.evaluateAll((els) => els.slice(0, 5).map((el) => el.id))).toEqual(order);
+      const leftEdges = await buttons.evaluateAll((els) => els.slice(0, 5).map((el) => el.getBoundingClientRect().left));
+      expect(leftEdges).toEqual([...leftEdges].sort((a, b) => a - b));
       for (const button of await buttons.all()) {
         await expect(button).toBeVisible();
         const bounds = (await button.boundingBox())!;
