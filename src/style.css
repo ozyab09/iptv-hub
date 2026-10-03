@@ -1106,7 +1106,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 /* Статус — единственное, что в деке может уступать место: длинная строка
    разрешения/скорости выталкивала правую группу на ползунок (issue #155). */
 .video .player-status { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* «К эфиру» — зовёт к действию, поэтому это единственная подписанная кнопка */
+/* Подписанные действия эфира и архива. */
 .video .btn-live {
   width: auto;
   height: 30px;
