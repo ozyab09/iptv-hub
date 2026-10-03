@@ -500,8 +500,15 @@
             <div id="guide-title" class="guide-title">Программа</div>
             <button id="guide-close" class="icon-btn" title="Закрыть" aria-label="Закрыть программу"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
           </div>
+          <div class="guide-modes">
+            <button id="guide-mode-list" class="chip" aria-pressed="true">Список</button>
+            <button id="guide-mode-grid" class="chip" aria-pressed="false">Сетка</button>
+          </div>
           <div id="guide-days" class="guide-days"></div>
           <div id="guide-list" class="guide-list"></div>
+          <div id="guide-grid" class="timeline-scroll" tabindex="0" hidden>
+            <div id="guide-grid-canvas" class="timeline-canvas"></div>
+          </div>
         </div>
       </div>
 

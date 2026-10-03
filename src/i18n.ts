@@ -2,6 +2,12 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "guide.list": "Список",
+  "guide.grid": "Сетка",
+  "guide.gridTitle": "Программа · каналы и время",
+  "guide.channels": "Каналы",
+  "guide.emptyChannels": "Нет доступных каналов в текущем разделе",
+  "guide.mobile": "Сетка программы доступна на широком экране (от 1024 пикселей)",
   "player.programmeStart": "Сначала",
   "favorites.reorderHint": "Перетащите для изменения порядка или нажмите Alt+↑/↓",
   "player.programmeStartTitle": "Сначала передачи",
@@ -231,6 +237,12 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "guide.list": "List",
+  "guide.grid": "Grid",
+  "guide.gridTitle": "Programme guide · channels and time",
+  "guide.channels": "Channels",
+  "guide.emptyChannels": "No available channels in this section",
+  "guide.mobile": "The programme grid requires a wide screen (at least 1024 pixels)",
   "player.programmeStart": "Start over",
   "favorites.reorderHint": "Drag to reorder or press Alt+↑/↓",
   "player.programmeStartTitle": "Watch from the start of the programme",
