@@ -3,6 +3,7 @@ export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
   "player.programmeStart": "Сначала",
+  "favorites.reorderHint": "Перетащите для изменения порядка или нажмите Alt+↑/↓",
   "player.programmeStartTitle": "Сначала передачи",
   "health.title": "Проблемные каналы",
   "health.reset": "Сбросить метки текущего плейлиста",
@@ -231,6 +232,7 @@ export const ru = {
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
   "player.programmeStart": "Start over",
+  "favorites.reorderHint": "Drag to reorder or press Alt+↑/↓",
   "player.programmeStartTitle": "Watch from the start of the programme",
   "health.title": "Problem channels",
   "health.reset": "Clear marks for the current playlist",

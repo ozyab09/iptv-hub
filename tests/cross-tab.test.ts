@@ -16,6 +16,7 @@ describe("classifyStorageChange", () => {
     const d = classifyStorageChange("iptv-hub.favorites.v1:12345");
     expect(d.favorites).toBe(true);
     expect(d.playlists).toBe(false);
+    expect(classifyStorageChange("iptv-hub.favorites-order.v1:12345")).toEqual(d);
   });
 
   it("тема — перечитать тему", () => {
