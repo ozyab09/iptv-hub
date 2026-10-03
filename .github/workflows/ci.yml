@@ -151,6 +151,16 @@ jobs:
       - name: Install system dependencies for cached browsers
         if: steps.browsers.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium firefox
+      # Firefox Web Audio требует работающий аудиовывод даже без физической карты.
+      - name: Start virtual audio output for Firefox
+        if: matrix.project == 'firefox-media'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=iptv_tests
+          pactl set-default-sink iptv_tests
+          pactl info
       - run: npx playwright test --project=${{ matrix.project }}
       - uses: actions/upload-artifact@v4
         if: failure()
