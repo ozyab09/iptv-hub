@@ -139,6 +139,7 @@ import {
   buildCatchupUrl,
   canWatchPast,
   programmeStartUrl,
+  hourlyFallbackProgrammes,
   dayWindows,
   programmesInDay,
   type DayWindow,
@@ -2654,7 +2655,16 @@ function renderGuide(): void {
 
   guideList.textContent = "";
   const window: DayWindow = wins[guideDayIdx]!;
-  const progs = epg ? programmesInDay(channelProgrammes(), window) : [];
+  const now = new Date();
+  let progs = programmesInDay(channelProgrammes(), window);
+  // Канал без телепрограммы, но с архивом: показываем часовые слоты «без
+  // названия» на неделю назад (#314) — клик открывает catchup.
+  if (progs.length === 0) {
+    const cu = { days: lastPlayed.catchupDays, source: lastPlayed.catchupSource };
+    if (cu.days > 0 && cu.source) {
+      progs = programmesInDay(hourlyFallbackProgrammes(now), window);
+    }
+  }
   if (progs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "muted";
@@ -2663,7 +2673,6 @@ function renderGuide(): void {
     return;
   }
 
-  const now = new Date();
   for (const p of progs) {
     guideList.append(programmeRow(p, now, () => (guideOverlay.hidden = true)));
   }
