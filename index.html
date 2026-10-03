@@ -216,6 +216,22 @@
                   <p id="player-mobile-unsupported" class="set-note muted" data-i18n="settings.mobileUnsupported">Браузер не сообщает тип сети — автоматическое ограничение качества недоступно.</p>
                 </section>
 
+                <section class="set-group reminder-settings-group">
+                  <h2 class="set-label t-overline" data-i18n="reminder.title">Напоминания о передачах</h2>
+                  <div class="group">
+                    <div class="item">
+                      <label for="reminder-minutes" data-i18n="reminder.minutes">За сколько минут напоминать</label>
+                      <div class="input"><input id="reminder-minutes" type="number" min="1" max="60" step="1" value="5" /></div>
+                    </div>
+                    <div class="item">
+                      <label for="reminder-desktop" data-i18n="reminder.desktop">Системные уведомления</label>
+                      <input id="reminder-desktop" type="checkbox" />
+                    </div>
+                  </div>
+                  <p class="set-note muted" data-i18n="reminder.note">Напоминания приходят в колокольчик, пока открыта вкладка. Настройка времени применяется к новым напоминаниям.</p>
+                  <p id="reminder-status" class="set-note muted" role="status"></p>
+                </section>
+
                 <section class="set-group refresh-group">
                   <h2 class="set-label t-overline" data-i18n="settings.refresh">Обновление плейлиста</h2>
                   <div class="group">

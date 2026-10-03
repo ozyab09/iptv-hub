@@ -2,6 +2,18 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "reminder.title": "Напоминания о передачах",
+  "reminder.add": "Напомнить",
+  "reminder.cancel": "Снять напоминание",
+  "reminder.watch": "Смотреть",
+  "reminder.lead": "За {minutes} мин до начала",
+  "reminder.minutes": "За сколько минут напоминать",
+  "reminder.desktop": "Системные уведомления",
+  "reminder.note": "Напоминания приходят в колокольчик, пока открыта вкладка. Настройка времени применяется к новым напоминаниям.",
+  "reminder.message": "Скоро: {channel} · {title} · {time}",
+  "reminder.unavailable": "Канал напоминания удалён или скрыт",
+  "reminder.unsupported": "Системные уведомления недоступны — напоминания остаются в колокольчике",
+  "reminder.denied": "Разрешение не получено — напоминания остаются в колокольчике",
   "guide.list": "Список",
   "guide.grid": "Сетка",
   "guide.gridTitle": "Программа · каналы и время",
@@ -237,6 +249,18 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "reminder.title": "Programme reminders",
+  "reminder.add": "Remind me",
+  "reminder.cancel": "Remove reminder",
+  "reminder.watch": "Watch",
+  "reminder.lead": "{minutes} min before the start",
+  "reminder.minutes": "Minutes before the start",
+  "reminder.desktop": "System notifications",
+  "reminder.note": "Reminders appear in the notification bell while a tab is open. The lead time applies to new reminders.",
+  "reminder.message": "Coming up: {channel} · {title} · {time}",
+  "reminder.unavailable": "The reminder channel was removed or hidden",
+  "reminder.unsupported": "System notifications are unavailable; reminders still appear in the bell",
+  "reminder.denied": "Permission was not granted; reminders still appear in the bell",
   "guide.list": "List",
   "guide.grid": "Grid",
   "guide.gridTitle": "Programme guide · channels and time",
