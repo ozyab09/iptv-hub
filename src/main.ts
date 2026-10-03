@@ -109,7 +109,7 @@ import {
   type WakeLockState,
 } from "./wake-lock";
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
-import { neighborIndex, Player } from "./player";
+import { getNetworkConnection, neighborIndex, Player } from "./player";
 import {
   applyTheme,
   clearTheme,
@@ -527,11 +527,19 @@ const playlistTransport: Transport = createTransport({
 const playerBuffer = $<HTMLInputElement>("player-buffer");
 const playerLowLatency = $<HTMLInputElement>("player-low-latency");
 const playerDiagnosticsTimeout = $<HTMLInputElement>("player-diagnostics-timeout");
+const playerMobileQuality = $<HTMLInputElement>("player-mobile-quality");
+const playerMobileHeight = $<HTMLSelectElement>("player-mobile-height");
+const mobileQualitySupported = getNetworkConnection() !== null;
+$("player-mobile-quality-row").hidden = !mobileQualitySupported;
+$("player-mobile-height-row").hidden = !mobileQualitySupported;
+$("player-mobile-unsupported").hidden = mobileQualitySupported;
 const playerSettingsStatus = $("player-settings-status");
 function renderPlayerSettings(): void {
   playerBuffer.value = String(playerSettings.maxBufferLength);
   playerLowLatency.checked = playerSettings.lowLatencyMode;
   playerDiagnosticsTimeout.value = String(playerSettings.diagnosticsTimeoutMs / 1000);
+  playerMobileQuality.checked = playerSettings.limitMobileQuality;
+  playerMobileHeight.value = String(playerSettings.mobileMaxHeight);
 }
 function persistPlayerSettings(): void {
   renderPlayerSettings();
@@ -550,6 +558,8 @@ playerSettingsForm.addEventListener("submit", (event) => {
     maxBufferLength: playerBuffer.valueAsNumber,
     lowLatencyMode: playerLowLatency.checked,
     diagnosticsTimeoutMs: playerDiagnosticsTimeout.valueAsNumber * 1000,
+    limitMobileQuality: playerMobileQuality.checked,
+    mobileMaxHeight: Number(playerMobileHeight.value),
   });
   persistPlayerSettings();
 });

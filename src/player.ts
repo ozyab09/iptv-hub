@@ -6,6 +6,12 @@ import { bufferedSeekTarget } from "./scrub";
 import { recordingManifest } from "./recording-playback";
 import { t } from "./i18n";
 import { createMirrorState, nextMirror, type MirrorState } from "./channel-mirrors";
+import { mobileQualityCap, needsMobileQualityCap, type ConnectionInfo } from "./mobile-quality";
+
+export type NetworkConnection = EventTarget & ConnectionInfo;
+export function getNetworkConnection(): NetworkConnection | null {
+  return typeof navigator === "undefined" ? null : (navigator as Navigator & { connection?: NetworkConnection }).connection ?? null;
+}
 
 /**
  * Сколько подряд сетевых сбоев переживаем, прежде чем сдаться. Без предела
@@ -47,6 +53,14 @@ export class Player {
   private httpsUpgraded = false;
   private activeSettings: PlayerSettings = { ...DEFAULT_PLAYER_SETTINGS };
   private readSettings: () => PlayerSettings;
+  private connection: NetworkConnection | null = null;
+  private manualQuality = false;
+  private refreshMobileQuality = (): void => {
+    if (!this.hls) return;
+    this.hls.autoLevelCapping = !this.manualQuality && !this.currentUrl?.startsWith("blob:") &&
+      needsMobileQualityCap(this.activeSettings.limitMobileQuality, this.connection)
+      ? mobileQualityCap(this.hls.levels, this.activeSettings.mobileMaxHeight) : -1;
+  };
   /** Файл и локальный манифест живут до закрытия/смены записи, включая перемотку. */
   private recordingUrls: string[] = [];
   private recordingDuration = 0;
@@ -153,6 +167,7 @@ export class Player {
     if (this.channelUrl === channel.url && this.currentUrl && !this.video.paused) return null;
     this.activeSettings = sanitizePlayerSettings(this.readSettings());
     this.stop();
+    this.manualQuality = false;
     this.channelUrl = channel.url;
     this.mirrorState = createMirrorState(channel);
     const refused = this.startStream(channel.url, forceHls);
@@ -176,6 +191,8 @@ export class Player {
     if (isHls && Hls.isSupported()) {
       const hls = new Hls(playerHlsConfig(this.activeSettings));
       this.hls = hls;
+      this.connection = getNetworkConnection();
+      this.connection?.addEventListener("change", this.refreshMobileQuality);
       hls.loadSource(url);
       hls.attachMedia(this.video);
       hls.on(Hls.Events.ERROR, (_e, data) => {
@@ -216,7 +233,11 @@ export class Player {
         this.onFatalError?.();
       });
       const notify = (): void => this.onHlsState?.();
-      this.hls.on(Hls.Events.MANIFEST_PARSED, notify);
+      this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (this.hls !== hls) return;
+        this.refreshMobileQuality();
+        notify();
+      });
       this.hls.on(Hls.Events.LEVEL_SWITCHED, notify);
       this.hls.on(Hls.Events.LEVEL_UPDATED, notify);
       this.hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, notify);
@@ -351,6 +372,8 @@ export class Player {
   }
 
   private stopMedia(): void {
+    this.connection?.removeEventListener("change", this.refreshMobileQuality);
+    this.connection = null;
     if (this.hls) {
       this.hls.destroy();
       this.hls = null;
@@ -371,7 +394,11 @@ export class Player {
 
   /** Выбрать уровень качества; -1 = Auto. */
   setLevel(index: number): void {
-    if (this.hls) this.hls.currentLevel = index;
+    if (this.hls) {
+      this.manualQuality = index >= 0;
+      this.refreshMobileQuality();
+      this.hls.currentLevel = index;
+    }
   }
 
   /** Выбрать аудиодорожку. */

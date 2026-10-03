@@ -107,6 +107,12 @@ push в main CI вычисляет следующий патч, штампует
   (дефолт 8000). Некорректные поля заменяются дефолтами. `Player.play()`
   фиксирует настройки нового запуска; retry и диагностика текущего потока
   используют этот снимок. Настройки пока не включены в backup JSON.
+  `limitMobileQuality` (false) и `mobileMaxHeight` (360/480/720/1080, default 720)
+  ограничивают Auto HLS через `autoLevelCapping`; `mobile-quality.ts` содержит
+  чистые правила. Network Information `type=cellular` включает cap, wifi/ethernet
+  снимают; без type используется effectiveType slow-2g/2g/3g. Ручной выбор
+  приоритетнее, возврат Auto снова применяет cap. Подписка change очищается при
+  остановке/смене источника, retry сохраняет снимок. Blob-записи не ограничиваются.
 - Timeshift (#175): hls.js хранит `backBufferLength=600`. Пауза живого HLS
   или перемотка включают целевой forward-буфер 600 секунд до `Player.goLive()`
   либо смены источника; продолжение не сбрасывает этот режим. «К эфиру»
