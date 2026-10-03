@@ -36,8 +36,12 @@
         <nav id="side-nav" class="side-nav" aria-label="Разделы"></nav>
         <div id="cat-label" class="side-label t-overline" data-i18n="nav.categories">Категории</div>
         <nav id="categories" class="categories" aria-label="Категории" data-i18n-aria-label="nav.categories"></nav>
-        <button id="btn-hide-panel" class="icon-btn list-toggle" title="Скрыть панель целиком" aria-label="Скрыть панель навигации и список каналов"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
+        <div class="sidebar-controls">
+          <button id="btn-collapse-list" class="icon-btn list-toggle" title="Скрыть меню (C)" aria-label="Скрыть меню" aria-expanded="true"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-panel-close"></use></svg></button>
+          <button id="btn-hide-panel" class="icon-btn list-toggle" title="Скрыть панель целиком" aria-label="Скрыть панель целиком" data-i18n-title="nav.hidePanel" data-i18n-aria-label="nav.hidePanel"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-close"></use></svg></button>
+        </div>
       </aside>
+      <button id="btn-show-menu" class="btn show-menu" title="Показать меню (C)" aria-label="Показать меню" data-i18n-title="nav.showMenuShortcut" data-i18n-aria-label="nav.showMenu" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-panel-open"></use></svg><span data-i18n="nav.showMenu">Показать меню</span></button>
 
       <!-- Шапка: какой плейлист открыт (он же переключатель), поиск, тема -->
       <header class="topbar">
@@ -318,7 +322,6 @@
                 <h2 class="t-heading view-title"><span id="view-title">Каналы</span> <span id="view-count" class="view-count num"></span></h2>
                 <!-- Только в режиме просмотра на широком экране: список
                      скрывается целиком, плеер растёт (C) -->
-                  <button id="btn-collapse-list" class="icon-btn sm list-toggle" title="Свернуть список (C)" aria-label="Свернуть список каналов" aria-expanded="true"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-panel-close"></use></svg></button>
               </div>
               <!-- Выбор категории в режиме просмотра: сайдбар там сжат
                    в рельс, и списку чипов места не остаётся. -->

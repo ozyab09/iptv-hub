@@ -304,6 +304,7 @@ const nowTimeLeft = $("now-time-left");
 const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
 const btnHidePanel = $<HTMLButtonElement>("btn-hide-panel");
 const btnRestorePanel = $<HTMLButtonElement>("btn-restore-panel");
+const btnShowMenu = $<HTMLButtonElement>("btn-show-menu");
 const toastEl = $("toast");
 const notifBell = $<HTMLButtonElement>("notif-bell");
 const notifBadge = $("notif-badge");
@@ -759,6 +760,7 @@ function applyLanguage(): void {
   renderNav();
   notifBellUi.render();
   reminderUi?.render();
+  updateMenuToggle();
   if (multiViewUi.isOpen) multiViewUi.render();
 }
 
@@ -916,7 +918,10 @@ function navButton(view: (typeof VIEWS)[number], cls: string): HTMLButtonElement
   const label = document.createElement("span");
   label.textContent = translateMessage(view.label, currentLanguage);
   b.append(label);
-  b.addEventListener("click", () => setView(view.id));
+  b.addEventListener("click", () => {
+    if (!isCompact()) setPanelHidden(false);
+    setView(view.id);
+  });
   return b;
 }
 
@@ -940,7 +945,7 @@ function renderNav(): void {
 function setView(view: View, persist = true): void {
   cancelNumericZap();
   activeView = view;
-  // Сворачивание относится только к списку; выбор сохраняется между разделами.
+  // Разделы со списком используют раскладку канала рядом с плеером.
   appEl.classList.toggle("channel-view", showsChannelList(view));
   if (persist) {
     try {
@@ -1786,7 +1791,14 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (playerBar.hidden || typing) return;
+  if (typing) return;
+  if (!isCompact() && (e.key === "c" || e.key === "с")) {
+    e.preventDefault();
+    if (appEl.classList.contains("panel-hidden")) setPanelHidden(false);
+    else setListCollapsed(!appEl.classList.contains("list-collapsed"));
+    return;
+  }
+  if (playerBar.hidden) return;
   if (multiViewUi.isOpen && multiViewUi.handleKey(e)) return;
   switch (e.key) {
     case " ":
@@ -1837,19 +1849,8 @@ window.addEventListener("keydown", (e) => {
     case "c":
     case "с": // ru-раскладка
       if (!showsChannelList(activeView)) return;
-      // На широком экране C сворачивает и разворачивает список рядом с
-      // плеером. На узком — возврат к списку: сворачиваем страницу плеера,
-      // иначе прокрутка к списку под ней ничего бы не показала.
+      // На узком экране возвращаем список из страницы плеера.
       e.preventDefault();
-      if (!isCompact()) {
-        // Панель скрыта целиком — C сначала возвращает её (и список).
-        if (appEl.classList.contains("panel-hidden")) {
-          setPanelHidden(false);
-          break;
-        }
-        setListCollapsed(!appEl.classList.contains("list-collapsed"));
-        break;
-      }
       togglePlayerPage(false);
       channelList.scrollIntoView({ block: "nearest" });
       (channelList.querySelector("button") as HTMLElement | null)?.focus();
@@ -2413,21 +2414,23 @@ window.addEventListener("popstate", () => {
  */
 const LIST_COLLAPSED_KEY = "iptv-hub.list-collapsed.v1";
 
-function setListCollapsed(on: boolean): void {
-  const moveFocus = document.activeElement === btnCollapseList || document.activeElement === btnRestorePanel;
-  appEl.classList.toggle("list-collapsed", on);
-  btnRestorePanel.hidden = !on;
+function updateMenuToggle(): void {
+  const on = appEl.classList.contains("list-collapsed");
   btnCollapseList.setAttribute("aria-expanded", String(!on));
-  btnCollapseList.title = on ? "Развернуть список (C)" : "Свернуть список (C)";
-  btnCollapseList.setAttribute(
-    "aria-label",
-    on ? "Развернуть список каналов" : "Свернуть список каналов",
-  );
+  btnCollapseList.title = tr(on ? "nav.showMenuShortcut" : "nav.hideMenuShortcut");
+  btnCollapseList.setAttribute("aria-label", tr(on ? "nav.showMenu" : "nav.hideMenu"));
   btnCollapseList
     .querySelector("use")
     ?.setAttribute("href", on ? "#i-panel-open" : "#i-panel-close");
+}
+
+function setListCollapsed(on: boolean): void {
+  const moveFocus = document.activeElement === btnRestorePanel;
+  appEl.classList.toggle("list-collapsed", on);
+  btnRestorePanel.hidden = !on;
+  updateMenuToggle();
   if (!on) renderVirtualWindow();
-  if (moveFocus) (on ? btnRestorePanel : btnCollapseList).focus();
+  if (moveFocus && !on) btnCollapseList.focus();
   try {
     localStorage.setItem(LIST_COLLAPSED_KEY, on ? "1" : "0");
   } catch {
@@ -2442,12 +2445,15 @@ btnCollapseList.addEventListener("click", () =>
 // ---------- Полное скрытие панели (сайдбар + список каналов) ----------
 // Кнопка «Скрыть панель целиком» на рельсе навигации: уходит и рельс
 // навигации, и панель каналов — плеер занимает весь экран. Возврат —
-// кнопка на кадре, клавиша C или Escape.
+// постоянная кнопка внизу слева, кнопка на кадре или клавиша C.
 function setPanelHidden(on: boolean): void {
+  const moveFocus = document.activeElement === btnHidePanel || document.activeElement === btnShowMenu;
   if (on && !appEl.classList.contains("list-collapsed")) setListCollapsed(true);
   appEl.classList.toggle("panel-hidden", on);
   if (!on) setListCollapsed(false);
   btnRestorePanel.hidden = !on;
+  btnShowMenu.hidden = !on;
+  if (moveFocus) (on ? btnShowMenu : btnCollapseList).focus();
   try {
     localStorage.setItem(PANEL_HIDDEN_KEY, on ? "1" : "0");
   } catch {
@@ -2458,6 +2464,7 @@ function setPanelHidden(on: boolean): void {
 const PANEL_HIDDEN_KEY = "iptv-hub.panel-hidden.v1";
 btnHidePanel.addEventListener("click", () => setPanelHidden(true));
 btnRestorePanel.addEventListener("click", () => setPanelHidden(false));
+btnShowMenu.addEventListener("click", () => setPanelHidden(false));
 try {
   if (localStorage.getItem(LIST_COLLAPSED_KEY) === "1") setListCollapsed(true);
   if (localStorage.getItem(PANEL_HIDDEN_KEY) === "1") setPanelHidden(true);

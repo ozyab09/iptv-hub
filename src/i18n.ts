@@ -2,6 +2,11 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "nav.showMenu": "Показать меню",
+  "nav.hideMenu": "Скрыть меню",
+  "nav.showMenuShortcut": "Показать меню (C)",
+  "nav.hideMenuShortcut": "Скрыть меню (C)",
+  "nav.hidePanel": "Скрыть панель целиком",
   "reminder.title": "Напоминания о передачах",
   "reminder.add": "Напомнить",
   "reminder.cancel": "Снять напоминание",
@@ -251,6 +256,11 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "nav.showMenu": "Show menu",
+  "nav.hideMenu": "Hide menu",
+  "nav.showMenuShortcut": "Show menu (C)",
+  "nav.hideMenuShortcut": "Hide menu (C)",
+  "nav.hidePanel": "Hide entire panel",
   "reminder.title": "Programme reminders",
   "reminder.add": "Remind me",
   "reminder.cancel": "Remove reminder",
