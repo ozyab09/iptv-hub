@@ -2740,7 +2740,7 @@ function renderGuide(): void {
   let progs = programmesInDay(channelProgrammes(), window);
   // Канал без телепрограммы, но с архивом: показываем часовые слоты «без
   // названия» на неделю назад (#314) — клик открывает catchup.
-  if (progs.length === 0) {
+  if (lastPlayed && progs.length === 0) {
     const cu = { days: lastPlayed.catchupDays, source: lastPlayed.catchupSource };
     if (cu.days > 0 && cu.source) {
       progs = programmesInDay(hourlyFallbackProgrammes(now), window);
