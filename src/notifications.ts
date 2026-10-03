@@ -11,6 +11,8 @@
 
 const STORAGE_KEY = "iptv-hub.notifications.v1";
 
+export interface NotificationWatch { playlistId: string; channelUrl: string }
+
 export interface Notification {
   /** Монотонный идентификатор в рамках хранилища. */
   id: number;
@@ -20,6 +22,8 @@ export interface Notification {
   at: number;
   /** Прочитанным становится всё, что пользователь видел в панели. */
   read: boolean;
+  /** A reminder can offer playback through the application's ordinary checks. */
+  watch?: NotificationWatch;
 }
 
 type KV = Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
@@ -42,11 +46,14 @@ export function parseNotifications(raw: string | null): Notification[] {
         typeof (n as Notification).text === "string" &&
         typeof (n as Notification).at === "number"
       ) {
+        const watch = (n as Notification).watch;
         list.push({
           id: (n as Notification).id,
           text: (n as Notification).text,
           at: (n as Notification).at,
           read: (n as Notification).read === true,
+          ...(watch && typeof watch === "object" && typeof watch.playlistId === "string" && watch.playlistId &&
+            typeof watch.channelUrl === "string" && watch.channelUrl ? { watch: { playlistId: watch.playlistId, channelUrl: watch.channelUrl } } : {}),
         });
       }
     }
@@ -84,8 +91,9 @@ export function addNotification(
   nextId: number,
   text: string,
   now: number,
+  watch?: NotificationWatch,
 ): Notification[] {
-  const item: Notification = { id: nextId, text, at: now, read: false };
+  const item: Notification = { id: nextId, text, at: now, read: false, ...(watch ? { watch: { ...watch } } : {}) };
   return [item, ...list].slice(0, MAX_NOTIFICATIONS);
 }
 

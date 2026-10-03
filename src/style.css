@@ -696,6 +696,22 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   gap: 4px;
   min-height: 120px;
 }
+.guide-modes { display: flex; gap: 6px; }
+.guide-modes [aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.guide.timeline-mode { width: min(1200px, 100%); }
+.timeline-scroll { overflow: auto; height: min(56vh, 560px); min-height: 180px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.timeline-canvas { position: relative; min-height: 100%; }
+.timeline-header { position: sticky; top: 0; z-index: 4; height: 36px; background: var(--surface-2); }
+.timeline-time { position: absolute; top: 0; width: 96px; height: 36px; padding: 8px; border-left: 1px solid var(--border); font-size: 12px; }
+.timeline-row { position: absolute; left: 0; width: 100%; height: 64px; border-bottom: 1px solid var(--border); }
+.timeline-channel { display: flex; align-items: center; position: sticky; left: 0; z-index: 2; width: 176px; height: 100%; padding: 8px 12px; background: var(--surface-2); border-right: 1px solid var(--border); overflow: hidden; font-size: 13px; }
+.timeline-cell { position: absolute; top: 2px; height: 59px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text); text-align: left; cursor: pointer; font: inherit; font-size: 13px; }
+.timeline-cell > span { position: absolute; top: 8px; right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-cell.now { background: var(--accent-soft); border-color: var(--accent); }
+.timeline-cell.past:enabled { border-color: var(--accent); }
+.timeline-cell:disabled { opacity: .55; cursor: default; }
+.timeline-cell:focus-visible, .timeline-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.timeline-empty { position: sticky; left: 0; width: max-content; max-width: 90vw; padding: 16px; }
 /* Строки программы — это <button>: без сброса браузер рисует им свой
    серый фон и рамку поверх .prog-row из дизайн-системы. */
 .guide-list .prog-row,
@@ -920,6 +936,14 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 .local-file-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .programme-recordable { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .programme-recordable > .prog-row { flex: 1; min-width: 180px; }
+.programme-reminder { min-height: 44px; flex: none; }
+.programme-reminder[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.programme-reminder:focus-visible, .programme-result:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.row.channel-card.programme-result { display: flex; gap: 12px; }
+.programme-result .meta { min-width: 0; flex: 1; }
+.reminder-settings-group .input { width: 88px; margin-left: auto; }
+.reminder-settings-group .item { gap: 12px; }
+.notification-watch { min-height: 44px; justify-self: start; }
 .schedule-programme, .programme-download { margin: var(--space-2); font: inherit; }
 .recording-schedule { display: grid; gap: var(--space-3); margin-bottom: var(--space-5); }
 .schedule-card { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-1); overflow-wrap: anywhere; }

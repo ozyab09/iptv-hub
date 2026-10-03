@@ -33,6 +33,16 @@ const n = (id: number, text = "текст", read = false): Notification => ({
 });
 
 describe("notifications: парсинг", () => {
+  it("persists reminder playback targets and ignores malformed targets", () => {
+    const target = { playlistId: "one", channelUrl: "https://tv.test/live.m3u8" };
+    const list = addNotification([], 1, "Film starts soon", 5, target);
+    const storage = store();
+    saveNotifications(list, storage);
+    expect(loadNotifications(storage)[0]!.watch).toEqual(target);
+    target.playlistId = "changed";
+    expect(list[0]!.watch!.playlistId).toBe("one");
+    expect(parseNotifications(JSON.stringify([{ ...n(1), watch: { playlistId: 42, channelUrl: "x" } }]))).toEqual([n(1)]);
+  });
   it("читает валидный список, битое — пусто", () => {
     expect(parseNotifications(JSON.stringify([n(1)]))).toHaveLength(1);
     expect(parseNotifications("мусор")).toEqual([]);
