@@ -144,6 +144,7 @@ import {
   programmesInDay,
   type DayWindow,
 } from "./catchup";
+import { downloadProgramme } from "./programme-downloader";
 import { createQualityMenu } from "./quality-menu";
 import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
@@ -2746,6 +2747,32 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
   }
   if (stop <= now.getTime()) return row;
   const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
+  // Скачивание доступной из архива передачи (#315) — рядом с записью.
+  if (state === "past" && watchable && cu.source) {
+    const dl = document.createElement("button");
+    dl.type = "button";
+    dl.className = "btn btn-sm programme-download";
+    dl.textContent = tr("download.title");
+    dl.title = tr("download.title");
+    dl.addEventListener("click", () => {
+      const url = buildCatchupUrl(cu, p, new Date());
+      if (!url) {
+        showToast(tr("error.noArchive"));
+        return;
+      }
+      void downloadProgramme({
+        channelName: c.name,
+        channelUrl: c.url,
+        programme: p,
+        url,
+        fs: recordingsFs,
+        storage: localStorage,
+        notify: showToast,
+        onSaved: renderRecordings,
+      });
+    });
+    wrapper.append(dl);
+  }
   const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
   record.textContent = tr("schedule.title");
   const playlistId = plState.activeId;

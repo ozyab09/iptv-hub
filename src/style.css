@@ -920,7 +920,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 .local-file-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .programme-recordable { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .programme-recordable > .prog-row { flex: 1; min-width: 180px; }
-.schedule-programme { margin: var(--space-2); font: inherit; }
+.schedule-programme, .programme-download { margin: var(--space-2); font: inherit; }
 .recording-schedule { display: grid; gap: var(--space-3); margin-bottom: var(--space-5); }
 .schedule-card { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-1); overflow-wrap: anywhere; }
 .schedule-card p { margin: 0 0 var(--space-2); }
@@ -928,7 +928,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 .schedule-actions .btn, .schedule-editor .btn { font: inherit; }
 .schedule-editor .input input { width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; outline: 0; }
 .schedule-editor .seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.schedule-editor .btn:focus-visible, .schedule-actions .btn:focus-visible, .schedule-programme:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.schedule-editor .btn:focus-visible, .schedule-actions .btn:focus-visible, .schedule-programme:focus-visible, .programme-download:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .add-form .input input,
 .pl-edit .input input {
   flex: 1;
