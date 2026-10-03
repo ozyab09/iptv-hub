@@ -111,6 +111,37 @@ for (const { kind, width } of [
     await expect(page.locator("#now-time-left")).toBeEmpty();
     await expect(page.locator("#now-show")).toBeEmpty();
     await expect(page.locator("#now-schedule")).toBeHidden();
+    const scrub = page.locator("#scrub");
+    await expect(scrub).toHaveAttribute("role", "slider");
+    await expect(scrub).toHaveAttribute("aria-valuemin", "0");
+    await expect(scrub).toHaveAttribute("aria-valuetext", "00:02 / 00:04");
+    const track = (await scrub.boundingBox())!;
+    const y = track.y + track.height / 2;
+    const duration = await video.evaluate((el: HTMLVideoElement) => el.duration);
+    await page.mouse.click(track.x + track.width / 4, y);
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeCloseTo(duration / 4, 1);
+    await page.mouse.move(track.x + track.width / 4, y);
+    await page.mouse.down();
+    await page.mouse.move(track.x + track.width * 3 / 4, y, { steps: 5 });
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeCloseTo(duration / 4, 1);
+    await video.evaluate((el: HTMLVideoElement) => el.dispatchEvent(new Event("timeupdate")));
+    await expect.poll(() => page.locator("#scrub-fill").evaluate((el: HTMLElement) => parseFloat(el.style.width))).toBeCloseTo(75, 0);
+    await page.mouse.up();
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeCloseTo(duration * 3 / 4, 1);
+    await expect(video).toHaveJSProperty("paused", true);
+    await page.mouse.move(track.x + track.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(track.x + track.width + 20, y);
+    await page.mouse.up();
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeCloseTo(duration, 1);
+    await scrub.press("Home");
+    await expect(video).toHaveJSProperty("currentTime", 0);
+    await scrub.press("End");
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeCloseTo(duration, 1);
+    await scrub.press("ArrowLeft");
+    await expect(video).toHaveJSProperty("currentTime", 0);
+    await scrub.press("ArrowRight");
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeCloseTo(duration, 1);
     const recordingSource = await video.getAttribute("src");
     await page.locator("#btn-pause").focus();
     await page.keyboard.press("ArrowLeft");
@@ -122,6 +153,7 @@ for (const { kind, width } of [
     await video.evaluate((el: HTMLVideoElement) => { el.currentTime = 2; });
     // Native files use their real duration; before metadata they use the saved estimate.
     await video.evaluate((el) => { Object.defineProperty(el, "duration", { value: NaN, configurable: true }); el.dispatchEvent(new Event("timeupdate")); });
+    await expect(scrub).not.toHaveAttribute("role", "slider");
     await expect(page.locator("#prog-end")).toHaveText(ext === "ts" ? "00:04" : "01:39");
     await video.evaluate((el) => { Reflect.deleteProperty(el, "duration"); el.dispatchEvent(new Event("timeupdate")); });
     await expect(page.locator("#prog-end")).toHaveText("00:04");
@@ -146,6 +178,8 @@ for (const { kind, width } of [
     await expect(page.locator("#sleep-badge")).toBeHidden();
     await expect(page.locator("#quality-btn")).toBeEnabled();
     await expect(page.locator("#quality-btn")).toHaveAttribute("aria-disabled", "false");
+    await expect(scrub).not.toHaveAttribute("role", "slider");
+    await expect(scrub).not.toHaveAttribute("tabindex", "0");
     if (hasEpg) {
       await expect(page.locator("#now-show")).toHaveText("Передача эфира");
       await expect(page.locator("#prog-start")).toHaveText(/\d{2}:\d{2}/);

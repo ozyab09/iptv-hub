@@ -1088,6 +1088,9 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 .video .bottom .video-actions { order: -1; }
 .scrub-row { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-1); }
 .scrub-row .scrub { flex: 1; }
+.scrub[role="slider"] { cursor: pointer; touch-action: none; overflow: visible; }
+.scrub[role="slider"]::before { content: ""; position: absolute; inset: -10px 0; }
+.scrub[role="slider"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
 .scrub-row .num:empty { display: none; }
 /* При нехватке ширины flex сжимал всё, кроме инпута: у range сильный
    min-content, и ползунок наезжал на правую группу (#93). min-width: 0

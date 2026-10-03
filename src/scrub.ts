@@ -21,6 +21,12 @@ export function programmeProgress(
   return Math.min(1, Math.max(0, (nowMs - startMs) / span));
 }
 
+/** Позиция указателя на полосе файла, с ограничением по её краям. */
+export function scrubSeekTarget(clientX: number, left: number, width: number, duration: number): number | null {
+  if (![clientX, left, width, duration].every(Number.isFinite) || width <= 0 || duration <= 0) return null;
+  return Math.max(0, Math.min(1, (clientX - left) / width)) * duration;
+}
+
 /**
  * Секунды, на которые зритель отстал от прямого эфира.
  * Отрицательные значения (обгон буфера) считаем нулём.

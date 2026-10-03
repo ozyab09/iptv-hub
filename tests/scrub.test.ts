@@ -6,9 +6,25 @@ import {
   LIVE_TOLERANCE_SEC,
   programmeProgress,
   mediaScrub,
+  scrubSeekTarget,
 } from "../src/scrub";
 
 const t = (iso: string): number => Date.parse(iso);
+
+describe("scrubSeekTarget", () => {
+  it("maps pointer coordinates to seconds and clamps outside the track", () => {
+    expect(scrubSeekTarget(150, 100, 200, 120)).toBe(30);
+    expect(scrubSeekTarget(50, 100, 200, 120)).toBe(0);
+    expect(scrubSeekTarget(350, 100, 200, 120)).toBe(120);
+  });
+  it.each([
+    [NaN, 0, 100, 60], [0, Infinity, 100, 60], [0, 0, 0, 60],
+    [0, 0, -1, 60], [0, 0, Infinity, 60], [0, 0, 100, NaN],
+    [0, 0, 100, Infinity], [0, 0, 100, 0], [0, 0, 100, -1],
+  ])("rejects invalid geometry or unavailable duration (%s, %s, %s, %s)", (x, left, width, duration) => {
+    expect(scrubSeekTarget(x, left, width, duration)).toBeNull();
+  });
+});
 
 describe("mediaScrub", () => {
   it("formats the file position and duration and computes progress", () => {

@@ -58,7 +58,7 @@ import {
   computeWindow,
   spacerHeight,
 } from "./virtual-list";
-import { clock, isBehindLive, mediaScrub, programmeProgress } from "./scrub";
+import { clock, isBehindLive, mediaScrub, programmeProgress, scrubSeekTarget } from "./scrub";
 import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
 import {
   loadPosition,
@@ -279,6 +279,8 @@ const wakeLockHooks = {
 const videoEl = $<HTMLVideoElement>("video");
 const videoStage = $("video-stage");
 const liveBadge = $("live-badge");
+const scrub = $("scrub");
+let scrubDrag: { pointerId: number; time: number } | null = null;
 const scrubFill = $("scrub-fill");
 const progStart = $("prog-start");
 const progEnd = $("prog-end");
@@ -2857,6 +2859,63 @@ for (const ev of ["click", "keydown"] as const) {
   });
 }
 
+function recordingScrubDuration(): number {
+  return player.isRecordingPlayback && videoEl.readyState > 0 && Number.isFinite(videoEl.duration) && videoEl.duration > 0
+    ? videoEl.duration : 0;
+}
+
+function scrubPointerTime(e: PointerEvent): number | null {
+  const rect = scrub.getBoundingClientRect();
+  return scrubSeekTarget(e.clientX, rect.left, rect.width, recordingScrubDuration());
+}
+
+scrub.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !e.isPrimary || scrubDrag) return;
+  const time = scrubPointerTime(e);
+  if (time === null) return;
+  e.preventDefault();
+  e.stopPropagation();
+  scrubDrag = { pointerId: e.pointerId, time };
+  scrub.setPointerCapture(e.pointerId);
+  scrub.focus();
+  wakeControls();
+  refreshScrub();
+});
+scrub.addEventListener("pointermove", (e) => {
+  if (scrubDrag?.pointerId !== e.pointerId) return;
+  e.stopPropagation();
+  const time = scrubPointerTime(e);
+  if (time !== null) scrubDrag.time = time;
+  wakeControls();
+  refreshScrub();
+});
+scrub.addEventListener("pointerup", (e) => {
+  if (scrubDrag?.pointerId !== e.pointerId) return;
+  e.stopPropagation();
+  const time = scrubPointerTime(e);
+  scrubDrag = null;
+  scrub.releasePointerCapture(e.pointerId);
+  if (time !== null) videoEl.currentTime = time;
+  refreshScrub();
+});
+for (const event of ["pointercancel", "lostpointercapture"] as const) {
+  scrub.addEventListener(event, (e) => {
+    if (scrubDrag?.pointerId !== e.pointerId) return;
+    scrubDrag = null;
+    refreshScrub();
+  });
+}
+scrub.addEventListener("keydown", (e) => {
+  const duration = recordingScrubDuration();
+  if (!duration || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === "Home") videoEl.currentTime = 0;
+  else if (e.key === "End") videoEl.currentTime = duration;
+  else player.seekBy(e.key === "ArrowLeft" ? -15 : 15);
+  refreshScrub();
+});
+
 /**
  * Полоса: позиция локальной записи или ход передачи по телепрограмме.
  *
@@ -2869,9 +2928,27 @@ function refreshScrub(): void {
   // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
   // а отстать от эфира на них можно ровно так же.
   refreshPlaybackControls();
+  const duration = recordingScrubDuration();
+  if (duration) {
+    scrub.setAttribute("role", "slider");
+    scrub.tabIndex = 0;
+    scrub.setAttribute("aria-label", "Позиция записи");
+    scrub.setAttribute("aria-valuemin", "0");
+    scrub.setAttribute("aria-valuemax", String(duration));
+  } else {
+    const pointerId = scrubDrag?.pointerId;
+    scrubDrag = null;
+    if (pointerId !== undefined && scrub.hasPointerCapture(pointerId)) scrub.releasePointerCapture(pointerId);
+    for (const attr of ["role", "tabindex", "aria-label", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext"]) scrub.removeAttribute(attr);
+  }
 
   if (player.isRecordingPlayback) {
-    const timeline = mediaScrub(videoEl.currentTime, videoEl.duration, player.recordingDurationSec);
+    const position = scrubDrag?.time ?? videoEl.currentTime;
+    const timeline = mediaScrub(position, videoEl.duration, player.recordingDurationSec);
+    if (duration) {
+      scrub.setAttribute("aria-valuenow", String(Math.max(0, Math.min(position, duration))));
+      scrub.setAttribute("aria-valuetext", `${timeline.position} / ${timeline.duration}`);
+    }
     const pct = `${(timeline.progress * 100).toFixed(1)}%`;
     scrubFill.style.width = pct;
     miniProgFill.style.width = pct;
@@ -3074,7 +3151,7 @@ function wakeControls(): void {
   controlsTimer = window.setTimeout(() => {
     // Открытое меню качества или дорожек нельзя гасить вместе с контролами
     const menuOpen = !qualityMenu.hidden || !audioMenu.hidden || !subtitleMenu.hidden;
-    if (menuOpen) {
+    if (menuOpen || scrubDrag || document.activeElement === scrub) {
       wakeControls();
       return;
     }
