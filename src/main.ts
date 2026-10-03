@@ -137,6 +137,7 @@ import {
 import {
   buildCatchupUrl,
   canWatchPast,
+  programmeStartUrl,
   dayWindows,
   programmesInDay,
   type DayWindow,
@@ -285,6 +286,8 @@ const scrubFill = $("scrub-fill");
 const progStart = $("prog-start");
 const progEnd = $("prog-end");
 const btnLive = $<HTMLButtonElement>("btn-live");
+const btnProgrammeStart = $<HTMLButtonElement>("btn-programme-start");
+let archivePlayback: { url: string; programme: EpgProgramme | null; fromStart: boolean } | null = null;
 const miniProgFill = $("mini-prog-fill");
 const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
@@ -648,6 +651,7 @@ const multiViewUi = createMultiViewUi({
   settings: () => playerSettings,
   toast: showToast,
   select: (channel) => {
+    archivePlayback = null;
     lastPlayed = channel;
     // Заголовок и звезда следуют за активным окном (#253): раньше здесь
     // менялся только lastPlayed, и заголовок оставался от первого канала.
@@ -1259,7 +1263,7 @@ function renderProgrammeMatch(match: ProgrammeMatch): HTMLButtonElement {
   row.title = `${name.textContent} · ${time.textContent}`;
   row.addEventListener("click", async () => {
     const archive = programmeArchiveUrl(match);
-    const played = await playChannel(channel, archive ?? undefined);
+    const played = await playChannel(channel, archive ?? undefined, programme);
     if (played && !archive && Date.parse(programme.start) > Date.now()) {
       showToast("Передача ещё не началась — включён эфир канала");
     }
@@ -1404,7 +1408,7 @@ function renderChannelCard(c: Channel): HTMLElement {
 }
 
 // ---------- Плеер ----------
-async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
+async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: EpgProgramme, fromStart = false): Promise<boolean> {
   cancelNumericZap();
   const request = ++playRequest;
   const id = plState.activeId;
@@ -1413,10 +1417,12 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
   if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
-  if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined)) {
+  if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined || archivePlayback !== null)) {
     stopRecordingNow();
     showToast("Запись остановлена: канал переключён");
   }
+  saveCurrentPosition();
+  archivePlayback = archiveUrl === undefined ? null : { url: archiveUrl, programme: archiveProgramme ?? null, fromStart };
   lastPlayed = c;
   // recents: дедап по url, максимум RECENTS_MAX, хранение per-плейлист
   recents = pushRecent(recents, c.url);
@@ -1440,7 +1446,6 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
-  saveCurrentPosition(); // уходим с предыдущего канала — запоминаем позицию (FR-9)
   healthAttempt = archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
   diagnosticsFor = null;
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
@@ -1481,6 +1486,7 @@ btnClosePlayer.addEventListener("click", () => {
   playerBar.hidden = true;
   setWatching(false);
   lastPlayed = null;
+  archivePlayback = null;
   renderChannels();
 });
 
@@ -1509,8 +1515,8 @@ videoEl.addEventListener("loadedmetadata", () => {
   // Продолжение с последней позиции (FR-9): только неэфирный контент —
   // у живого потока длительность конечного файла нет.
   const dur = videoEl.duration;
-  if (lastPlayed && Number.isFinite(dur) && dur > 0) {
-    const saved = loadPosition(localStorage, lastPlayed.url, Date.now(), dur);
+  if (lastPlayed && !archivePlayback?.fromStart && Number.isFinite(dur) && dur > 0) {
+    const saved = loadPosition(localStorage, archivePlayback?.url ?? lastPlayed.url, Date.now(), dur);
     if (saved !== null && saved > 15) {
       videoEl.currentTime = saved;
       showToast(`Продолжаю с ${Math.floor(saved / 60)}:${String(Math.floor(saved % 60)).padStart(2, "0")} · перемотайте назад, чтобы начать сначала`);
@@ -1522,7 +1528,7 @@ videoEl.addEventListener("loadedmetadata", () => {
 const saveCurrentPosition = (): void => {
   const dur = videoEl.duration;
   if (!lastPlayed || !Number.isFinite(dur) || dur === 0) return; // эфир — не сохраняем
-  if (videoEl.currentTime > 0) savePosition(localStorage, lastPlayed.url, videoEl.currentTime, Date.now());
+  if (videoEl.currentTime > 0) savePosition(localStorage, archivePlayback?.url ?? lastPlayed.url, videoEl.currentTime, Date.now());
 };
 videoEl.addEventListener("pause", saveCurrentPosition);
 window.addEventListener("pagehide", saveCurrentPosition);
@@ -2161,6 +2167,7 @@ function playRecording(file: File, r: RecordingMeta): void {
   closeMultiView(false);
   stopIfRecording();
   lastPlayed = null; // позиция записи не должна сохраняться под URL прошлого канала
+  archivePlayback = null;
   const refused = player.playRecording(file, r.ext, r.durationSec);
   refreshPlaybackControls();
   if (refused) {
@@ -2680,7 +2687,7 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
         showToast(tr("error.noArchive"));
         return;
       }
-      if (await playChannel(c, url)) onPlayed();
+      if (await playChannel(c, url, p)) onPlayed();
     });
   } else if (state === "past") {
     row.title =
@@ -2715,13 +2722,13 @@ function channelProgrammes(): EpgProgramme[] {
 let scheduleKey = "";
 function renderSchedule(): void {
   const all = channelProgrammes();
-  const nowMs = Date.now();
+  const nowMs = archivePlayback?.programme ? Date.parse(archivePlayback.programme.start) : Date.now();
   const i = all.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
   scheduleKey = lastPlayed && i >= 0 ? `${lastPlayed.url}|${all[i]!.start}` : "";
   schedList.textContent = "";
   nowSchedule.hidden = i < 0;
   if (i < 0) return;
-  const now = new Date(nowMs);
+  const now = new Date();
   for (const p of all.slice(Math.max(0, i - 1), i + 4)) {
     schedList.append(programmeRow(p, now, () => undefined));
   }
@@ -2758,7 +2765,8 @@ function refreshPlaybackControls(): void {
   btnSleep.hidden = recording;
   btnLive.disabled = recording;
   btnLive.setAttribute("aria-disabled", String(recording));
-  btnLive.hidden = recording || !isBehindLive(videoEl.currentTime, liveEdge());
+  btnLive.hidden = recording || (!archivePlayback && !isBehindLive(videoEl.currentTime, liveEdge()));
+  btnProgrammeStart.hidden = currentProgrammeStart() === null;
   if (recording) {
     if (overlayStack.includes("quality")) closeOverlay("quality");
     if (overlayStack.includes("sleep")) closeOverlay("sleep");
@@ -2965,7 +2973,7 @@ function refreshScrub(): void {
   }
 
   const prog =
-    epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null;
+    archivePlayback?.programme ?? (epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null);
   if (!prog) {
     if (scheduleKey) renderSchedule();
     scrubFill.style.width = "0%";
@@ -2978,7 +2986,8 @@ function refreshScrub(): void {
   }
   const startMs = Date.parse(prog.start);
   const stopMs = Date.parse(prog.stop);
-  const pct = `${(programmeProgress(Date.now(), startMs, stopMs) * 100).toFixed(1)}%`;
+  const positionMs = archivePlayback ? startMs + videoEl.currentTime * 1000 : Date.now();
+  const pct = `${(programmeProgress(positionMs, startMs, stopMs) * 100).toFixed(1)}%`;
   scrubFill.style.width = pct;
   miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
   progStart.textContent = clock(startMs);
@@ -2989,7 +2998,7 @@ function refreshScrub(): void {
 
   // Название передачи — сверху кадра, «ещё N мин» — у конца полосы
   nowShow.textContent = prog.title;
-  nowTimeLeft.textContent = timeLeft(stopMs - Date.now());
+  nowTimeLeft.textContent = timeLeft(stopMs - positionMs);
 }
 
 /** «ещё 58 мин», «ещё 1 ч 5 мин» — до конца передачи. */
@@ -3075,8 +3084,24 @@ function renderContinue(): void {
   }
 }
 
-btnLive.addEventListener("click", () => {
+function currentProgrammeStart() {
+  if (!lastPlayed || !snapshot || !epg || archivePlayback || multiViewUi.isOpen || player.isRecordingPlayback || playerBar.hidden) return null;
+  const programme = getNowNext(epg, lastPlayed, snapshot).now;
+  const url = programmeStartUrl({ days: lastPlayed.catchupDays, source: lastPlayed.catchupSource }, programme);
+  return programme && url ? { channel: lastPlayed, programme, url } : null;
+}
+
+btnProgrammeStart.addEventListener("click", async () => {
+  const target = currentProgrammeStart();
+  if (target && await playChannel(target.channel, target.url, target.programme, true)) refreshScrub();
+});
+
+btnLive.addEventListener("click", async () => {
   if (btnLive.disabled) return;
+  if (archivePlayback && lastPlayed) {
+    if (await playChannel(lastPlayed)) refreshScrub();
+    return;
+  }
   player.goLive();
   btnLive.hidden = true;
 });
@@ -3740,6 +3765,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   setWatching(false);
   lastPlayed = null;
   snapshot = null;
+  archivePlayback = null;
   renderGroupSettings();
   renderPinSettings();
   epg = null;

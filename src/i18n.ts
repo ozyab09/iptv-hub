@@ -2,6 +2,8 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "player.programmeStart": "Сначала",
+  "player.programmeStartTitle": "Сначала передачи",
   "health.title": "Проблемные каналы",
   "health.reset": "Сбросить метки текущего плейлиста",
   "health.note": "Метка появляется после окончательной ошибки подключения и снимается, когда канал успешно заиграет. Ошибки архива и записей не учитываются.",
@@ -228,6 +230,8 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "player.programmeStart": "Start over",
+  "player.programmeStartTitle": "Watch from the start of the programme",
   "health.title": "Problem channels",
   "health.reset": "Clear marks for the current playlist",
   "health.note": "A mark appears after a final connection error and clears when the channel plays successfully. Archive and recording errors are excluded.",

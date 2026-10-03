@@ -3,6 +3,7 @@ import {
   parseCatchup,
   buildCatchupUrl,
   canWatchPast,
+  programmeStartUrl,
   dayWindows,
   programmesInDay,
   MAX_CATCHUP_DAYS,
@@ -77,6 +78,31 @@ describe("canWatchPast", () => {
   });
   it("rejects without archive", () => {
     expect(canWatchPast({ days: 0, source: null }, prog, now)).toBe(false);
+  });
+});
+
+describe("programmeStartUrl", () => {
+  const info = { days: 3, source: "https://x/archive.m3u8?utc={utc}&lutc={lutc}" };
+  it("uses the programme start, not the current live position", () => {
+    expect(programmeStartUrl(info, prog, new Date("2026-09-28T10:30:00Z"))).toBe("https://x/archive.m3u8?utc=1790589600&lutc=1790591400");
+  });
+  it("hides during the first second, before and after the programme", () => {
+    for (const now of ["2026-09-28T09:59:59Z", "2026-09-28T10:00:00.999Z", "2026-09-28T11:00:00Z"]) {
+      expect(programmeStartUrl(info, prog, new Date(now))).toBeNull();
+    }
+    expect(programmeStartUrl(info, prog, new Date("2026-09-28T10:00:01Z"))).not.toBeNull();
+  });
+  it("requires EPG, archive depth and a URL template", () => {
+    const now = new Date("2026-09-28T10:30:00Z");
+    expect(programmeStartUrl(info, null, now)).toBeNull();
+    expect(programmeStartUrl({ ...info, days: 0 }, prog, now)).toBeNull();
+    expect(programmeStartUrl({ ...info, source: null }, prog, now)).toBeNull();
+  });
+  it("rejects invalid programme dates and a start outside archive depth", () => {
+    const now = new Date("2026-09-28T10:30:00Z");
+    expect(programmeStartUrl(info, { ...prog, start: "invalid" }, now)).toBeNull();
+    expect(programmeStartUrl(info, { ...prog, stop: "invalid" }, now)).toBeNull();
+    expect(programmeStartUrl(info, { ...prog, start: "2026-09-20T10:00:00Z" }, now)).toBeNull();
   });
 });
 
