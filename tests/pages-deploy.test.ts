@@ -91,7 +91,7 @@ it("проверки и релиз используют один dist текущ
     const job = jobSection(text, name);
     expect(job).toContain("needs.build.result == 'success'");
     expect(job).toMatch(/needs: \[[^\]]*\bbuild\b/);
-    expect(job).toMatch(/uses: actions\/download-artifact@v4\n        with:\n          name: pages-build\n          path: dist/);
+    expect(job).toMatch(/uses: actions\/download-artifact@v8\n        with:\n          name: pages-build\n          path: dist/);
     expect(job).not.toContain("npm run build");
     if (name !== "visual") expect(job).not.toContain("npm ci");
   }

@@ -81,6 +81,39 @@ export function programmeStartUrl(info: CatchupInfo, prog: EpgProgramme | null, 
 
 // ---------- Дни для вкладок гайда ----------
 
+const HOUR = 3_600_000;
+
+/**
+ * Часовые слоты «без названия» (#314): для каналов без телепрограммы, но
+ * с архивом гайд показывает по одному часу назад на неделю (7 × 24 = 168
+ * позиций). Слоты заканчиваются на границе текущего часа — текущий час
+ * играет как эфир, прошедшие открываются через catchup (в пределах глубины
+ * архива, как обычные передачи). Слоты идут от старых к новым.
+ */
+export function hourlyFallbackProgrammes(
+  now: Date = new Date(),
+  days = 7,
+): EpgProgramme[] {
+  const out: EpgProgramme[] = [];
+  const end = now.getTime();
+  // Начало текущего часа: последний слот, который ещё не закончился.
+  let stop = Math.floor(end / HOUR) * HOUR;
+  const horizon = end - days * 86_400_000;
+  while (stop > horizon) {
+    const start = stop - HOUR;
+    out.push({
+      start: new Date(start).toISOString(),
+      stop: new Date(stop).toISOString(),
+      title: "Без названия",
+      desc: null,
+    });
+    stop = start;
+  }
+  // От старых к новым — порядок рендера списка гайда.
+  return out.reverse();
+}
+
+
 const DAY = 86_400_000;
 
 export interface DayWindow {
