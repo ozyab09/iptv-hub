@@ -55,7 +55,10 @@ for (const width of [320, 390, 844, 1024, 1280, 1440]) {
       await page.locator("#btn-mute").focus();
       await page.keyboard.press("Tab");
       if (await page.locator("#volume-slider").isVisible()) await page.keyboard.press("Tab");
-      await expect(page.locator("#btn-seek-back")).toBeFocused();
+      for (const id of ["btn-prev", "btn-seek-back", "btn-pause", "btn-seek-fwd", "btn-next"]) {
+        await expect(page.locator(`#${id}`)).toBeFocused();
+        await page.keyboard.press("Tab");
+      }
       await page.locator("#quality-btn").click();
       const menu = page.locator("#quality-menu");
       await expect(menu).toBeVisible();
