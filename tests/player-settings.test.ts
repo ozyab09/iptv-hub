@@ -4,7 +4,7 @@ import { DEFAULT_PLAYER_SETTINGS, parsePlayerSettings, playerHlsConfig, sanitize
 
 describe("настройки плеера", () => {
   it("сохраняет прежние дефолты hls.js и диагностики", () => {
-    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ maxBufferLength: Hls.DefaultConfig.maxBufferLength, lowLatencyMode: false, diagnosticsTimeoutMs: 8000, limitMobileQuality: false, mobileMaxHeight: 720 });
+    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ maxBufferLength: Hls.DefaultConfig.maxBufferLength, lowLatencyMode: false, diagnosticsTimeoutMs: 8000, limitMobileQuality: false, mobileMaxHeight: 720, autoplayLastChannel: false });
   });
   it.each([null, "", "{", "null", "[]", "42", '"text"'])("испорченный JSON %s даёт дефолты", (raw) => {
     expect(parsePlayerSettings(raw)).toEqual(DEFAULT_PLAYER_SETTINGS);
@@ -35,6 +35,11 @@ describe("настройки плеера", () => {
     safe.maxBufferLength = 120;
     expect(input.maxBufferLength).toBe(30);
     expect(DEFAULT_PLAYER_SETTINGS.maxBufferLength).toBe(30);
+  });
+  it("autoplay is opt-in and accepts only a boolean", () => {
+    expect(sanitizePlayerSettings({ autoplayLastChannel: true }).autoplayLastChannel).toBe(true);
+    expect(sanitizePlayerSettings({ autoplayLastChannel: "true" }).autoplayLastChannel).toBe(false);
+    expect(parsePlayerSettings(null).autoplayLastChannel).toBe(false);
   });
   it("передаёт увеличенный целевой буфер в HLS без таймаута диагностики", () => {
     expect(playerHlsConfig({ ...DEFAULT_PLAYER_SETTINGS, maxBufferLength: 300, lowLatencyMode: true, diagnosticsTimeoutMs: 20000 }))
