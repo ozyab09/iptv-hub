@@ -49,7 +49,6 @@ import {
   isFavorite,
   toggleFavorite,
 } from "./favorites";
-import { parseM3U } from "./m3u";
 import { validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtream";
 import { createOpfsFs, createTransport, type Transport } from "./playlist-transport";
 import { formatRange, getNowNext, loadEpg } from "./epg";
@@ -3498,9 +3497,7 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
   refreshBusy = true;
   btnRefreshNow.setAttribute("aria-busy", "true");
   try {
-    const resp = await fetch(item.playlistUrl);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const fresh = parseM3U(await resp.text());
+    const fresh = await loadPlaylist(item.playlistUrl);
     const diff = diffSnapshots(snapshot, fresh);
     const httpNew = Math.max(0, fresh.droppedHttp - snapshot.droppedHttp);
     const interesting =
@@ -3518,9 +3515,14 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
         if (epgLoad.isCurrent()) {
           epg = parsed;
           programmes = countProgrammes(epg);
+          epgNow.hidden = true;
         }
       } catch {
         // программа не критична: списки всё равно обновим, уведомим «передач нет»
+        if (epgLoad.isCurrent()) {
+          epgNow.hidden = false;
+          setSystemText(epgNow, t("error.epg"));
+        }
       }
     }
 
