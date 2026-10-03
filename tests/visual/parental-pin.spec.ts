@@ -114,7 +114,7 @@ test("PIN covers deep links, ZAP, favourites, search/archive and multi-view", as
   await page.locator("#channel-list .channel-card").filter({ hasText: "Beta" }).click();
   await expect(page.locator("#video")).toHaveAttribute("src", "https://fixture.test/b.mp4");
   await page.locator("#video").click();
-  await page.keyboard.press("ArrowLeft");
+  await page.locator("#btn-prev").click();
   await enterPin(page, "9999");
   await expect(page.locator("#video")).toHaveAttribute("src", "https://fixture.test/b.mp4");
   await enterPin(page, "0123");
