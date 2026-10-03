@@ -3,6 +3,7 @@ import { createRecordingScheduleUi } from "./recording-schedule-ui";
 import { channelHealthKey, parseChannelHealth, serializeChannelHealth, markChannelFailure, clearChannelFailure, type ChannelHealth, type ChannelFailure } from "./channel-health";
 import { createGroupPreferencesUi } from "./group-preferences-ui";
 import { groupPreferencesKey, parseGroupPreferences, serializeGroupPreferences, orderedGroups, moveGroup, type GroupPreferences } from "./group-preferences";
+import { applyFavoritesOrder, favoritesOrderKey, moveFavorite, parseFavoritesOrder } from "./favorites-order";
 import { appendZapDigit, zapChannelIndex, ZAP_DELAY_MS, type NumericZap } from "./numeric-zap";
 import { LANGUAGE_KEY, resolveLanguage, t, translateMessage, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { installDebugLog } from "./debug-log";
@@ -58,7 +59,7 @@ import {
   computeWindow,
   spacerHeight,
 } from "./virtual-list";
-import { clock, isBehindLive, mediaScrub, programmeProgress } from "./scrub";
+import { clock, isBehindLive, mediaScrub, programmeProgress, scrubSeekTarget } from "./scrub";
 import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
 import {
   loadPosition,
@@ -138,6 +139,7 @@ import {
 import {
   buildCatchupUrl,
   canWatchPast,
+  programmeStartUrl,
   dayWindows,
   programmesInDay,
   type DayWindow,
@@ -280,10 +282,14 @@ const wakeLockHooks = {
 const videoEl = $<HTMLVideoElement>("video");
 const videoStage = $("video-stage");
 const liveBadge = $("live-badge");
+const scrub = $("scrub");
+let scrubDrag: { pointerId: number; time: number } | null = null;
 const scrubFill = $("scrub-fill");
 const progStart = $("prog-start");
 const progEnd = $("prog-end");
 const btnLive = $<HTMLButtonElement>("btn-live");
+const btnProgrammeStart = $<HTMLButtonElement>("btn-programme-start");
+let archivePlayback: { url: string; programme: EpgProgramme | null; fromStart: boolean } | null = null;
 const miniProgFill = $("mini-prog-fill");
 const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
@@ -437,6 +443,7 @@ let scheduleUi: ReturnType<typeof createRecordingScheduleUi> | null = null;
 let favKey: string | null = null; // favoritesKey(id) активного плейлиста (legacy)
 void favKey;
 let favorites = new Set<string>();
+let favoritesOrder: string[] = [];
 const VIEW_KEY = "iptv-hub.view.v1";
 let activeView: View = parseView(
   typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null,
@@ -535,14 +542,28 @@ const playlistTransport: Transport = createTransport({
 const playerBuffer = $<HTMLInputElement>("player-buffer");
 const playerLowLatency = $<HTMLInputElement>("player-low-latency");
 const playerDiagnosticsTimeout = $<HTMLInputElement>("player-diagnostics-timeout");
+const playerMobileQuality = $<HTMLInputElement>("player-mobile-quality");
+const playerMobileHeight = $<HTMLSelectElement>("player-mobile-height");
+const playerAutoplayLast = $<HTMLInputElement>("player-autoplay-last");
+const playerVolumeBoost = $<HTMLInputElement>("player-volume-boost");
+const mobileQualitySupported = getNetworkConnection() !== null;
+$("player-mobile-quality-row").hidden = !mobileQualitySupported;
+$("player-mobile-height-row").hidden = !mobileQualitySupported;
+$("player-mobile-unsupported").hidden = mobileQualitySupported;
 const playerSettingsStatus = $("player-settings-status");
 function renderPlayerSettings(): void {
   playerBuffer.value = String(playerSettings.maxBufferLength);
   playerLowLatency.checked = playerSettings.lowLatencyMode;
   playerDiagnosticsTimeout.value = String(playerSettings.diagnosticsTimeoutMs / 1000);
+  playerMobileQuality.checked = playerSettings.limitMobileQuality;
+  playerMobileHeight.value = String(playerSettings.mobileMaxHeight);
+  playerAutoplayLast.checked = playerSettings.autoplayLastChannel;
+  playerVolumeBoost.checked = playerSettings.volumeBoost;
 }
 function persistPlayerSettings(): void {
   renderPlayerSettings();
+  player.setBoostEnabled(playerSettings.volumeBoost, playerSettings.volumePercent / 100);
+  refreshPlayerVolume();
   try {
     localStorage.setItem(PLAYER_SETTINGS_KEY, JSON.stringify(playerSettings));
     setSystemText(playerSettingsStatus, t("settings.saved"));
@@ -558,6 +579,11 @@ playerSettingsForm.addEventListener("submit", (event) => {
     maxBufferLength: playerBuffer.valueAsNumber,
     lowLatencyMode: playerLowLatency.checked,
     diagnosticsTimeoutMs: playerDiagnosticsTimeout.valueAsNumber * 1000,
+    limitMobileQuality: playerMobileQuality.checked,
+    mobileMaxHeight: Number(playerMobileHeight.value),
+    autoplayLastChannel: playerAutoplayLast.checked,
+    volumeBoost: playerVolumeBoost.checked,
+    volumePercent: Math.min(playerVolumeBoost.checked ? 200 : 100, playerSettings.volumePercent),
   });
   persistPlayerSettings();
 });
@@ -637,6 +663,7 @@ const multiViewUi = createMultiViewUi({
   settings: () => playerSettings,
   toast: showToast,
   select: (channel) => {
+    archivePlayback = null;
     lastPlayed = channel;
     // Заголовок и звезда следуют за активным окном (#253): раньше здесь
     // менялся только lastPlayed, и заголовок оставался от первого канала.
@@ -1196,7 +1223,7 @@ function renderChannels(resetScroll = true): void {
   const sorted =
     activeView === "recents" ? list : applyFavorites(list, favorites, false);
   const programmes = searchProgrammes(inView.filter((c) => !activeCategory || c.group === activeCategory), epg, q);
-  visibleResults = [...sorted, ...programmes];
+  visibleResults = [...(activeView === "favorites" ? applyFavoritesOrder(sorted, favorites, favoritesOrder) : sorted), ...programmes];
   visibleChannels = [...new Map([...sorted, ...programmes.map((m) => m.channel)].map((c) => [c.url, c])).values()];
   viewCount.textContent = groupDigits(visibleResults.length);
   emptyState.textContent = emptyMessage(activeView, q !== "");
@@ -1248,7 +1275,7 @@ function renderProgrammeMatch(match: ProgrammeMatch): HTMLButtonElement {
   row.title = `${name.textContent} · ${time.textContent}`;
   row.addEventListener("click", async () => {
     const archive = programmeArchiveUrl(match);
-    const played = await playChannel(channel, archive ?? undefined);
+    const played = await playChannel(channel, archive ?? undefined, programme);
     if (played && !archive && Date.parse(programme.start) > Date.now()) {
       showToast("Передача ещё не началась — включён эфир канала");
     }
@@ -1261,6 +1288,44 @@ function renderChannelCard(c: Channel): HTMLElement {
   card.className = channelRowClass(lastPlayed?.url === c.url);
   card.setAttribute("role", "listitem");
   card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
+  if (activeView === "favorites") {
+    card.draggable = true;
+    card.title = tr("favorites.reorderHint");
+    card.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
+    card.addEventListener("keydown", (event) => {
+      if (event.target !== card || !event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const channels = visibleResults.filter((row): row is Channel => !("programme" in row));
+      const index = channels.findIndex((channel) => channel.url === c.url);
+      const target = channels[index + (event.key === "ArrowUp" ? -1 : 1)];
+      if (target) reorderFavorite(c.url, target.url);
+    });
+    card.addEventListener("dragstart", (event) => {
+      if (!event.dataTransfer || event.target !== card) { event.preventDefault(); return; }
+      event.dataTransfer.setData("application/x-iptv-favorite", JSON.stringify({ playlistId: plState.activeId, url: c.url }));
+      event.dataTransfer.effectAllowed = "move";
+      cancelNumericZap();
+    });
+    card.addEventListener("dragover", (event) => {
+      if (!event.dataTransfer?.types.includes("application/x-iptv-favorite")) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      card.classList.add("favorite-drop-target");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("favorite-drop-target"));
+    card.addEventListener("drop", (event) => {
+      event.preventDefault();
+      card.classList.remove("favorite-drop-target");
+      try {
+        const data = JSON.parse(event.dataTransfer?.getData("application/x-iptv-favorite") ?? "null");
+        if (data?.playlistId === plState.activeId && typeof data.url === "string") reorderFavorite(data.url, c.url);
+      } catch { /* Чужой drag payload. */ }
+    });
+    card.addEventListener("dragend", () => {
+      channelList.querySelectorAll(".favorite-drop-target").forEach((row) => row.classList.remove("favorite-drop-target"));
+    });
+  }
   const failure = channelHealth.get(c.url);
   card.classList.toggle("has-failure", failure !== undefined);
 
@@ -1393,7 +1458,7 @@ function renderChannelCard(c: Channel): HTMLElement {
 }
 
 // ---------- Плеер ----------
-async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
+async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: EpgProgramme, fromStart = false): Promise<boolean> {
   cancelNumericZap();
   const request = ++playRequest;
   const id = plState.activeId;
@@ -1402,10 +1467,12 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
   if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
-  if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined)) {
+  if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined || archivePlayback !== null)) {
     stopRecordingNow();
     showToast("Запись остановлена: канал переключён");
   }
+  saveCurrentPosition();
+  archivePlayback = archiveUrl === undefined ? null : { url: archiveUrl, programme: archiveProgramme ?? null, fromStart };
   lastPlayed = c;
   // recents: дедап по url, максимум RECENTS_MAX, хранение per-плейлист
   recents = pushRecent(recents, c.url);
@@ -1429,7 +1496,6 @@ async function playChannel(c: Channel, archiveUrl?: string): Promise<boolean> {
   setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
-  saveCurrentPosition(); // уходим с предыдущего канала — запоминаем позицию (FR-9)
   healthAttempt = archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
   diagnosticsFor = null;
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
@@ -1470,6 +1536,7 @@ btnClosePlayer.addEventListener("click", () => {
   playerBar.hidden = true;
   setWatching(false);
   lastPlayed = null;
+  archivePlayback = null;
   renderChannels();
 });
 
@@ -1498,8 +1565,8 @@ videoEl.addEventListener("loadedmetadata", () => {
   // Продолжение с последней позиции (FR-9): только неэфирный контент —
   // у живого потока длительность конечного файла нет.
   const dur = videoEl.duration;
-  if (lastPlayed && Number.isFinite(dur) && dur > 0) {
-    const saved = loadPosition(localStorage, lastPlayed.url, Date.now(), dur);
+  if (lastPlayed && !archivePlayback?.fromStart && Number.isFinite(dur) && dur > 0) {
+    const saved = loadPosition(localStorage, archivePlayback?.url ?? lastPlayed.url, Date.now(), dur);
     if (saved !== null && saved > 15) {
       videoEl.currentTime = saved;
       showToast(`Продолжаю с ${Math.floor(saved / 60)}:${String(Math.floor(saved % 60)).padStart(2, "0")} · перемотайте назад, чтобы начать сначала`);
@@ -1511,7 +1578,7 @@ videoEl.addEventListener("loadedmetadata", () => {
 const saveCurrentPosition = (): void => {
   const dur = videoEl.duration;
   if (!lastPlayed || !Number.isFinite(dur) || dur === 0) return; // эфир — не сохраняем
-  if (videoEl.currentTime > 0) savePosition(localStorage, lastPlayed.url, videoEl.currentTime, Date.now());
+  if (videoEl.currentTime > 0) savePosition(localStorage, archivePlayback?.url ?? lastPlayed.url, videoEl.currentTime, Date.now());
 };
 videoEl.addEventListener("pause", saveCurrentPosition);
 window.addEventListener("pagehide", saveCurrentPosition);
@@ -1533,13 +1600,26 @@ btnRetry.addEventListener("click", () => {
 
 btnMute.addEventListener("click", () => {
   player.toggleMute();
-  refreshMuteIcon();
-  volumeSlider.value = String(Math.round(player.getVolume() * 100));
+  refreshPlayerVolume();
 });
 volumeSlider.addEventListener("input", () => {
-  player.setVolume(Number(volumeSlider.value) / 100);
-  refreshMuteIcon();
+  setPlayerVolume(Number(volumeSlider.value) / 100);
 });
+
+function refreshPlayerVolume(): void {
+  volumeSlider.max = player.canBoostVolume ? "200" : "100";
+  volumeSlider.value = String(Math.round(player.getVolume() * 100));
+  volumeSlider.setAttribute("aria-valuetext", `${volumeSlider.value}%`);
+  volumeSlider.title = `${volumeSlider.value}%`;
+  volumeSlider.classList.toggle("volume-boosting", player.getVolume() > 1);
+  refreshMuteIcon();
+}
+function setPlayerVolume(value: number): void {
+  player.setVolume(value);
+  playerSettings = sanitizePlayerSettings({ ...playerSettings, volumePercent: Math.round(player.getVolume() * 100) });
+  try { localStorage.setItem(PLAYER_SETTINGS_KEY, JSON.stringify(playerSettings)); } catch { /* приватный режим */ }
+  refreshPlayerVolume();
+}
 
 btnPip.addEventListener("click", () => void player.togglePip());
 
@@ -1720,26 +1800,26 @@ window.addEventListener("keydown", (e) => {
       player.togglePause();
       break;
     case "ArrowRight":
-      playNeighbor(1);
+      e.preventDefault();
+      player.seekBy(15);
       break;
     case "ArrowLeft":
-      playNeighbor(-1);
+      e.preventDefault();
+      player.seekBy(-15);
       break;
     case "ArrowUp":
       e.preventDefault();
       volumeSlider.value = String(
-        Math.min(100, Number(volumeSlider.value) + 10),
+        Math.min(Number(volumeSlider.max), Number(volumeSlider.value) + 10),
       );
-      player.setVolume(Number(volumeSlider.value) / 100);
-      refreshMuteIcon();
+      setPlayerVolume(Number(volumeSlider.value) / 100);
       break;
     case "ArrowDown":
       e.preventDefault();
       volumeSlider.value = String(
         Math.max(0, Number(volumeSlider.value) - 10),
       );
-      player.setVolume(Number(volumeSlider.value) / 100);
-      refreshMuteIcon();
+      setPlayerVolume(Number(volumeSlider.value) / 100);
       break;
     case "Escape": {
       const top = topOverlay(overlayStack);
@@ -1880,12 +1960,6 @@ function captureFromVideo(): RecordingSource | null {
   }
 }
 
-// AudioContext и узел источника создаются один раз на весь сеанс:
-// createMediaElementSource можно вызвать на элементе только однажды, повторный
-// вызов бросает InvalidStateError.
-let audioCtx: AudioContext | null = null;
-let audioSourceNode: MediaElementAudioSourceNode | null = null;
-
 /**
  * Аудиодорожка текущего видео через Web Audio — так звук добывается там, где
  * захват элемента не работает (мобильный Firefox).
@@ -1895,32 +1969,7 @@ let audioSourceNode: MediaElementAudioSourceNode | null = null;
  * не проблема: источник элемента — свой blob: от MediaSource.
  */
 function captureAudioTrack(): { track: MediaStreamTrack; release: () => void } | null {
-  if (typeof AudioContext === "undefined") return null;
-  try {
-    if (!audioCtx) {
-      audioCtx = new AudioContext();
-      // Звук обязательно возвращается в вывод: без этого соединения элемент
-      // замолчит, потому что его аудио уходит в граф целиком.
-      audioSourceNode = audioCtx.createMediaElementSource(videoEl);
-      audioSourceNode.connect(audioCtx.destination);
-    }
-    if (!audioSourceNode) return null;
-    void audioCtx.resume(); // клик по ⏺ — валидный user gesture
-    const dest = audioCtx.createMediaStreamDestination();
-    audioSourceNode.connect(dest);
-    const [track] = dest.stream.getAudioTracks();
-    if (!track) {
-      audioSourceNode.disconnect(dest);
-      return null;
-    }
-    return {
-      track,
-      release: () => audioSourceNode?.disconnect(dest),
-    };
-  } catch (e) {
-    console.debug("[iptv-hub] rec: Web Audio недоступен:", e);
-    return null;
-  }
+  return player.captureAudioTrack();
 }
 
 /**
@@ -2203,6 +2252,7 @@ function playRecording(file: File, r: RecordingMeta): void {
   closeMultiView(false);
   stopIfRecording();
   lastPlayed = null; // позиция записи не должна сохраняться под URL прошлого канала
+  archivePlayback = null;
   const refused = player.playRecording(file, r.ext, r.durationSec);
   refreshPlaybackControls();
   if (refused) {
@@ -2722,7 +2772,7 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
         showToast(tr("error.noArchive"));
         return;
       }
-      if (await playChannel(c, url)) onPlayed();
+      if (await playChannel(c, url, p)) onPlayed();
     });
   } else if (state === "past") {
     row.title =
@@ -2757,13 +2807,13 @@ function channelProgrammes(): EpgProgramme[] {
 let scheduleKey = "";
 function renderSchedule(): void {
   const all = channelProgrammes();
-  const nowMs = Date.now();
+  const nowMs = archivePlayback?.programme ? Date.parse(archivePlayback.programme.start) : Date.now();
   const i = all.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
   scheduleKey = lastPlayed && i >= 0 ? `${lastPlayed.url}|${all[i]!.start}` : "";
   schedList.textContent = "";
   nowSchedule.hidden = i < 0;
   if (i < 0) return;
-  const now = new Date(nowMs);
+  const now = new Date();
   for (const p of all.slice(Math.max(0, i - 1), i + 4)) {
     schedList.append(programmeRow(p, now, () => undefined));
   }
@@ -2790,12 +2840,18 @@ function liveEdge(): number {
 let sleepState: SleepState = initialSleepState;
 
 function refreshPlaybackControls(): void {
+  refreshPlayerVolume();
   const recording = player.isRecordingPlayback;
+  btnPrev.hidden = recording;
+  btnNext.hidden = recording;
+  btnPrev.disabled = recording;
+  btnNext.disabled = recording;
   btnRec.hidden = recording;
   btnSleep.hidden = recording;
   btnLive.disabled = recording;
   btnLive.setAttribute("aria-disabled", String(recording));
-  btnLive.hidden = recording || !isBehindLive(videoEl.currentTime, liveEdge());
+  btnLive.hidden = recording || (!archivePlayback && !isBehindLive(videoEl.currentTime, liveEdge()));
+  btnProgrammeStart.hidden = currentProgrammeStart() === null;
   if (recording) {
     if (overlayStack.includes("quality")) closeOverlay("quality");
     if (overlayStack.includes("sleep")) closeOverlay("sleep");
@@ -2900,6 +2956,63 @@ for (const ev of ["click", "keydown"] as const) {
   });
 }
 
+function recordingScrubDuration(): number {
+  return player.isRecordingPlayback && videoEl.readyState > 0 && Number.isFinite(videoEl.duration) && videoEl.duration > 0
+    ? videoEl.duration : 0;
+}
+
+function scrubPointerTime(e: PointerEvent): number | null {
+  const rect = scrub.getBoundingClientRect();
+  return scrubSeekTarget(e.clientX, rect.left, rect.width, recordingScrubDuration());
+}
+
+scrub.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !e.isPrimary || scrubDrag) return;
+  const time = scrubPointerTime(e);
+  if (time === null) return;
+  e.preventDefault();
+  e.stopPropagation();
+  scrubDrag = { pointerId: e.pointerId, time };
+  scrub.setPointerCapture(e.pointerId);
+  scrub.focus();
+  wakeControls();
+  refreshScrub();
+});
+scrub.addEventListener("pointermove", (e) => {
+  if (scrubDrag?.pointerId !== e.pointerId) return;
+  e.stopPropagation();
+  const time = scrubPointerTime(e);
+  if (time !== null) scrubDrag.time = time;
+  wakeControls();
+  refreshScrub();
+});
+scrub.addEventListener("pointerup", (e) => {
+  if (scrubDrag?.pointerId !== e.pointerId) return;
+  e.stopPropagation();
+  const time = scrubPointerTime(e);
+  scrubDrag = null;
+  scrub.releasePointerCapture(e.pointerId);
+  if (time !== null) videoEl.currentTime = time;
+  refreshScrub();
+});
+for (const event of ["pointercancel", "lostpointercapture"] as const) {
+  scrub.addEventListener(event, (e) => {
+    if (scrubDrag?.pointerId !== e.pointerId) return;
+    scrubDrag = null;
+    refreshScrub();
+  });
+}
+scrub.addEventListener("keydown", (e) => {
+  const duration = recordingScrubDuration();
+  if (!duration || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === "Home") videoEl.currentTime = 0;
+  else if (e.key === "End") videoEl.currentTime = duration;
+  else player.seekBy(e.key === "ArrowLeft" ? -15 : 15);
+  refreshScrub();
+});
+
 /**
  * Полоса: позиция локальной записи или ход передачи по телепрограмме.
  *
@@ -2912,9 +3025,27 @@ function refreshScrub(): void {
   // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
   // а отстать от эфира на них можно ровно так же.
   refreshPlaybackControls();
+  const duration = recordingScrubDuration();
+  if (duration) {
+    scrub.setAttribute("role", "slider");
+    scrub.tabIndex = 0;
+    scrub.setAttribute("aria-label", "Позиция записи");
+    scrub.setAttribute("aria-valuemin", "0");
+    scrub.setAttribute("aria-valuemax", String(duration));
+  } else {
+    const pointerId = scrubDrag?.pointerId;
+    scrubDrag = null;
+    if (pointerId !== undefined && scrub.hasPointerCapture(pointerId)) scrub.releasePointerCapture(pointerId);
+    for (const attr of ["role", "tabindex", "aria-label", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext"]) scrub.removeAttribute(attr);
+  }
 
   if (player.isRecordingPlayback) {
-    const timeline = mediaScrub(videoEl.currentTime, videoEl.duration, player.recordingDurationSec);
+    const position = scrubDrag?.time ?? videoEl.currentTime;
+    const timeline = mediaScrub(position, videoEl.duration, player.recordingDurationSec);
+    if (duration) {
+      scrub.setAttribute("aria-valuenow", String(Math.max(0, Math.min(position, duration))));
+      scrub.setAttribute("aria-valuetext", `${timeline.position} / ${timeline.duration}`);
+    }
     const pct = `${(timeline.progress * 100).toFixed(1)}%`;
     scrubFill.style.width = pct;
     miniProgFill.style.width = pct;
@@ -2927,7 +3058,7 @@ function refreshScrub(): void {
   }
 
   const prog =
-    epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null;
+    archivePlayback?.programme ?? (epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null);
   if (!prog) {
     if (scheduleKey) renderSchedule();
     scrubFill.style.width = "0%";
@@ -2940,7 +3071,8 @@ function refreshScrub(): void {
   }
   const startMs = Date.parse(prog.start);
   const stopMs = Date.parse(prog.stop);
-  const pct = `${(programmeProgress(Date.now(), startMs, stopMs) * 100).toFixed(1)}%`;
+  const positionMs = archivePlayback ? startMs + videoEl.currentTime * 1000 : Date.now();
+  const pct = `${(programmeProgress(positionMs, startMs, stopMs) * 100).toFixed(1)}%`;
   scrubFill.style.width = pct;
   miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
   progStart.textContent = clock(startMs);
@@ -2951,7 +3083,7 @@ function refreshScrub(): void {
 
   // Название передачи — сверху кадра, «ещё N мин» — у конца полосы
   nowShow.textContent = prog.title;
-  nowTimeLeft.textContent = timeLeft(stopMs - Date.now());
+  nowTimeLeft.textContent = timeLeft(stopMs - positionMs);
 }
 
 /** «ещё 58 мин», «ещё 1 ч 5 мин» — до конца передачи. */
@@ -3037,8 +3169,24 @@ function renderContinue(): void {
   }
 }
 
-btnLive.addEventListener("click", () => {
+function currentProgrammeStart() {
+  if (!lastPlayed || !snapshot || !epg || archivePlayback || multiViewUi.isOpen || player.isRecordingPlayback || playerBar.hidden) return null;
+  const programme = getNowNext(epg, lastPlayed, snapshot).now;
+  const url = programmeStartUrl({ days: lastPlayed.catchupDays, source: lastPlayed.catchupSource }, programme);
+  return programme && url ? { channel: lastPlayed, programme, url } : null;
+}
+
+btnProgrammeStart.addEventListener("click", async () => {
+  const target = currentProgrammeStart();
+  if (target && await playChannel(target.channel, target.url, target.programme, true)) refreshScrub();
+});
+
+btnLive.addEventListener("click", async () => {
   if (btnLive.disabled) return;
+  if (archivePlayback && lastPlayed) {
+    if (await playChannel(lastPlayed)) refreshScrub();
+    return;
+  }
   player.goLive();
   btnLive.hidden = true;
 });
@@ -3117,7 +3265,7 @@ function wakeControls(): void {
   controlsTimer = window.setTimeout(() => {
     // Открытое меню качества или дорожек нельзя гасить вместе с контролами
     const menuOpen = !qualityMenu.hidden || !audioMenu.hidden || !subtitleMenu.hidden;
-    if (menuOpen) {
+    if (menuOpen || scrubDrag || document.activeElement === scrub) {
       wakeControls();
       return;
     }
@@ -3395,11 +3543,28 @@ function loadFavoritesFor(id: string): Set<string> {
 
 /** Сохранить избранное по ключу плейлиста (best-effort). */
 function saveFavoritesFor(id: string): void {
+  favoritesOrder = applyFavoritesOrder(snapshot?.channels ?? [], favorites, favoritesOrder).map((channel) => channel.url);
   try {
     localStorage.setItem(favoritesKey(id), JSON.stringify([...favorites]));
+    localStorage.setItem(favoritesOrderKey(id), JSON.stringify(favoritesOrder));
   } catch {
     // приватный режим / quota
   }
+}
+
+function loadFavoritesOrderFor(id: string): string[] {
+  try { return parseFavoritesOrder(localStorage.getItem(favoritesOrderKey(id))).filter((url) => favorites.has(url)); }
+  catch { return []; }
+}
+
+function reorderFavorite(url: string, target: string): void {
+  if (activeView !== "favorites" || !plState.activeId || !snapshot || !favorites.has(url) || !favorites.has(target)) return;
+  const order = applyFavoritesOrder(snapshot.channels, favorites, favoritesOrder).map((channel) => channel.url);
+  favoritesOrder = moveFavorite(order, url, target);
+  try { localStorage.setItem(favoritesOrderKey(plState.activeId), JSON.stringify(favoritesOrder)); } catch { /* текущая сессия */ }
+  renderChannels(false);
+  const index = visibleResults.findIndex((row) => !("programme" in row) && row.url === url);
+  if (index >= 0) focusChannelAt(index);
 }
 
 /** Активировать плейлист по id: перезагрузить его избранное и список. */
@@ -3449,8 +3614,9 @@ window.addEventListener("storage", (e) => {
   }
   if (d.favorites) {
     const activeId = plState.activeId;
-    if (activeId && (e.key === null || e.key === favoritesKey(activeId))) {
+    if (activeId && (e.key === null || e.key === favoritesKey(activeId) || e.key === favoritesOrderKey(activeId))) {
       favorites = loadFavoritesFor(activeId);
+      favoritesOrder = loadFavoritesOrderFor(activeId);
       refreshNowFav();
       if (showsChannelList(activeView)) renderChannels();
     }
@@ -3675,6 +3841,7 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  favoritesOrder = plState.activeId ? loadFavoritesOrderFor(plState.activeId) : [];
   healthAttempt = null;
   try { channelHealth = parseChannelHealth(plState.activeId ? localStorage.getItem(channelHealthKey(plState.activeId)) : null); }
   catch { channelHealth = new Map(); }
@@ -3702,6 +3869,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   setWatching(false);
   lastPlayed = null;
   snapshot = null;
+  archivePlayback = null;
   renderGroupSettings();
   renderPinSettings();
   epg = null;
@@ -3786,7 +3954,9 @@ async function bootstrap(): Promise<void> {
   }
   favorites = loadFavoritesFor(active.id);
   loadRecentsFor(active.id);
-  await openPlaylist(active.playlistUrl, active.epgUrl);
+  const opening = openPlaylist(active.playlistUrl, active.epgUrl);
+  const bootPlayRequest = playRequest;
+  await opening;
 
   // Диплинк на канал (FR-12): ?ch=<url> — после загрузки плейлиста
   // включить канал. Работает и вместе с ?p= (тот же заход).
@@ -3799,6 +3969,10 @@ async function bootstrap(): Promise<void> {
     } else {
       showToast(tr("error.deepLink"));
     }
+  } else if (playerSettings.autoplayLastChannel && !params.has("p") && !params.has("ch") &&
+    !lastPlayed && playRequest === bootPlayRequest && plState.activeId === active.id) {
+    const target = displayChannels().find((channel) => channel.url === recents[0]);
+    if (target) await playChannel(target);
   }
 }
 

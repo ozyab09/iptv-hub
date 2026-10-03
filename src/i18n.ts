@@ -2,6 +2,9 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "player.programmeStart": "Сначала",
+  "favorites.reorderHint": "Перетащите для изменения порядка или нажмите Alt+↑/↓",
+  "player.programmeStartTitle": "Сначала передачи",
   "health.title": "Проблемные каналы",
   "health.reset": "Сбросить метки текущего плейлиста",
   "health.note": "Метка появляется после окончательной ошибки подключения и снимается, когда канал успешно заиграет. Ошибки архива и записей не учитываются.",
@@ -96,6 +99,13 @@ export const ru = {
   "settings.player": "Плеер",
   "settings.buffer": "Буфер HLS, секунды",
   "settings.latency": "Низкая задержка HLS",
+  "settings.mobileQuality": "Ограничивать качество в мобильной сети",
+  "settings.mobileHeight": "Максимальное качество",
+  "settings.autoplayLast": "Продолжать с последнего канала при открытии",
+  "settings.volumeBoost": "Усиление громкости до 200%",
+  "error.volumeBoost": "Усиление недоступно: браузер не даёт захватить звук (возможно, CORS). Громкость возвращена к 100%.",
+  "settings.mobileNote": "Для HLS в Auto. Если тип сети неизвестен, ограничение включается для медленного соединения 2G/3G. Ручной выбор качества имеет приоритет; если нет уровня ниже порога, используется самый низкий доступный.",
+  "settings.mobileUnsupported": "Браузер не сообщает тип сети — автоматическое ограничение качества недоступно.",
   "settings.timeout": "Таймаут диагностики, секунды",
   "settings.defaults": "По умолчанию",
   "settings.playerNote": "Применяются к следующему запуску канала. Буфер: 5–600 с, диагностика: 1–60 с. Больший буфер требует больше памяти; доступная пауза зависит от потока. Низкая задержка работает с поддерживающими её HLS-потоками.",
@@ -221,6 +231,9 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "player.programmeStart": "Start over",
+  "favorites.reorderHint": "Drag to reorder or press Alt+↑/↓",
+  "player.programmeStartTitle": "Watch from the start of the programme",
   "health.title": "Problem channels",
   "health.reset": "Clear marks for the current playlist",
   "health.note": "A mark appears after a final connection error and clears when the channel plays successfully. Archive and recording errors are excluded.",
@@ -315,6 +328,13 @@ export const en: Record<TranslationKey, string> = {
   "settings.player": "Player",
   "settings.buffer": "HLS buffer, seconds",
   "settings.latency": "HLS low latency",
+  "settings.mobileQuality": "Limit quality on mobile networks",
+  "settings.mobileHeight": "Maximum quality",
+  "settings.autoplayLast": "Resume the last channel when opening the app",
+  "settings.volumeBoost": "Volume boost up to 200%",
+  "error.volumeBoost": "Volume boost is unavailable: the browser cannot capture audio (possibly CORS). Volume has returned to 100%.",
+  "settings.mobileNote": "For HLS in Auto. When the network type is unknown, slow 2G/3G connections are capped. Manual quality takes priority; if no level is below the limit, the lowest available level is used.",
+  "settings.mobileUnsupported": "This browser does not report network information; automatic quality limits are unavailable.",
   "settings.timeout": "Diagnostics timeout, seconds",
   "settings.defaults": "Reset to defaults",
   "settings.playerNote": "Applied the next time a channel starts. Buffer: 5–600 s, diagnostics: 1–60 s. A larger buffer uses more memory; available pause time depends on the stream. Low latency requires support from the HLS stream.",

@@ -71,6 +71,14 @@ export function canWatchPast(info: CatchupInfo, prog: EpgProgramme, now: Date = 
   return ageDays >= 0 && ageDays <= info.days;
 }
 
+/** Начать текущую передачу с первой секунды, если начало ещё доступно в архиве. */
+export function programmeStartUrl(info: CatchupInfo, prog: EpgProgramme | null, now: Date = new Date()): string | null {
+  if (!prog || info.days <= 0) return null;
+  const elapsed = now.getTime() - Date.parse(prog.start);
+  if (!(elapsed >= 1000 && elapsed <= info.days * 86_400_000 && now.getTime() < Date.parse(prog.stop))) return null;
+  return buildCatchupUrl(info, prog, now);
+}
+
 // ---------- Дни для вкладок гайда ----------
 
 const DAY = 86_400_000;

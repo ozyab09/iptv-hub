@@ -36,7 +36,7 @@ export function classifyStorageChange(key: string | null): SettingsKeyDiff {
   if (key === PLAYLISTS_STORAGE_KEY || key === ACTIVE_STORAGE_KEY) {
     return { playlists: true, favorites: false, theme: false, ignore: false };
   }
-  if (key.startsWith("iptv-hub.favorites.v1")) {
+  if (key.startsWith("iptv-hub.favorites.v1") || key.startsWith("iptv-hub.favorites-order.v1:")) {
     return { playlists: false, favorites: true, theme: false, ignore: false };
   }
   if (key === THEME_STORAGE_KEY) {

@@ -179,6 +179,31 @@
                         <label for="player-diagnostics-timeout" data-i18n="settings.timeout">Таймаут диагностики, секунды</label>
                         <div class="input"><input id="player-diagnostics-timeout" type="number" min="1" max="60" step="1" required /></div>
                       </div>
+                      <div id="player-mobile-quality-row" class="item">
+                        <label for="player-mobile-quality" data-i18n="settings.mobileQuality">Ограничивать качество в мобильной сети</label>
+                        <span class="player-switch">
+                          <input id="player-mobile-quality" type="checkbox" />
+                          <span class="player-switch-track" aria-hidden="true"></span>
+                        </span>
+                      </div>
+                      <div class="item">
+                        <label for="player-volume-boost" data-i18n="settings.volumeBoost">Усиление громкости до 200%</label>
+                        <span class="player-switch">
+                          <input id="player-volume-boost" type="checkbox" />
+                          <span class="player-switch-track" aria-hidden="true"></span>
+                        </span>
+                      </div>
+                      <div class="item">
+                        <label for="player-autoplay-last" data-i18n="settings.autoplayLast">Продолжать с последнего канала при открытии</label>
+                        <span class="player-switch">
+                          <input id="player-autoplay-last" type="checkbox" />
+                          <span class="player-switch-track" aria-hidden="true"></span>
+                        </span>
+                      </div>
+                      <div id="player-mobile-height-row" class="item">
+                        <label for="player-mobile-height" data-i18n="settings.mobileHeight">Максимальное качество</label>
+                        <div class="input"><select id="player-mobile-height"><option value="360">360p</option><option value="480">480p</option><option value="720">720p</option><option value="1080">1080p</option></select></div>
+                      </div>
                       <div class="item">
                         <button type="submit" class="btn" data-i18n="common.save">Сохранить</button>
                         <button id="player-settings-reset" type="button" class="btn" data-i18n="settings.defaults">По умолчанию</button>
@@ -187,6 +212,8 @@
                   </form>
                   <p class="set-note muted" data-i18n="settings.playerNote">Применяются к следующему запуску канала. Буфер: 5–600 с, диагностика: 1–60 с. Больший буфер требует больше памяти; доступная пауза зависит от потока. Низкая задержка работает с поддерживающими её HLS-потоками.</p>
                   <p id="player-settings-status" class="set-note muted" role="status"></p>
+                  <p class="set-note muted" data-i18n="settings.mobileNote">Для HLS в Auto. Если тип сети неизвестен, ограничение включается для медленного соединения 2G/3G. Ручной выбор качества имеет приоритет; если нет уровня ниже порога, используется самый низкий доступный.</p>
+                  <p id="player-mobile-unsupported" class="set-note muted" data-i18n="settings.mobileUnsupported">Браузер не сообщает тип сети — автоматическое ограничение качества недоступно.</p>
                 </section>
 
                 <section class="set-group refresh-group">
@@ -374,15 +401,16 @@
               <div class="center">
                 <div class="transport">
                   <button id="btn-seek-back" class="vbtn ghost" title="Назад 15 сек (J)" aria-label="Назад 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-back"></use></svg></button>
-                  <button id="btn-prev" class="vbtn ghost" title="Предыдущий канал (←)" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
+                  <button id="btn-prev" class="vbtn ghost" title="Предыдущий канал" aria-label="Предыдущий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-prev"></use></svg></button>
                   <button id="btn-pause" class="vbtn big" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить"><svg class="i i-lg i-fill" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg></button>
-                  <button id="btn-next" class="vbtn ghost" title="Следующий канал (→)" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
+                  <button id="btn-next" class="vbtn ghost" title="Следующий канал" aria-label="Следующий канал"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next"></use></svg></button>
                   <button id="btn-seek-fwd" class="vbtn ghost" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-fwd"></use></svg></button>
                   <button id="btn-rec" class="vbtn ghost rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
                   <button id="btn-sleep" class="vbtn ghost" title="Sleep-таймер: выключить позже" aria-label="Sleep-таймер" aria-haspopup="listbox" aria-controls="sleep-menu" aria-expanded="false"><span id="sleep-badge" class="sleep-badge" hidden></span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-clock"></use></svg></button>
                 </div>
               </div>
               <div class="video-actions-right">
+                <button id="btn-programme-start" class="vbtn btn-live" data-i18n="player.programmeStart" data-i18n-title="player.programmeStartTitle" hidden>Сначала</button>
                 <button id="btn-live" class="vbtn btn-live" hidden>К эфиру</button>
                 <div id="quality-wrap" class="quality-wrap">
                   <button id="quality-btn" class="btn btn-sm quality-btn" title="Качество" aria-label="Качество" aria-haspopup="listbox" aria-expanded="false">Auto</button>
