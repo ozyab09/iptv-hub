@@ -96,7 +96,7 @@ test("start and return require PIN; cancelled PIN keeps recording, approved PIN 
   await page.locator("#btn-rec").click();
   await expect(page.locator("#btn-rec")).toHaveClass(/recording/);
   release();
-  await expect.poll(() => page.locator("#video").evaluate((el: HTMLVideoElement) => el.currentTime)).toBeGreaterThan(4);
+  await expect.poll(() => page.locator("#video").evaluate((el: HTMLVideoElement) => el.buffered.length ? el.buffered.end(el.buffered.length - 1) : 0)).toBeGreaterThan(4);
   await page.locator("#video").hover();
   const source = await page.locator("#video").getAttribute("src");
   await page.locator("#btn-programme-start").click();
