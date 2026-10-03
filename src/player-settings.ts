@@ -4,6 +4,7 @@ export interface PlayerSettings {
   diagnosticsTimeoutMs: number;
   limitMobileQuality: boolean;
   mobileMaxHeight: number;
+  autoplayLastChannel: boolean;
 }
 
 export const PLAYER_SETTINGS_KEY = "iptv-hub.player-settings.v1";
@@ -15,6 +16,7 @@ export const DEFAULT_PLAYER_SETTINGS: Readonly<PlayerSettings> = Object.freeze({
   diagnosticsTimeoutMs: 8000,
   limitMobileQuality: false,
   mobileMaxHeight: 720,
+  autoplayLastChannel: false,
 });
 
 function secondsOrDefault(value: unknown, min: number, max: number, fallback: number): number {
@@ -32,6 +34,7 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
     diagnosticsTimeoutMs: secondsOrDefault(fields.diagnosticsTimeoutMs, 1000, 60000, DEFAULT_PLAYER_SETTINGS.diagnosticsTimeoutMs),
     limitMobileQuality: typeof fields.limitMobileQuality === "boolean" ? fields.limitMobileQuality : false,
     mobileMaxHeight: [360, 480, 720, 1080].includes(fields.mobileMaxHeight as number) ? fields.mobileMaxHeight as number : 720,
+    autoplayLastChannel: typeof fields.autoplayLastChannel === "boolean" ? fields.autoplayLastChannel : false,
   };
 }
 

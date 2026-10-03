@@ -529,6 +529,7 @@ const playerLowLatency = $<HTMLInputElement>("player-low-latency");
 const playerDiagnosticsTimeout = $<HTMLInputElement>("player-diagnostics-timeout");
 const playerMobileQuality = $<HTMLInputElement>("player-mobile-quality");
 const playerMobileHeight = $<HTMLSelectElement>("player-mobile-height");
+const playerAutoplayLast = $<HTMLInputElement>("player-autoplay-last");
 const mobileQualitySupported = getNetworkConnection() !== null;
 $("player-mobile-quality-row").hidden = !mobileQualitySupported;
 $("player-mobile-height-row").hidden = !mobileQualitySupported;
@@ -540,6 +541,7 @@ function renderPlayerSettings(): void {
   playerDiagnosticsTimeout.value = String(playerSettings.diagnosticsTimeoutMs / 1000);
   playerMobileQuality.checked = playerSettings.limitMobileQuality;
   playerMobileHeight.value = String(playerSettings.mobileMaxHeight);
+  playerAutoplayLast.checked = playerSettings.autoplayLastChannel;
 }
 function persistPlayerSettings(): void {
   renderPlayerSettings();
@@ -560,6 +562,7 @@ playerSettingsForm.addEventListener("submit", (event) => {
     diagnosticsTimeoutMs: playerDiagnosticsTimeout.valueAsNumber * 1000,
     limitMobileQuality: playerMobileQuality.checked,
     mobileMaxHeight: Number(playerMobileHeight.value),
+    autoplayLastChannel: playerAutoplayLast.checked,
   });
   persistPlayerSettings();
 });
@@ -3834,7 +3837,9 @@ async function bootstrap(): Promise<void> {
   }
   favorites = loadFavoritesFor(active.id);
   loadRecentsFor(active.id);
-  await openPlaylist(active.playlistUrl, active.epgUrl);
+  const opening = openPlaylist(active.playlistUrl, active.epgUrl);
+  const bootPlayRequest = playRequest;
+  await opening;
 
   // Диплинк на канал (FR-12): ?ch=<url> — после загрузки плейлиста
   // включить канал. Работает и вместе с ?p= (тот же заход).
@@ -3847,6 +3852,10 @@ async function bootstrap(): Promise<void> {
     } else {
       showToast(tr("error.deepLink"));
     }
+  } else if (playerSettings.autoplayLastChannel && !params.has("p") && !params.has("ch") &&
+    !lastPlayed && playRequest === bootPlayRequest && plState.activeId === active.id) {
+    const target = displayChannels().find((channel) => channel.url === recents[0]);
+    if (target) await playChannel(target);
   }
 }
 
