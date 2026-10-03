@@ -2750,6 +2750,10 @@ let sleepState: SleepState = initialSleepState;
 
 function refreshPlaybackControls(): void {
   const recording = player.isRecordingPlayback;
+  btnPrev.hidden = recording;
+  btnNext.hidden = recording;
+  btnPrev.disabled = recording;
+  btnNext.disabled = recording;
   btnRec.hidden = recording;
   btnSleep.hidden = recording;
   btnLive.disabled = recording;

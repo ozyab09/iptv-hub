@@ -90,6 +90,10 @@ for (const { kind, width } of [
     await expect(page.locator("#quality-btn")).toHaveAttribute("aria-disabled", "true");
     await expect(page.locator("#btn-live")).toBeDisabled();
     await expect(page.locator("#btn-live")).toHaveAttribute("aria-disabled", "true");
+    for (const id of ["btn-prev", "btn-next"]) {
+      await expect(page.locator(`#${id}`)).toBeHidden();
+      await expect(page.locator(`#${id}`)).toBeDisabled();
+    }
     for (const id of ["btn-rec", "btn-sleep", "sleep-menu", "sleep-badge"]) {
       await expect(page.locator(`#${id}`)).toBeHidden();
     }
@@ -174,6 +178,10 @@ for (const { kind, width } of [
     if (width < 1024) await video.click();
     await page.locator("#video-stage").hover();
     await expect(page.locator("#btn-rec")).toBeVisible();
+    for (const id of ["btn-prev", "btn-next"]) {
+      await expect(page.locator(`#${id}`)).toBeVisible();
+      await expect(page.locator(`#${id}`)).toBeEnabled();
+    }
     await expect(page.locator("#btn-sleep")).toBeVisible();
     await expect(page.locator("#sleep-badge")).toBeHidden();
     await expect(page.locator("#quality-btn")).toBeEnabled();
