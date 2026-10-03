@@ -1,0 +1,11 @@
+feat: hourly fallback schedule in guide for channels without EPG (#314)
+
+Чистый hourlyFallbackProgrammes() в catchup.ts: 168 часовых слотов «без
+названия» на неделю назад (заканчиваются на границе текущего часа, идут
+от старых к новым). renderGuide использует их, когда у канала есть
+catchup (дни + шаблон), но нет передач EPG: текущий час играет как эфир,
+прошедшие открываются из архива, вне глубины — приглушены. Тесты и README
+обновлены.
+
+🤖 Generated with Codebuff
+Co-Authored-By: Codebuff <noreply@codebuff.com>
