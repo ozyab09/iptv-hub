@@ -460,7 +460,43 @@ function canNumericZap(): boolean {
     (!isCompact() || playerBar.classList.contains("open")) &&
     !focused?.closest("input, textarea, select, [contenteditable]:not([contenteditable=false])") && !dialogOpen;
 }
+
+/**
+ * Можно ли обрабатывать горячие клавиши (S — скриншот, ←/→ — перемотка,
+ * остальные ниже) в текущем интерфейсе: не в поле ввода, не в модальном
+ * диалоге/меню, не на настройках/записях (там свои контролы), не на
+ * мини-плеере и не когда панель скрыта.
+ */
+export function canHotkey(): boolean {
+  const focused = document.activeElement as HTMLElement | null;
+  const dialogOpen = [...document.querySelectorAll<HTMLElement>(
+    'dialog[open], [role="dialog"], [role="menu"], [role="listbox"]
+  ')].some((el) => el.getClientRects().length > 0);
+  return !playerBar.hidden && showsChannelList(activeView) &&
+    (!isCompact() || playerBar.classList.contains("open")) &&
+    !focused?.closest(
+      "input, textarea, select, [contenteditable]:not([contenteditable=false])"
+    ) && !dialogOpen;
+}
 let visibleResults: (Channel | ProgrammeMatch)[] = [];
+/**
+ * Можно ли обрабатывать горячие клавиши (S — скриншот, ←/→ — перемотка,
+ * остальные ниже) в текущем интерфейсе: не в поле ввода, не в модальном
+ * диалоге/меню, не на настройках/записях (там свои контролы), не на
+ * мини-плеере и не когда панель скрыта.
+ */
+export function canHotkey(): boolean {
+  const focused = document.activeElement as HTMLElement | null;
+  const dialogOpen = [...document.querySelectorAll<HTMLElement>(
+    'dialog[open], [role="dialog"], [role="menu"], [role="listbox"]
+  ')].some((el) => el.getClientRects().length > 0);
+  return !playerBar.hidden && showsChannelList(activeView) &&
+    (!isCompact() || playerBar.classList.contains("open")) &&
+    !focused?.closest(
+      "input, textarea, select, [contenteditable]:not([contenteditable=false])"
+    ) && !dialogOpen;
+}
+
 /**
  * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
  * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
@@ -1664,6 +1700,41 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     searchInput.focus();
     searchInput.select();
+    return;
+  }
+
+  const shouldHotkey = (key: string, typingOnly = false): boolean => (
+    !typing &&
+    !e.ctrlKey && !e.metaKey && !e.altKey &&
+    !e.isComposing &&
+    (typingOnly ? e.key === key : e.key === key)
+  );
+
+  // Hotkeys, не связанные с какими-то даже простым приёмом:
+  // S — скриншот, стрелки ←/→ — перемотка ±15 с, при этом они не должны
+  // срабатывать в поле ввода, в диалоге/меню (этот интерфейс — вынесен
+  // в canHotkey), на странице плеера — для просмотра. Остальные горячие
+  // клавиши (G, C, M, J, L, F) по-прежнему обрабатываются ниже.
+  if (shouldHotkey("s", true) || shouldHotkey("ArrowLeft") || shouldHotkey("ArrowRight")) {
+    if (canHotkey()) {
+      if (e.key === "s" || e.key === "ы") {
+        if (playerBar.hidden) return;
+        try {
+          takeScreenshot();
+        } catch {
+          showToast(describeShotFailure("tainted"));
+        }
+        return;
+      }
+      // Стрелки: перемотка ±15 сек. На эфире цель ищется в buffered
+      // (можно перематывать впределах буфера), в записи и VOD — по
+      // длине; Home/End ещё не реализованы в seekBy.
+      e.preventDefault();
+      if (playerBar.hidden === false) {
+        player.seekBy(e.key === "ArrowLeft" ? -15 : 15);
+      }
+      return;
+    }
     return;
   }
 
