@@ -3,18 +3,8 @@ import { BACKUP_RESULT_KEY, createBackupUi, type BackupUiDeps } from "../src/bac
 import { t } from "../src/i18n";
 import type { Playlist } from "../src/playlists";
 import type { Channel } from "../src/types";
+import { memoryStorage } from "./fakes/storage";
 
-function memoryStorage(): Storage {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    clear: () => m.clear(),
-    key: (i: number) => [...m.keys()][i] ?? null,
-    get length() { return m.size; },
-  };
-}
 
 function fakeButton() {
   const listeners: Record<string, () => void> = {};

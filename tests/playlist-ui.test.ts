@@ -15,6 +15,7 @@ import {
 import { t } from "../src/i18n";
 import { PLAYLISTS_KEY, type Playlist, type PlaylistsState } from "../src/playlists";
 import { xtreamApiUrl, xtreamEpgUrl, readXtreamUrl } from "../src/xtream";
+import { memoryStorage as makeStorage } from "./fakes/storage";
 
 // ---------- Фейковые DOM-узлы ----------
 
@@ -134,15 +135,6 @@ function fakeEl(tag = "div"): FakeNode {
   return e;
 }
 
-/** Фейковое хранилище поверх Map — как в тестах playlists.ts. */
-function makeStorage() {
-  const map = new Map<string, string>();
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, String(v)),
-    removeItem: (k: string) => void map.delete(k),
-  };
-}
 
 const plA: Playlist = {
   id: "a",

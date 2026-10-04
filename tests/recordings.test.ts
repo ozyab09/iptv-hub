@@ -7,17 +7,10 @@ import {
   loadRecordings,
   RECORDINGS_MAX,
   removeRecording,
-  type RecordingsKV,
   type RecordingMeta,
 } from "../src/recordings";
+import { memoryStorage as kv } from "./fakes/storage";
 
-function kv(): RecordingsKV {
-  const map = new Map<string, string>();
-  return {
-    getItem: (k) => map.get(k) ?? null,
-    setItem: (k, v) => void map.set(k, v),
-  } as RecordingsKV;
-}
 
 const meta = (id: string, startedAt: number): RecordingMeta => ({
   id,
