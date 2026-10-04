@@ -150,6 +150,7 @@ import { createMultiViewUi } from "./multi-view-ui";
 import { createTimelineGuide } from "./timeline-guide-ui";
 import { createProgrammeReminders } from "./reminder-ui";
 import { readBackupSections, restoreBackup } from "./backup-storage";
+import { missingLocalFiles, readLocalPlaylistFiles, restoreLocalPlaylistFiles } from "./backup-local";
 import type { NotificationWatch } from "./notifications";
 import { applyChannelOverrides, channelOverridesKey, parseChannelOverrides, serializeChannelOverrides, setChannelOverride, type ChannelOverrides } from "./channel-overrides";
 import { createPinHash, parentalPinsKey, parseParentalPins, serializeParentalPins, verifyPin, type ParentalPins } from "./parental-pin";
@@ -3722,44 +3723,60 @@ function renderPlaylistManager(): void {
 }
 
 // ---------- Экспорт / импорт настроек ----------
-btnExport.addEventListener("click", () => {
-  saveCurrentPosition();
-  const favs: Record<string, string[]> = {};
-  for (const p of plState.items) {
-    const list = loadFavoritesFor(p.id);
-    if (list.size > 0) favs[p.id] = [...list];
+btnExport.addEventListener("click", async () => {
+  btnExport.disabled = true;
+  btnExport.setAttribute("aria-busy", "true");
+  try {
+    saveCurrentPosition();
+    const favs: Record<string, string[]> = {};
+    for (const p of plState.items) {
+      const list = loadFavoritesFor(p.id);
+      if (list.size > 0) favs[p.id] = [...list];
+    }
+    const recentsBackup: Record<string, string[]> = {};
+    for (const p of plState.items) {
+      try {
+        const raw = localStorage.getItem(recentsKey(p.id));
+        const parsed: unknown = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed)) {
+          const urls = parsed.filter((x): x is string => typeof x === "string");
+          if (urls.length > 0) recentsBackup[p.id] = urls;
+        }
+      } catch { /* битые данные — пропускаем */ }
+    }
+    const backup = buildBackup({
+      theme: themeChoice(localStorage),
+      playlists: plState.items,
+      activeId: plState.activeId,
+      favorites: favs,
+      recents: recentsBackup,
+      ...readBackupSections(localStorage, plState.items.map((p) => p.id)),
+      language: currentLanguage,
+    });
+    const local = await readLocalPlaylistFiles(backup.playlists, playlistOpfsFs);
+    backup.localPlaylists = local.files;
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: "application/json",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `iptv-hub-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    showToast(tr("backup.exported"));
+    if (local.missing.length) {
+      const message = tr("backup.localMissing", { count: local.missing.length });
+      showToast(message);
+      pushNotification(message);
+    }
+  } catch {
+    showToast(tr("backup.writeFailed"));
+  } finally {
+    btnExport.disabled = false;
+    btnExport.removeAttribute("aria-busy");
   }
-  const recentsBackup: Record<string, string[]> = {};
-  for (const p of plState.items) {
-    try {
-      const raw = localStorage.getItem(recentsKey(p.id));
-      const parsed: unknown = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) {
-        const urls = parsed.filter((x): x is string => typeof x === "string");
-        if (urls.length > 0) recentsBackup[p.id] = urls;
-      }
-    } catch { /* битые данные — пропускаем */ }
-  }
-  const backup = buildBackup({
-    theme: themeChoice(localStorage),
-    playlists: plState.items,
-    activeId: plState.activeId,
-    favorites: favs,
-    recents: recentsBackup,
-    ...readBackupSections(localStorage, plState.items.map((p) => p.id)),
-    language: currentLanguage,
-  });
-  const blob = new Blob([JSON.stringify(backup, null, 2)], {
-    type: "application/json",
-  });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `iptv-hub-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  showToast(tr("backup.exported"));
 });
 
 // Экспорт избранного в .m3u (FR-11): совместимый файл для любых плееров
@@ -3805,8 +3822,8 @@ importFile.addEventListener("change", () => {
       archivePlayback = null;
       player.stop(); // A late pause/pagehide must not overwrite imported positions.
       let error = false;
-      try { restoreBackup(localStorage, data); } catch { error = true; }
-      try { sessionStorage.setItem("iptv-hub.backup-result", JSON.stringify({ count: data.playlists.length, warnings: result.warnings, error })); } catch { /* Storage unavailable. */ }
+      try { await restoreLocalPlaylistFiles(data, playlistOpfsFs, () => restoreBackup(localStorage, data)); } catch { error = true; }
+      try { sessionStorage.setItem("iptv-hub.backup-result", JSON.stringify({ count: data.playlists.length, warnings: result.warnings, missingLocal: missingLocalFiles(data).length, error })); } catch { /* Storage unavailable. */ }
       const url = new URL(location.href);
       for (const key of ["p", "e", "ch"]) url.searchParams.delete(key);
       history.replaceState(null, "", url);
@@ -4123,8 +4140,13 @@ void bootstrap().then(() => {
     const raw = sessionStorage.getItem("iptv-hub.backup-result");
     sessionStorage.removeItem("iptv-hub.backup-result");
     if (!raw) return;
-    const result = JSON.parse(raw) as { count: number; warnings: string[]; error: boolean };
+    const result = JSON.parse(raw) as { count: number; warnings: string[]; missingLocal?: number; error: boolean };
     showToast(tr(result.error ? "backup.writeFailed" : "backup.imported", { count: result.count }));
     if (!result.error && result.warnings.length) pushNotification(tr("backup.normalized", { sections: result.warnings.join(", ") }));
+    if (!result.error && result.missingLocal) {
+      const message = tr("backup.localMissing", { count: result.missingLocal });
+      showToast(message);
+      pushNotification(message);
+    }
   } catch { /* No pending import report. */ }
 });
