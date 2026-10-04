@@ -25,7 +25,9 @@ test("live HLS retains a three-minute pause and returns to live", async ({ page 
   const video = page.locator("#video");
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.videoWidth)).toBe(160);
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeGreaterThan(0.1);
+  await expect(page.locator("#btn-pause use")).toHaveAttribute("href", "#i-pause");
   await page.locator("#btn-pause").click();
+  await expect(page.locator("#btn-pause use")).toHaveAttribute("href", "#i-play");
   const pausedAt = await video.evaluate((el: HTMLVideoElement) => el.currentTime);
   for (let i = 0; i < 45; i++) {
     head++;
@@ -43,6 +45,7 @@ test("live HLS retains a three-minute pause and returns to live", async ({ page 
   await page.locator("#channel-list .channel-card").click();
   expect(await video.evaluate((el: HTMLVideoElement) => el.src)).toBe(source);
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(false);
+  await expect(page.locator("#btn-pause use")).toHaveAttribute("href", "#i-pause");
   const resumedAt = await video.evaluate((el: HTMLVideoElement) => el.currentTime);
   expect(resumedAt).toBeLessThan(pausedAt + 5);
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeGreaterThan(pausedAt + 0.5);
