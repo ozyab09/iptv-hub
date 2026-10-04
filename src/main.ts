@@ -26,12 +26,12 @@ import {
   channelRowClass,
   chipClass,
   menuItemClass,
-  programRowClass,
   qualityBadgeClass,
   starClass,
 } from "./ui-classes";
 import { createRecordingSink } from "./recording-sink";
 import { createRecorderAdapter, createRecordingCapture } from "./recording-capture";
+import { createGuideUi } from "./guide-ui";
 import { createSegmentSession } from "./segment-recorder";
 import {
   isMixedContent,
@@ -134,15 +134,7 @@ import {
   canRecord,
   createRecordingSession,
 } from "./recorder";
-import {
-  buildCatchupUrl,
-  canWatchPast,
-  programmeStartUrl,
-  hourlyFallbackProgrammes,
-  dayWindows,
-  programmesInDay,
-  type DayWindow,
-} from "./catchup";
+import { programmeStartUrl } from "./catchup";
 import { cancelDownload, downloadProgramme, downloadStatus } from "./programme-downloader";
 import { createQualityMenu } from "./quality-menu";
 import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
@@ -354,22 +346,10 @@ const playerStatus = $("player-status");
 const btnGuide = $<HTMLButtonElement>("btn-guide");
 const guideOverlay = $("guide-overlay");
 const programmeOverlay = $("programme-overlay");
-const programmeCardTitle = $("programme-card-title");
-const programmeCardMeta = $("programme-card-meta");
-const programmeCardDesc = $("programme-card-desc");
-const programmeCardActions = $("programme-card-actions");
-const programmeCardClose = $<HTMLButtonElement>("programme-card-close");
-const guideTitle = $("guide-title");
-const guideDays = $("guide-days");
-const guideList = $("guide-list");
 const guideGrid = $("guide-grid");
-const guideListMode = $("guide-mode-list");
-const guideGridMode = $("guide-mode-grid");
-let guideGridOn = false;
 let timelineGuideUi: ReturnType<typeof createTimelineGuide> | null = null;
 let reminderUi: ReturnType<typeof createProgrammeReminders> | null = null;
 const nowSchedule = $("now-schedule");
-const schedList = $("sched-list");
 const btnFullGuide = $<HTMLButtonElement>("btn-full-guide");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
@@ -814,8 +794,8 @@ $("language-seg").addEventListener("click", (event) => {
   renderRecButton(isRecordingNow());
   qualityMenuUi.refreshQualityUi();
   refreshScrub();
-  renderSchedule();
-  if (!guideOverlay.hidden) renderGuide();
+  guideUi.renderSchedule();
+  if (!guideOverlay.hidden) guideUi.render();
   renderFullscreenTitle();
 });
 
@@ -1327,7 +1307,7 @@ function renderChannels(resetScroll = true): void {
   renderContinue();
   if (resetScroll) channelList.scrollTop = 0;
   renderVirtualWindow();
-  if (!guideOverlay.hidden && guideGridOn) timelineGuideUi?.refresh();
+  if (!guideOverlay.hidden && guideUi.isGrid()) timelineGuideUi?.refresh();
 }
 
 /** Общая плитка: исходный логотип или монограмма, в том числе после ошибки. */
@@ -2047,7 +2027,7 @@ window.addEventListener("keydown", (e) => {
     case "g":
     case "п": // ru-раскладка
       e.preventDefault();
-      if (guideOverlay.hidden) openGuide();
+      if (guideOverlay.hidden) guideUi.open();
       else guideOverlay.hidden = true;
       break;
     case "c":
@@ -2246,7 +2226,7 @@ const recordingsUi = createRecordingsUi({
   },
   beforeRender: () => {
     scheduleUi?.render();
-    refreshDownloadUi();
+    guideUi.refreshDownloads();
   },
 });
 
@@ -2659,7 +2639,6 @@ btnRec.addEventListener("click", () => {
 });
 
 // ---- Гайд (программа передач) + catchup ----
-let guideDayIdx = 0;
 reminderUi = createProgrammeReminders({ root: document, minutes: $<HTMLInputElement>("reminder-minutes"), desktop: $<HTMLInputElement>("reminder-desktop"), status: $("reminder-status") }, {
   storage: localStorage,
   playlistIds: () => plState.items.map((p) => p.id),
@@ -2681,298 +2660,61 @@ timelineGuideUi = createTimelineGuide({ scroll: guideGrid, canvas: $("guide-grid
   close: () => closeOverlay("guide"),
 });
 
-function setGuideMode(grid: boolean): void {
-  if (grid && isCompact()) { showToast(tr("guide.mobile")); return; }
-  guideGridOn = grid;
-  renderGuide();
-}
-guideListMode.addEventListener("click", () => setGuideMode(false));
-guideGridMode.addEventListener("click", () => setGuideMode(true));
-window.addEventListener("resize", () => {
-  if (guideGridOn && isCompact()) {
-    guideGridOn = false;
-    if (!guideOverlay.hidden) { showToast(tr("guide.mobile")); renderGuide(); }
-  }
-});
-
-function openGuide(): void {
-  if (!lastPlayed) return;
-  guideDayIdx = 0;
-  openOverlay("guide");
-  renderGuide();
-}
-
-function renderGuide(): void {
-  guideTitle.textContent = guideGridOn ? tr("guide.gridTitle") : `${tr("guide.title")}${lastPlayed ? ` · ${lastPlayed.name}` : ""}`;
-  guideOverlay.querySelector(".guide")!.classList.toggle("timeline-mode", guideGridOn);
-  guideListMode.textContent = tr("guide.list");
-  guideGridMode.textContent = tr("guide.grid");
-  guideListMode.setAttribute("aria-pressed", String(!guideGridOn));
-  guideGridMode.setAttribute("aria-pressed", String(guideGridOn));
-  guideList.hidden = guideGridOn;
-  guideGrid.hidden = !guideGridOn;
-  const wins = dayWindows(new Date(), currentLanguage);
-  guideDays.textContent = "";
-  wins.forEach((w, i) => {
-    const b = document.createElement("button");
-    b.textContent = w.label;
-    b.className = i === guideDayIdx ? "chip on" : "chip";
-    b.addEventListener("click", () => {
-      guideDayIdx = i;
-      renderGuide();
-    });
-    guideDays.append(b);
-  });
-
-  guideList.textContent = "";
-  const window: DayWindow = wins[guideDayIdx]!;
-  if (guideGridOn) { timelineGuideUi!.render(window); return; }
-  const now = new Date();
-  let progs = programmesInDay(channelProgrammes(), window);
-  // Канал без телепрограммы, но с архивом: показываем часовые слоты «без
-  // названия» на неделю назад (#314) — клик открывает catchup.
-  if (lastPlayed && progs.length === 0) {
-    const cu = { days: lastPlayed.catchupDays, source: lastPlayed.catchupSource };
-    if (cu.days > 0 && cu.source) {
-      progs = programmesInDay(hourlyFallbackProgrammes(now), window);
-    }
-  }
-  if (progs.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "muted";
-    empty.textContent = tr("guide.noDay");
-    guideList.append(empty);
-    return;
-  }
-
-  for (const p of progs) {
-    guideList.append(programmeRow(p, now, () => (guideOverlay.hidden = true)));
-  }
-}
-
-/**
- * Строка передачи — одна и для шторки с программой, и для блока под
- * плеером. Эфир включается, прошедшее с архивом — открывается из архива,
- * прошедшее без архива приглушено, будущее просто подписано.
- */
-function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLElement {
-  const c = lastPlayed!;
-  const cu = { days: c.catchupDays, source: c.catchupSource };
-  const start = Date.parse(p.start);
-  const stop = Date.parse(p.stop);
-  const isLive = start <= now.getTime() && now.getTime() < stop;
-  const watchable = isLive || canWatchPast(cu, p, now);
-  const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
-
-  const row = document.createElement("button");
-  // Приглушаем только прошедшее без архива: будущие передачи тоже нельзя
-  // включить, но это нормальная программа, а не «недоступное».
-  row.className =
-    programRowClass(state) + (state === "past" && !watchable ? " dim" : "");
-  // Нельзя включить — не кнопка для клавиатуры и мыши.
-  row.disabled = !watchable;
-
-  const t = document.createElement("span");
-  t.className = "time";
-  t.textContent = formatRange(p, currentLanguage);
-  const body = document.createElement("span");
-  body.className = "prog-body";
-  const title = document.createElement("span");
-  title.className = "title";
-  title.textContent = p.title;
-  body.append(title);
-  // Эфир и архив — плашками, а не символами в тексте: title приходит из EPG
-  if (isLive) {
-    const live = document.createElement("span");
-    live.className = "live";
-    live.textContent = tr("guide.live");
-    body.append(live);
-  } else if (state === "past" && watchable) {
-    const arch = document.createElement("span");
-    arch.className = "prog-arch";
-    arch.innerHTML = iconMarkup("archive", "i-sm");
-    arch.append(tr("guide.archive"));
-    body.append(arch);
-  }
-  row.append(t, body);
-
-  if (watchable) {
-    row.title = isLive ? tr("guide.watchNow") : tr("guide.archiveTitle");
-    row.addEventListener("click", () => void watchProgramme(c, p, now, onPlayed));
-  } else if (state === "past") {
-    row.title =
-      cu.days > 0
-        ? tr("guide.outsideArchive")
-        : tr("guide.noArchive");
-  }
-  // Описание из EPG — подсказкой на строке, полностью — в карточке (#363).
-  if (p.desc) row.title = row.title ? `${row.title}. ${p.desc}` : p.desc;
-  const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
-  wrapper.append(row, programmeInfoButton(c, p, onPlayed));
-  if (stop <= now.getTime()) {
-    // Скачивание доступной из архива передачи (#315, #359). Раньше блок стоял
-    // после раннего return для прошедших передач и не рисовался вовсе.
-    if (watchable && cu.source) wrapper.append(programmeDownloadButton(c, p, cu));
-    return wrapper;
-  }
-  wrapper.append(...programmeFutureActions(c, p));
-  return wrapper;
-}
-
-/** «Записать» и «Напомнить» для идущей и будущей передачи. */
-function programmeFutureActions(c: Channel, p: EpgProgramme): HTMLElement[] {
-  const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
-  record.textContent = tr("schedule.title");
-  const playlistId = plState.activeId;
-  record.addEventListener("click", () => { if (playlistId) scheduleUi?.plan(c, p, playlistId); });
-  const reminder = playlistId && reminderUi?.button(c, p, playlistId);
-  return reminder ? [record, reminder] : [record];
-}
-
-/** Включить эфир или архив передачи: те же проверки, что у строки программы. */
-async function watchProgramme(c: Channel, p: EpgProgramme, now: Date, onPlayed: () => void): Promise<boolean> {
-  const start = Date.parse(p.start);
-  const stop = Date.parse(p.stop);
-  if (start <= now.getTime() && now.getTime() < stop) {
-    if (!await playChannel(c)) return false;
-    onPlayed();
-    return true;
-  }
-  const url = buildCatchupUrl({ days: c.catchupDays, source: c.catchupSource }, p, now);
-  if (!url) {
-    showToast(tr("error.noArchive"));
-    return false;
-  }
-  if (!await playChannel(c, url, p)) return false;
-  onPlayed();
-  return true;
-}
-
-function programmeInfoButton(c: Channel, p: EpgProgramme, onPlayed: () => void): HTMLButtonElement {
-  const info = document.createElement("button");
-  info.type = "button";
-  info.className = "icon-btn programme-info";
-  info.title = tr("programme.details");
-  info.setAttribute("aria-label", `${tr("programme.details")}: ${p.title}`);
-  setIcon(info, "info");
-  info.addEventListener("click", () => openProgrammeCard(c, p, onPlayed));
-  return info;
-}
-
-/**
- * Карточка передачи (#363): название, время и статус, описание из EPG и
- * действия строки программы. Текст EPG вставляется только через textContent.
- */
-function openProgrammeCard(c: Channel, p: EpgProgramme, onPlayed: () => void): void {
-  const now = new Date();
-  const start = Date.parse(p.start);
-  const stop = Date.parse(p.stop);
-  const cu = { days: c.catchupDays, source: c.catchupSource };
-  const isLive = start <= now.getTime() && now.getTime() < stop;
-  const past = stop <= now.getTime();
-  const watchable = isLive || canWatchPast(cu, p, now);
-  programmeCardTitle.textContent = p.title;
-  const status = isLive ? tr("programme.statusNow") : past ? tr("programme.statusPast") : tr("programme.statusNext");
-  programmeCardMeta.textContent = `${c.name} · ${formatRange(p, currentLanguage)} · ${status}`;
-  programmeCardDesc.textContent = p.desc ?? "";
-  programmeCardDesc.hidden = !p.desc;
-  programmeCardActions.textContent = "";
-  if (watchable) {
-    const watch = document.createElement("button");
-    watch.type = "button";
-    watch.className = "btn btn-sm btn-primary programme-watch";
-    watch.textContent = isLive ? tr("guide.watchNow") : tr("guide.archive");
-    watch.addEventListener("click", async () => {
-      if (await watchProgramme(c, p, new Date(), onPlayed)) closeOverlay("programme");
-    });
-    programmeCardActions.append(watch);
-  }
-  if (past) {
-    if (watchable && cu.source) programmeCardActions.append(programmeDownloadButton(c, p, cu));
-  } else {
-    programmeCardActions.append(...programmeFutureActions(c, p));
-  }
-  programmeCardActions.hidden = programmeCardActions.childElementCount === 0;
-  openOverlay("programme");
-  programmeCardClose.focus();
-}
-
-/**
- * Кнопка скачивания передачи из архива. Пока идёт скачивание этой передачи,
- * кнопка показывает прогресс и отменяет его; другие кнопки ждут (#359).
- */
-function programmeDownloadButton(c: Channel, p: EpgProgramme, cu: { days: number; source: string | null }): HTMLButtonElement {
-  const dl = document.createElement("button");
-  dl.type = "button";
-  dl.className = "btn btn-sm programme-download";
-  dl.dataset.downloadChannel = c.url;
-  dl.dataset.downloadStart = p.start;
-  dl.addEventListener("click", () => {
-    const current = downloadStatus();
-    if (current) {
-      if (current.channelUrl === c.url && current.start === p.start) cancelProgrammeDownload();
-      return;
-    }
-    const url = buildCatchupUrl(cu, p, new Date());
-    if (!url) {
-      showToast(tr("error.noArchive"));
-      return;
-    }
-    void downloadProgramme({
-      channelName: c.name,
-      channelUrl: c.url,
-      programme: p,
+// Шторка «Программа», блок под плеером и карточка передачи — src/guide-ui.ts (#368).
+const guideUi = createGuideUi({
+  nodes: {
+    overlay: guideOverlay,
+    title: $("guide-title"),
+    days: $("guide-days"),
+    list: $("guide-list"),
+    grid: guideGrid,
+    listMode: $<HTMLButtonElement>("guide-mode-list"),
+    gridMode: $<HTMLButtonElement>("guide-mode-grid"),
+    schedule: nowSchedule,
+    scheduleList: $("sched-list"),
+    card: {
+      overlay: programmeOverlay,
+      title: $("programme-card-title"),
+      meta: $("programme-card-meta"),
+      desc: $("programme-card-desc"),
+      actions: $("programme-card-actions"),
+      close: $<HTMLButtonElement>("programme-card-close"),
+    },
+    downloadStatus: $("download-status"),
+  },
+  channel: () => lastPlayed,
+  programmes: (channel) => channelProgrammes(channel),
+  archiveProgramme: () => archivePlayback?.programme ?? null,
+  language: () => currentLanguage,
+  toast: showToast,
+  playChannel: (channel, url, programme) => playChannel(channel, url, programme),
+  isCompact,
+  renderTimeline: (day) => timelineGuideUi!.render(day),
+  openOverlay,
+  closeOverlay,
+  playlistId: () => plState.activeId,
+  planRecording: (channel, programme, playlistId) => scheduleUi?.plan(channel, programme, playlistId),
+  reminderButton: (channel, programme, playlistId) => reminderUi?.button(channel, programme, playlistId) ?? null,
+  downloads: {
+    status: downloadStatus,
+    cancel: cancelDownload,
+    start: (channel, programme, url) => void downloadProgramme({
+      channelName: channel.name,
+      channelUrl: channel.url,
+      programme,
       url,
       fs: recordingsFs,
       storage: localStorage,
       notify: showToast,
       onSaved: renderRecordings,
-      onStatus: refreshDownloadUi,
-    });
-  });
-  refreshDownloadButton(dl);
-  return dl;
-}
+      onStatus: () => guideUi.refreshDownloads(),
+    }),
+  },
+  setIcon,
+});
+window.addEventListener("resize", () => guideUi.onResize());
 
-function refreshDownloadButton(dl: HTMLButtonElement): void {
-  const current = downloadStatus();
-  const mine = current !== null && current.channelUrl === dl.dataset.downloadChannel && current.start === dl.dataset.downloadStart;
-  dl.disabled = current !== null && !mine;
-  dl.classList.toggle("downloading", mine);
-  dl.textContent = mine ? tr("download.progress", { pct: Math.floor(current.progress * 100) }) : tr("download.title");
-  dl.title = mine ? tr("download.cancel") : current ? tr("download.busy") : tr("download.title");
-  dl.setAttribute("aria-label", dl.title);
-}
-
-function cancelProgrammeDownload(): void {
-  cancelDownload();
-  showToast(tr("download.cancelled"));
-}
-
-/** Прогресс скачивания: кнопки в программе и строка в разделе «Записи». */
-function refreshDownloadUi(): void {
-  document.querySelectorAll<HTMLButtonElement>(".programme-download").forEach(refreshDownloadButton);
-  const box = $("download-status");
-  const current = downloadStatus();
-  box.hidden = current === null;
-  box.textContent = "";
-  if (!current) return;
-  const label = document.createElement("span");
-  label.className = "download-status-label ellipsis";
-  label.textContent = tr("download.status", { title: current.title, channel: current.channelName });
-  const bar = document.createElement("progress");
-  bar.max = 100;
-  bar.value = Math.floor(current.progress * 100);
-  bar.setAttribute("aria-label", label.textContent);
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "btn btn-sm download-cancel";
-  cancel.textContent = tr("download.cancel");
-  cancel.addEventListener("click", cancelProgrammeDownload);
-  box.append(label, bar, cancel);
-}
-
-/** Передачи текущего канала по телепрограмме, по времени начала. */
+/** Передачи канала по телепрограмме, по времени начала. */
 function channelProgrammes(channel: Channel | null = lastPlayed): EpgProgramme[] {
   if (!epg || !channel) return [];
   return (
@@ -2982,46 +2724,9 @@ function channelProgrammes(channel: Channel | null = lastPlayed): EpgProgramme[]
   );
 }
 
-/**
- * Программа под плеером: одна прошедшая (её можно открыть из архива), та,
- * что идёт, и три следующие. Полная — в шторке «Вся программа».
- */
-let scheduleKey = "";
-function renderSchedule(): void {
-  const all = channelProgrammes();
-  const nowMs = archivePlayback?.programme ? Date.parse(archivePlayback.programme.start) : Date.now();
-  const i = all.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
-  scheduleKey = lastPlayed && i >= 0 ? `${lastPlayed.url}|${all[i]!.start}` : "";
-  schedList.textContent = "";
-  nowSchedule.hidden = i < 0;
-  if (i < 0) return;
-  const now = new Date();
-  for (const p of all.slice(Math.max(0, i - 1), i + 4)) {
-    schedList.append(programmeRow(p, now, () => undefined));
-  }
-}
-
-btnGuide.addEventListener("click", openGuide);
-btnFullGuide.addEventListener("click", openGuide);
+btnGuide.addEventListener("click", () => guideUi.open());
+btnFullGuide.addEventListener("click", () => guideUi.open());
 guideClose.addEventListener("click", () => closeOverlay("guide"));
-programmeCardClose.addEventListener("click", () => closeOverlay("programme"));
-programmeOverlay.addEventListener("click", (e) => {
-  if (e.target === programmeOverlay) closeOverlay("programme");
-});
-// Escape закрывает карточку раньше гайда под ней: ловим в capture-фазе,
-// до обработчиков гайда и горячих клавиш плеера (#363).
-window.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape" || programmeOverlay.hidden) return;
-  e.preventDefault();
-  e.stopImmediatePropagation();
-  closeOverlay("programme");
-}, true);
-guideOverlay.addEventListener("click", (e) => {
-  if (e.target === guideOverlay) closeOverlay("guide");
-});
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !guideOverlay.hidden) closeOverlay("guide");
-});
 
 /** Край живого буфера или NaN, если поток ещё не начал грузиться. */
 function liveEdge(): number {
@@ -3293,14 +2998,14 @@ function refreshScrubView(): void {
     progEnd.textContent = timeline.duration;
     nowShow.textContent = "";
     nowTimeLeft.textContent = "";
-    if (scheduleKey) renderSchedule();
+    if (guideUi.scheduleKey()) guideUi.renderSchedule();
     return;
   }
 
   const prog =
     archivePlayback?.programme ?? (epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null);
   if (!prog) {
-    if (scheduleKey) renderSchedule();
+    if (guideUi.scheduleKey()) guideUi.renderSchedule();
     scrubFill.style.width = "0%";
     miniProgFill.style.width = "0%";
     progStart.textContent = "";
@@ -3319,7 +3024,7 @@ function refreshScrubView(): void {
   progEnd.textContent = clock(stopMs, currentLanguage);
 
   // Сменилась передача или канал — перестроить программу под плеером
-  if (`${lastPlayed!.url}|${prog.start}` !== scheduleKey) renderSchedule();
+  if (`${lastPlayed!.url}|${prog.start}` !== guideUi.scheduleKey()) guideUi.renderSchedule();
 
   // Название передачи — сверху кадра, «ещё N мин» — у конца полосы
   nowShow.textContent = prog.title;
@@ -3436,7 +3141,7 @@ videoEl.addEventListener("timeupdate", refreshScrub);
 // и между timeupdate, которые HLS шлёт нерегулярно.
 window.setInterval(() => {
   refreshScrub();
-  if (!guideOverlay.hidden && guideGridOn) timelineGuideUi?.refresh();
+  if (!guideOverlay.hidden && guideUi.isGrid()) timelineGuideUi?.refresh();
 }, 10_000);
 
 // ---- Жесты на кадре (телефон) ----
