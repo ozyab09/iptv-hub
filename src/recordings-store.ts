@@ -68,3 +68,18 @@ export function createRecordingsFs(): RecordingsFs | null {
     },
   };
 }
+
+/** Имена файлов OPFS с префиксом (рабочие `rec-*.part` для восстановления, #309). */
+export async function listOpfsNames(prefix: string): Promise<string[]> {
+  const storage = (navigator as Navigator & {
+    storage?: { getDirectory?: () => Promise<FileSystemDirectoryHandle> };
+  }).storage;
+  if (!storage?.getDirectory) return [];
+  const out: string[] = [];
+  const d = (await storage.getDirectory()) as unknown as { keys?: () => AsyncIterableIterator<string> };
+  if (typeof d.keys !== "function") return out;
+  for await (const name of d.keys()) {
+    if (name.startsWith(prefix)) out.push(name);
+  }
+  return out;
+}

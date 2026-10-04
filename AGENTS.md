@@ -42,7 +42,7 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts` —
@@ -168,6 +168,12 @@ push в main CI вычисляет следующий патч, штампует
   `MediaRecorder` (`recorder.ts`), где захват не работает — канвас+WebAudio.
   `pagehide` во время записи финализирует частичную запись через общий
   `stopRecordingNow()` (best effort: OPFS-записи при выгрузке не гарантированы).
+  `recording-recovery.ts` (#309): старт сегментной записи кладёт метку
+  `iptv-hub.recording-pending.v1` (канал/передача/старт), успешное сохранение
+  в библиотеку её снимает. На boot при живой метке самый свежий
+  `rec-<ts>.part` (не раньше старта) копируется в `done-<id>.<ext>` и
+  добавляется в библиотеку; пустой/отсутствующий файл просто снимает метку.
+  Продолжение записи после выгрузки и внешние «сервисы сессий» вне проекта.
 - Воспроизведение записей: `Player.playRecording()` владеет локальными blob-URL
   до остановки/смены записи. TS оборачивается в конечный HLS-манифест
   (`recording-playback.ts`) и преобразуется hls.js через MSE; mp4/webm — нативно.

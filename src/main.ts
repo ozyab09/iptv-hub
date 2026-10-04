@@ -74,9 +74,15 @@ import {
 } from "./recordings";
 import {
   createRecordingsFs,
+  listOpfsNames,
   recordingFileName as storedRecordingName,
   type RecordingsFs,
 } from "./recordings-store";
+import {
+  clearRecordingPending,
+  markRecordingPending,
+  recoverPendingRecording,
+} from "./recording-recovery";
 import { firstFocus, lastFocus, moveFocus } from "./kbd-nav";
 import {
   defaultLocalName,
@@ -2213,6 +2219,24 @@ try {
   recordingsFs = null;
 }
 
+// Запись, брошенная закрытием вкладки до сохранения, переносится из
+// рабочего rec-*.part в библиотеку на следующем запуске (#309).
+if (recordingsFs) {
+  void recoverPendingRecording({
+    kv: typeof localStorage !== "undefined" ? localStorage : null,
+    fs: recordingsFs,
+    listWork: () => listOpfsNames("rec-"),
+    now: Date.now,
+    makeId: () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  })
+    .then((meta) => {
+      if (!meta) return;
+      renderRecordings();
+      showToast(tr("record.recovered", { channel: meta.channelName }));
+    })
+    .catch((e: unknown) => console.debug("[iptv-hub] записи: восстановление не удалось", e));
+}
+
 /** Момент старта текущей записи (мс эпохи) — выставляется в startRecording. */
 let recordingStartedAt = 0;
 let recordingChannel: Channel | null = null;
@@ -2248,6 +2272,7 @@ async function saveToLibrary(blob: Blob, ext: string, _mime: string): Promise<vo
   try {
     await recordingsFs.write(storedRecordingName(id, ext), blob);
     addRecording(typeof localStorage !== "undefined" ? localStorage : null, meta);
+    clearRecordingPending(typeof localStorage !== "undefined" ? localStorage : null);
     renderRecordings();
     // Файл и в библиотеке, и в загрузках: сырой .ts браузерный <video>
     // играть не умеет (только через MSE), поэтому прежнее скачивание —
@@ -2695,7 +2720,17 @@ function startRecording(): void {
     pinLevelForRecording();
     void segSession.start().then(() => {
       // старт мог не состояться (не создалось хранилище) — не держим качество
-      if (!segSession.isRecording()) restoreLevelAfterRecording();
+      if (!segSession.isRecording()) {
+        restoreLevelAfterRecording();
+        return;
+      }
+      // Метка для восстановления после внезапной выгрузки вкладки (#309).
+      markRecordingPending(typeof localStorage !== "undefined" ? localStorage : null, {
+        channelName: recordingChannel?.name ?? tr("record.defaultName"),
+        channelUrl: recordingChannel?.url ?? "",
+        programmeTitle: recordingProgrammeTitle,
+        startedAt: recordingStartedAt,
+      });
     });
     return;
   }
