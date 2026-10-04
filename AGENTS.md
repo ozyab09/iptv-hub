@@ -46,7 +46,9 @@ push в main CI вычисляет следующий патч, штампует
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
-   `screenshot-ui.ts` (#364), `recordings-ui.ts` (#365), `recording-capture.ts` (#366) —
+   `screenshot-ui.ts` (#364), `recordings-ui.ts` (#365), `recording-capture.ts` (#366),
+   `guide-ui.ts` (#368), `scrub-ui.ts` (#369), `backup-ui.ts` (#370),
+   `channel-list-ui.ts` (#367) —
    узлы и зависимости приходят через create, логика тестируется на фейках.
    Осторожно с топ-левельным кодом `main.ts`: он исполняется по порядку, и
    вызов функции, трогающей `const X = createX(...)` до строки её объявления,
@@ -265,7 +267,7 @@ push в main CI вычисляет следующий патч, штампует
 
 ### Карточка передачи (#363)
 
-`programmeRow()` всегда возвращает `.programme-recordable` со строкой и кнопкой
+`programmeRow()` (в `guide-ui.ts`, #368) всегда возвращает `.programme-recordable` со строкой и кнопкой
 `.programme-info`; `openProgrammeCard()` открывает оверлей `programme` (общий
 стек, history, popstate). Escape ловится в capture-фазе window и закрывает
 карточку раньше гайда. Текст EPG — только `textContent`, `desc` с переносами
@@ -380,6 +382,7 @@ iptv-hub/
 │   ├── playlists.ts        # список плейлистов: upsert ?p=, активный, миграция legacy
 │   ├── favorites.ts        # избранное per-плейлист (Set URL)
 │   ├── backup.ts           # экспорт/импорт versioned JSON + «недавние каналы»
+│   ├── backup-ui.ts        # DOM экспорта/импорта JSON и избранного в M3U, отчёт импорта (#370)
 │   ├── config.ts           # isMixedContent + resolveConfig (legacy-ключ, для миграции)
 │   ├── m3u.ts              # парсер M3U: Channel, категории, normalizeName
 │   ├── epg.ts              # загрузка (стрим+gzip) и разбор XMLTV, now/next
@@ -387,6 +390,7 @@ iptv-hub/
 │   ├── player.ts           # Player: hls.js / нативный, quality, retry, https-апгрейд
 │   ├── playlist-ui.ts      # UI менеджера плейлистов: setup-список + переключатель
 │   ├── playlist-transport.ts # транспорт плейлистов: OPFS-адаптер, loadPlaylist, диагностика сбоев
+│   ├── guide-ui.ts         # DOM программы: шторка, блок под плеером, programmeRow, карточка (#368)
 │   ├── quality.ts          # лейблы уровней/дорожек, формат статуса
 │   ├── screenshot-ui.ts    # DOM скриншота кадра: canvas → PNG, кнопка (#364)
 │   ├── recorder.ts         # запись перекодированием: mime, имя файла, жизненный цикл
@@ -397,10 +401,12 @@ iptv-hub/
 │   ├── debug-log.ts        # экранный лог по ?debug=1 (на телефоне консоли нет)
 │   ├── theme.ts            # тёмная/светлая тема (system default, без FOUC)
 │   ├── virtual-list.ts     # математика окна виртуализации (строки × колонки)
+│   ├── channel-list-ui.ts  # DOM списка: виртуальное окно, карточки, фокус (#367)
 │   ├── views.ts            # разделы приложения и отбор каналов
 │   ├── ui-classes.ts       # выбор классов дизайн-системы по состоянию
 │   ├── icons.ts            # набор линейных иконок 24×24 + спрайт
 │   ├── scrub.ts            # ход передачи и отставание от эфира
+│   ├── scrub-ui.ts         # DOM полосы прогресса: slider записи, ход передачи (#369)
 │   ├── gestures.ts         # свайпы и двойной тап на кадре
 │   ├── components.css      # КОПИЯ bundle.css дизайн-системы (править в системе)
 │   ├── types.ts            # Channel, PlaylistSnapshot, EpgProgramme, NowNext
@@ -539,6 +545,11 @@ tick вкладок; без API используется запись флага
 запуск повторяет проверки через `playChannel()`, архив — `canWatchPast()` и
 `buildCatchupUrl()`. Режим сетки доступен от 1024 px; сужение возвращает список.
 Переключение дней меняет окно, переключение режима сохраняет день.
+
+**Кросс-таб (#371):** `storage`-событие → `applyStorageChange()` в
+`cross-tab.ts` решает, какие реакции применить и в каком порядке (группы,
+PIN активного плейлиста → плейлисты → избранное активного → тема);
+`clear()` в другой вкладке задевает всё. Реакции — словарь в main.ts.
 
 **Порядок избранного (#288):** `favorites-order.ts`, массив URL по ключу
 `iptv-hub.favorites-order.v1:<playlist-id>`. `applyFavoritesOrder()` сохраняет
@@ -940,7 +951,7 @@ APK обновляется вручную через GitHub Releases; натив
   раскладки переключателей; вертикальная прокрутка резервирует место под скроллбар.
 
 Числа, продублированные в CSS и в коде, связаны тестами: `CHANNEL_ROW_HEIGHT`
-с высотой строки, `COMPACT_BREAKPOINT` (1023: ниже — мини-плеер и страница
+(`channel-list-ui.ts`) с высотой строки, `COMPACT_BREAKPOINT` (1023: ниже — мини-плеер и страница
 плеера) с медиазапросом. Разойдутся — поедет виртуализация или мини-плеер.
 
 ## 🔧 Планируемый рефакторинг

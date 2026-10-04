@@ -1,5 +1,6 @@
 import "./style.css";
 import { createCatalogueCard } from "./catalogue-card";
+import { createChannelListUi } from "./channel-list-ui";
 import { resumeEpisode } from "./xtream-catalogue";
 import { parseExternalSubtitles, parseSubtitlePreference, subtitlePreferenceKey, type SubtitleCue } from "./external-subtitles";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
@@ -22,16 +23,10 @@ import {
   VIEWS,
   type View,
 } from "./views";
-import {
-  channelRowClass,
-  chipClass,
-  menuItemClass,
-  programRowClass,
-  qualityBadgeClass,
-  starClass,
-} from "./ui-classes";
+import { chipClass, menuItemClass } from "./ui-classes";
 import { createRecordingSink } from "./recording-sink";
 import { createRecorderAdapter, createRecordingCapture } from "./recording-capture";
+import { createGuideUi } from "./guide-ui";
 import { createSegmentSession } from "./segment-recorder";
 import {
   isMixedContent,
@@ -49,7 +44,6 @@ import {
 } from "./playlists";
 import {
   applyFavorites,
-  buildFavoritesM3U,
   isFavorite,
   toggleFavorite,
 } from "./favorites";
@@ -60,13 +54,9 @@ import { epgSourceUrls, epgSourcesInput } from "./epg-sources";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
 import { createDebounced } from "./debounce";
 import { DEFAULT_PLAYER_SETTINGS, PLAYER_SETTINGS_KEY, parsePlayerSettings, sanitizePlayerSettings } from "./player-settings";
-import {
-  computeWindow,
-  columnsForWidth,
-  spacerHeight,
-} from "./virtual-list";
-import { clock, isBehindLive, mediaScrub, programmeProgress, scrubSeekTarget } from "./scrub";
-import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
+import { isBehindLive, programmeProgress } from "./scrub";
+import { createScrubUi } from "./scrub-ui";
+import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
 import {
   loadPosition,
   savePosition,
@@ -97,7 +87,7 @@ import {
   sleepTick,
   type SleepState,
 } from "./sleep-timer";
-import { classifyStorageChange } from "./cross-tab";
+import { applyStorageChange, type StorageReaction } from "./cross-tab";
 import { resolveChannelDeepLink } from "./deeplink";
 import {
   initialWakeLockState,
@@ -125,8 +115,6 @@ import {
   type ThemeChoice,
 } from "./theme";
 import {
-  buildBackup,
-  parseBackup,
   pushRecent,
   recentsKey,
 } from "./backup";
@@ -134,23 +122,14 @@ import {
   canRecord,
   createRecordingSession,
 } from "./recorder";
-import {
-  buildCatchupUrl,
-  canWatchPast,
-  programmeStartUrl,
-  hourlyFallbackProgrammes,
-  dayWindows,
-  programmesInDay,
-  type DayWindow,
-} from "./catchup";
+import { programmeStartUrl } from "./catchup";
 import { cancelDownload, downloadProgramme, downloadStatus } from "./programme-downloader";
 import { createQualityMenu } from "./quality-menu";
 import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
 import { createTimelineGuide } from "./timeline-guide-ui";
 import { createProgrammeReminders } from "./reminder-ui";
-import { readBackupSections, restoreBackup } from "./backup-storage";
-import { missingLocalFiles, readLocalPlaylistFiles, restoreLocalPlaylistFiles } from "./backup-local";
+import { createBackupUi } from "./backup-ui";
 import type { NotificationWatch } from "./notifications";
 import { applyChannelOverrides, channelOverridesKey, parseChannelOverrides, serializeChannelOverrides, setChannelOverride, type ChannelOverrides } from "./channel-overrides";
 import { createPinHash, parentalPinsKey, parseParentalPins, serializeParentalPins, verifyPin, type ParentalPins } from "./parental-pin";
@@ -298,21 +277,15 @@ const videoEl = $<HTMLVideoElement>("video");
 const videoStage = $("video-stage");
 const liveBadge = $("live-badge");
 const scrub = $("scrub");
-let scrubDrag: { pointerId: number; time: number } | null = null;
-const scrubFill = $("scrub-fill");
-const progStart = $("prog-start");
-const progEnd = $("prog-end");
 const btnLive = $<HTMLButtonElement>("btn-live");
 const btnProgrammeStart = $<HTMLButtonElement>("btn-programme-start");
 let archivePlayback: { url: string; programme: EpgProgramme | null; fromStart: boolean } | null = null;
-const miniProgFill = $("mini-prog-fill");
 const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
 
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
 const nowShow = $("now-show");
-const nowTimeLeft = $("now-time-left");
 const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
 const btnHidePanel = $<HTMLButtonElement>("btn-hide-panel");
 const btnRestorePanel = $<HTMLButtonElement>("btn-restore-panel");
@@ -360,22 +333,10 @@ const playerStatus = $("player-status");
 const btnGuide = $<HTMLButtonElement>("btn-guide");
 const guideOverlay = $("guide-overlay");
 const programmeOverlay = $("programme-overlay");
-const programmeCardTitle = $("programme-card-title");
-const programmeCardMeta = $("programme-card-meta");
-const programmeCardDesc = $("programme-card-desc");
-const programmeCardActions = $("programme-card-actions");
-const programmeCardClose = $<HTMLButtonElement>("programme-card-close");
-const guideTitle = $("guide-title");
-const guideDays = $("guide-days");
-const guideList = $("guide-list");
 const guideGrid = $("guide-grid");
-const guideListMode = $("guide-mode-list");
-const guideGridMode = $("guide-mode-grid");
-let guideGridOn = false;
 let timelineGuideUi: ReturnType<typeof createTimelineGuide> | null = null;
 let reminderUi: ReturnType<typeof createProgrammeReminders> | null = null;
 const nowSchedule = $("now-schedule");
-const schedList = $("sched-list");
 const btnFullGuide = $<HTMLButtonElement>("btn-full-guide");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
@@ -508,16 +469,6 @@ function canNumericZap(): boolean {
  * мини-плеере и не когда панель скрыта.
  */
 export let visibleResults: (Channel | ProgrammeMatch)[] = [];
-
-/**
- * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
- * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
- * прокрутку. Тест сверяет оба значения.
- */
-const CHANNEL_ROW_HEIGHT = 72;
-
-/** Список каналов — одна колонка строк, как требует дизайн-система. */
-const CHANNEL_COLUMNS = 1;
 
 /** Недавно просмотренные (url → имя берём из snapshot при рендере). */
 let recents: string[] = [];
@@ -820,8 +771,8 @@ $("language-seg").addEventListener("click", (event) => {
   renderRecButton(isRecordingNow());
   qualityMenuUi.refreshQualityUi();
   refreshScrub();
-  renderSchedule();
-  if (!guideOverlay.hidden) renderGuide();
+  guideUi.renderSchedule();
+  if (!guideOverlay.hidden) guideUi.render();
   renderFullscreenTitle();
 });
 
@@ -1239,58 +1190,41 @@ document.addEventListener("click", (e) => {
   }
 });
 
-// ---------- Рендер каналов (виртуализированный) ----------
-/** Карточки держим живыми только в видимом окне; остальное — спейсер. */
-let virtualSpacer: HTMLDivElement | null = null;
-let virtualInner: HTMLDivElement | null = null;
-
-function ensureVirtualShell(): void {
-  if (virtualInner) return;
-  virtualSpacer = document.createElement("div");
-  virtualSpacer.className = "virtual-spacer";
-  virtualInner = document.createElement("div");
-  virtualInner.className = "virtual-inner";
-  virtualSpacer.append(virtualInner);
-  channelList.append(virtualSpacer);
-  channelList.addEventListener("scroll", () => {
-    renderVirtualWindow();
-  });
-}
-
-function renderVirtualWindow(): void {
-  if (!virtualInner || !virtualSpacer) return;
-  const vh = channelList.clientHeight || 600;
-  const catalogue = (activeView === "movies" || activeView === "series") && !seriesEpisodes;
-  const columns = catalogue ? columnsForWidth(channelList.clientWidth, 160) : CHANNEL_COLUMNS;
-  const rowHeight = catalogue ? 260 : CHANNEL_ROW_HEIGHT;
-  virtualInner.dataset.catalogue = String(catalogue);
-  virtualInner.style.gridTemplateColumns = catalogue ? `repeat(${columns}, minmax(0, 1fr))` : "";
-  const win = computeWindow(
-    channelList.scrollTop,
-    vh,
-    visibleResults.length,
-    rowHeight,
-    undefined,
-    columns,
-  );
-  virtualSpacer.style.height = `${spacerHeight(visibleResults.length, rowHeight, columns)}px`;
-  virtualInner.style.transform = `translateY(${win.offset}px)`;
-  virtualInner.textContent = "";
-  const first = win.start * columns;
-  const last = Math.min(
-    visibleResults.length,
-    first + win.count * columns,
-  );
-  for (let i = first; i < last; i++) {
-    const c = visibleResults[i];
-    if (c) {
-      const row = "programme" in c ? renderProgrammeMatch(c) :
-        catalogue ? createCatalogueCard(document, c, () => { void playChannel(c); }) : renderChannelCard(c);
-      row.dataset.resultIndex = String(i);
-      virtualInner.append(row);
-    }
-  }
-}
+// ---------- Список каналов (виртуализированный) — src/channel-list-ui.ts (#367) ----------
+const channelListUi = createChannelListUi({
+  list: channelList,
+  results: () => visibleResults,
+  isCatalogue: () => (activeView === "movies" || activeView === "series") && !seriesEpisodes,
+  isFavoritesView: () => activeView === "favorites",
+  currentUrl: () => lastPlayed?.url ?? null,
+  isFavorite: (c) => isFavorite(favorites, c),
+  failure: (url) => channelHealth.get(url),
+  failureLabel: channelFailureLabel,
+  nowNext: (c) => (epg && snapshot ? getNowNext(epg, c, snapshot) : null),
+  language: () => currentLanguage,
+  toast: showToast,
+  play: (c) => void playChannel(c),
+  playProgramme: (match) => void (async () => {
+    const archive = programmeArchiveUrl(match);
+    const played = await playChannel(match.channel, archive ?? undefined, match.programme);
+    if (played && !archive && Date.parse(match.programme.start) > Date.now()) showToast(tr("guide.futureLive"));
+  })(),
+  toggleFavorite: (c) => {
+    favorites = toggleFavorite(favorites, c);
+    if (plState.activeId) saveFavoritesFor(plState.activeId);
+    refreshNowFav();
+    renderCategories();
+    renderChannels(false); // звезда не сбрасывает прокрутку (#349)
+  },
+  openEditor: openChannelEditor,
+  reorderFavorite,
+  playlistId: () => plState.activeId,
+  onDragStart: cancelNumericZap,
+  reminderButton: (match) => (plState.activeId ? reminderUi?.button(match.channel, match.programme, plState.activeId) ?? null : null),
+  catalogueCard: (c) => createCatalogueCard(document, c, () => { void playChannel(c); }),
+  setIcon,
+  canHover: () => window.matchMedia("(hover: hover)").matches,
+});
 
 // Поворот экрана / resize меняет ширину контейнера (число колонок) и питч —
 // пересчитываем окно, иначе спейсер остаётся со старой высотой и карточки
@@ -1298,7 +1232,7 @@ function renderVirtualWindow(): void {
 window.addEventListener("resize", () => {
   syncStatusBarAppearance();
   if (playerScreen.hidden) return;
-  renderVirtualWindow();
+  channelListUi.renderWindow();
 });
 
 function renderChannels(resetScroll = true): void {
@@ -1328,252 +1262,9 @@ function renderChannels(resetScroll = true): void {
   viewCount.textContent = groupDigits(visibleResults.length);
   emptyState.textContent = emptyMessage(activeView, q !== "", currentLanguage);
   emptyState.hidden = visibleResults.length > 0;
-  ensureVirtualShell();
-  // при смене фильтра сбрасываем прокрутку, чтобы окно пересчиталось с нуля
   renderContinue();
-  if (resetScroll) channelList.scrollTop = 0;
-  renderVirtualWindow();
-  if (!guideOverlay.hidden && guideGridOn) timelineGuideUi?.refresh();
-}
-
-/** Общая плитка: исходный логотип или монограмма, в том числе после ошибки. */
-function renderChannelLogo(c: Channel): HTMLSpanElement {
-  const logo = document.createElement("span");
-  logo.className = "logo sm";
-  logo.title = c.name;
-  const monogram = c.name.trim().slice(0, 2).toUpperCase();
-  logo.textContent = monogram;
-  if (c.logo) {
-    const img = document.createElement("img");
-    img.alt = "";
-    img.loading = "lazy";
-    img.addEventListener("error", () => { logo.textContent = monogram; }, { once: true });
-    img.src = c.logo;
-    logo.textContent = "";
-    logo.append(img);
-  }
-  return logo;
-}
-
-/** Результат поиска сохраняет высоту виртуальной строки канала. */
-function renderProgrammeMatch(match: ProgrammeMatch): HTMLElement {
-  const { channel, programme } = match;
-  const row = document.createElement("div");
-  row.tabIndex = 0;
-  row.className = channelRowClass(lastPlayed?.url === channel.url);
-  row.setAttribute("role", "listitem");
-  const logo = renderChannelLogo(channel);
-  const meta = document.createElement("span");
-  meta.className = "meta";
-  const name = document.createElement("span");
-  name.className = "t-strong ellipsis";
-  name.textContent = `${channel.name} · ${programme.title}`;
-  const time = document.createElement("span");
-  time.className = "row-now ellipsis muted num";
-  const date = new Date(programme.start).toLocaleDateString(currentLanguage, { day: "2-digit", month: "2-digit" });
-  time.textContent = `${date} · ${formatRange(programme, currentLanguage)}`;
-  meta.append(name, time);
-  row.append(logo, meta);
-  row.title = `${name.textContent} · ${time.textContent}`;
-  row.addEventListener("click", async () => {
-    const archive = programmeArchiveUrl(match);
-    const played = await playChannel(channel, archive ?? undefined, programme);
-    if (played && !archive && Date.parse(programme.start) > Date.now()) {
-      showToast(tr("guide.futureLive"));
-    }
-  });
-  row.addEventListener("keydown", (event) => {
-    if (event.target === row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); row.click(); }
-  });
-  const reminder = plState.activeId && reminderUi?.button(channel, programme, plState.activeId);
-  if (reminder) {
-    row.classList.add("programme-result");
-    row.append(reminder);
-  }
-  return row;
-}
-
-function renderChannelCard(c: Channel): HTMLElement {
-  // Карточка — контейнер, а не кнопка (#351): запуск канала — растянутая на
-  // всю строку кнопка .channel-hit, звезда и редактирование — соседние кнопки
-  // поверх неё. Так нет вложенных интерактивных элементов, а клик по любой
-  // точке строки по-прежнему запускает канал.
-  const card = document.createElement("div");
-  card.className = channelRowClass(lastPlayed?.url === c.url);
-  card.setAttribute("role", "listitem");
-  card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
-  const hit = document.createElement("button");
-  hit.type = "button";
-  hit.className = "channel-hit";
-  hit.setAttribute("aria-label", c.name);
-  hit.title = c.url; // ссылка на поток при наведении
-  card.append(hit);
-  if (activeView === "favorites") {
-    card.draggable = true;
-    hit.title = tr("favorites.reorderHint");
-    hit.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
-    hit.addEventListener("keydown", (event) => {
-      if (!event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const channels = visibleResults.filter((row): row is Channel => !("programme" in row));
-      const index = channels.findIndex((channel) => channel.url === c.url);
-      const target = channels[index + (event.key === "ArrowUp" ? -1 : 1)];
-      if (target) reorderFavorite(c.url, target.url);
-    });
-    card.addEventListener("dragstart", (event) => {
-      if (!event.dataTransfer || event.target !== card) { event.preventDefault(); return; }
-      event.dataTransfer.setData("application/x-iptv-favorite", JSON.stringify({ playlistId: plState.activeId, url: c.url }));
-      event.dataTransfer.effectAllowed = "move";
-      cancelNumericZap();
-    });
-    card.addEventListener("dragover", (event) => {
-      if (!event.dataTransfer?.types.includes("application/x-iptv-favorite")) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-      card.classList.add("favorite-drop-target");
-    });
-    card.addEventListener("dragleave", () => card.classList.remove("favorite-drop-target"));
-    card.addEventListener("drop", (event) => {
-      event.preventDefault();
-      card.classList.remove("favorite-drop-target");
-      try {
-        const data = JSON.parse(event.dataTransfer?.getData("application/x-iptv-favorite") ?? "null");
-        if (data?.playlistId === plState.activeId && typeof data.url === "string") reorderFavorite(data.url, c.url);
-      } catch { /* Чужой drag payload. */ }
-    });
-    card.addEventListener("dragend", () => {
-      channelList.querySelectorAll(".favorite-drop-target").forEach((row) => row.classList.remove("favorite-drop-target"));
-    });
-  }
-  const failure = channelHealth.get(c.url);
-  card.classList.toggle("has-failure", failure !== undefined);
-
-  card.append(renderChannelLogo(c));
-
-  const meta = document.createElement("span");
-  meta.className = "meta";
-  const line = document.createElement("span");
-  line.className = "line";
-
-  const name = document.createElement("span");
-  name.className = "t-strong ellipsis";
-  name.textContent = c.name;
-  line.append(name);
-
-  if (failure) {
-    const badge = document.createElement("span");
-    badge.className = "channel-failure";
-    badge.textContent = "!";
-    badge.title = channelFailureLabel(failure);
-    badge.setAttribute("role", "img");
-    badge.setAttribute("aria-label", badge.title);
-    line.append(badge);
-  }
-
-  if (c.quality) {
-    const q = document.createElement("span");
-    q.className = qualityBadgeClass(c.quality);
-    q.textContent = c.quality;
-    line.append(q);
-  }
-  meta.append(line);
-
-  // Что идёт сейчас, сколько прошло и (на широком экране) что дальше:
-  // канал выбирают по передаче, а не по названию.
-  let nextText = "";
-  if (epg) {
-    const { now, next } = getNowNext(epg, c, snapshot!);
-    if (now) {
-      const e = document.createElement("span");
-      e.className = "row-now ellipsis";
-      const t = document.createElement("span");
-      t.className = "num muted";
-      t.textContent = clock(Date.parse(now.start), currentLanguage);
-      e.append(t, ` ${now.title}`);
-      meta.append(e);
-
-      const bar = document.createElement("span");
-      bar.className = "prog";
-      const fill = document.createElement("span");
-      fill.style.width = `${(programmeProgress(Date.now(), Date.parse(now.start), Date.parse(now.stop)) * 100).toFixed(1)}%`;
-      bar.append(fill);
-      meta.append(bar);
-    }
-    if (next) nextText = `${clock(Date.parse(next.start), currentLanguage)}  ${next.title}`;
-  }
-  card.append(meta);
-
-  const nextEl = document.createElement("span");
-  nextEl.className = "row-next ellipsis muted num";
-  nextEl.textContent = nextText;
-  card.append(nextEl);
-
-  const star = document.createElement("button");
-  const fav = isFavorite(favorites, c);
-  star.className = starClass(fav);
-  star.title = fav ? tr("favorites.remove") : tr("favorites.add");
-  star.setAttribute("aria-label", star.title);
-  setIcon(star, fav ? "star-on" : "star");
-  star.addEventListener("click", (ev) => {
-    ev.stopPropagation(); // не запускать воспроизведение
-    favorites = toggleFavorite(favorites, c);
-    if (plState.activeId) saveFavoritesFor(plState.activeId);
-    refreshNowFav();
-    renderCategories();
-    renderChannels(false); // звезда не сбрасывает прокрутку (#349)
-  });
-  const actions = document.createElement("span");
-  actions.className = "channel-actions";
-  const edit = document.createElement("button");
-  edit.className = "icon-btn";
-  edit.dataset.channelEdit = "";
-  edit.title = tr("channel.edit");
-  edit.setAttribute("aria-label", edit.title);
-  setIcon(edit, "edit");
-  edit.addEventListener("click", (event) => { event.stopPropagation(); openChannelEditor(c); });
-  actions.append(star, edit);
-  card.append(actions);
-  card.addEventListener("contextmenu", (event) => { event.preventDefault(); openChannelEditor(c); });
-
-  // Мини-превью: текстовый тост «сейчас в эфире» (issue #118). Никаких
-  // <video> — десяток одновременных декодеров убил бы мобильную батарею.
-  let pressT = 0;
-  let pressX = 0;
-  let pressY = 0;
-  const showPreview = (): void => {
-    if (!epg) return; // без телепрограммы превью не из чего собрать
-    const { now } = getNowNext(epg, c, snapshot!);
-    if (!now) return;
-    showToast(tr("guide.preview", { channel: c.name, title: now.title, time: clock(Date.parse(now.start), currentLanguage) }));
-  };
-  card.addEventListener("pointerdown", (ev) => {
-    if (ev.pointerType === "touch") {
-      pressT = Date.now();
-      pressX = ev.clientX;
-      pressY = ev.clientY;
-    }
-  });
-  card.addEventListener("pointerup", (ev) => {
-    if (ev.pointerType !== "touch" || pressT === 0) return;
-    const held = Date.now() - pressT;
-    pressT = 0;
-    const moved = Math.hypot(ev.clientX - pressX, ev.clientY - pressY);
-    if (isLongPress(held, moved)) {
-      ev.preventDefault();
-      showPreview();
-    }
-  });
-  card.addEventListener("pointercancel", () => {
-    pressT = 0;
-  });
-  // Мышь: обычный hover по карточке — на десктопе превью ничего не стоит.
-  card.addEventListener("mouseenter", () => {
-    if (window.matchMedia("(hover: hover)").matches) showPreview();
-  });
-
-  card.addEventListener("click", () => playChannel(c));
-  return card;
+  channelListUi.render(resetScroll);
+  if (!guideOverlay.hidden && guideUi.isGrid()) timelineGuideUi?.refresh();
 }
 
 // ---------- Плеер ----------
@@ -1868,21 +1559,11 @@ nowFav.addEventListener("click", () => {
 // фокус уже на карточке канала (карточки — кнопки) или на поиске.
 // Математика фокуса — чистый модуль kbd-nav.ts.
 function focusedChannelIndex(): number {
-  const t = document.activeElement;
-  if (!(t instanceof HTMLElement)) return -1;
-  // Фокус живёт на .channel-hit внутри строки (#351) или на самой строке передачи.
-  const index = t.closest<HTMLElement>("[data-result-index]")?.dataset.resultIndex;
-  return index === undefined ? -1 : Number(index);
+  return channelListUi.focusedIndex();
 }
 
 function focusChannelAt(index: number): void {
-  if (!visibleResults[index]) return;
-  const catalogue = (activeView === "movies" || activeView === "series") && !seriesEpisodes;
-  const columns = catalogue ? columnsForWidth(channelList.clientWidth, 160) : CHANNEL_COLUMNS;
-  channelList.scrollTop = Math.floor(index / columns) * (catalogue ? 260 : CHANNEL_ROW_HEIGHT);
-  renderVirtualWindow();
-  const row = channelList.querySelector<HTMLElement>(`[data-result-index="${index}"]`);
-  (row?.querySelector<HTMLElement>(".channel-hit") ?? row)?.focus();
+  channelListUi.focusAt(index);
 }
 
 window.addEventListener("keydown", (e) => {
@@ -2053,7 +1734,7 @@ window.addEventListener("keydown", (e) => {
     case "g":
     case "п": // ru-раскладка
       e.preventDefault();
-      if (guideOverlay.hidden) openGuide();
+      if (guideOverlay.hidden) guideUi.open();
       else guideOverlay.hidden = true;
       break;
     case "c":
@@ -2252,7 +1933,7 @@ const recordingsUi = createRecordingsUi({
   },
   beforeRender: () => {
     scheduleUi?.render();
-    refreshDownloadUi();
+    guideUi.refreshDownloads();
   },
 });
 
@@ -2444,7 +2125,7 @@ function setListCollapsed(on: boolean): void {
   appEl.classList.toggle("list-collapsed", on);
   btnRestorePanel.hidden = !on;
   updateMenuToggle();
-  if (!on) renderVirtualWindow();
+  if (!on) channelListUi.renderWindow();
   if (moveFocus && !on) btnCollapseList.focus();
   try {
     localStorage.setItem(LIST_COLLAPSED_KEY, on ? "1" : "0");
@@ -2666,7 +2347,6 @@ btnRec.addEventListener("click", () => {
 });
 
 // ---- Гайд (программа передач) + catchup ----
-let guideDayIdx = 0;
 reminderUi = createProgrammeReminders({ root: document, minutes: $<HTMLInputElement>("reminder-minutes"), desktop: $<HTMLInputElement>("reminder-desktop"), status: $("reminder-status") }, {
   storage: localStorage,
   playlistIds: () => plState.items.map((p) => p.id),
@@ -2688,298 +2368,61 @@ timelineGuideUi = createTimelineGuide({ scroll: guideGrid, canvas: $("guide-grid
   close: () => closeOverlay("guide"),
 });
 
-function setGuideMode(grid: boolean): void {
-  if (grid && isCompact()) { showToast(tr("guide.mobile")); return; }
-  guideGridOn = grid;
-  renderGuide();
-}
-guideListMode.addEventListener("click", () => setGuideMode(false));
-guideGridMode.addEventListener("click", () => setGuideMode(true));
-window.addEventListener("resize", () => {
-  if (guideGridOn && isCompact()) {
-    guideGridOn = false;
-    if (!guideOverlay.hidden) { showToast(tr("guide.mobile")); renderGuide(); }
-  }
-});
-
-function openGuide(): void {
-  if (!lastPlayed) return;
-  guideDayIdx = 0;
-  openOverlay("guide");
-  renderGuide();
-}
-
-function renderGuide(): void {
-  guideTitle.textContent = guideGridOn ? tr("guide.gridTitle") : `${tr("guide.title")}${lastPlayed ? ` · ${lastPlayed.name}` : ""}`;
-  guideOverlay.querySelector(".guide")!.classList.toggle("timeline-mode", guideGridOn);
-  guideListMode.textContent = tr("guide.list");
-  guideGridMode.textContent = tr("guide.grid");
-  guideListMode.setAttribute("aria-pressed", String(!guideGridOn));
-  guideGridMode.setAttribute("aria-pressed", String(guideGridOn));
-  guideList.hidden = guideGridOn;
-  guideGrid.hidden = !guideGridOn;
-  const wins = dayWindows(new Date(), currentLanguage);
-  guideDays.textContent = "";
-  wins.forEach((w, i) => {
-    const b = document.createElement("button");
-    b.textContent = w.label;
-    b.className = i === guideDayIdx ? "chip on" : "chip";
-    b.addEventListener("click", () => {
-      guideDayIdx = i;
-      renderGuide();
-    });
-    guideDays.append(b);
-  });
-
-  guideList.textContent = "";
-  const window: DayWindow = wins[guideDayIdx]!;
-  if (guideGridOn) { timelineGuideUi!.render(window); return; }
-  const now = new Date();
-  let progs = programmesInDay(channelProgrammes(), window);
-  // Канал без телепрограммы, но с архивом: показываем часовые слоты «без
-  // названия» на неделю назад (#314) — клик открывает catchup.
-  if (lastPlayed && progs.length === 0) {
-    const cu = { days: lastPlayed.catchupDays, source: lastPlayed.catchupSource };
-    if (cu.days > 0 && cu.source) {
-      progs = programmesInDay(hourlyFallbackProgrammes(now), window);
-    }
-  }
-  if (progs.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "muted";
-    empty.textContent = tr("guide.noDay");
-    guideList.append(empty);
-    return;
-  }
-
-  for (const p of progs) {
-    guideList.append(programmeRow(p, now, () => (guideOverlay.hidden = true)));
-  }
-}
-
-/**
- * Строка передачи — одна и для шторки с программой, и для блока под
- * плеером. Эфир включается, прошедшее с архивом — открывается из архива,
- * прошедшее без архива приглушено, будущее просто подписано.
- */
-function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLElement {
-  const c = lastPlayed!;
-  const cu = { days: c.catchupDays, source: c.catchupSource };
-  const start = Date.parse(p.start);
-  const stop = Date.parse(p.stop);
-  const isLive = start <= now.getTime() && now.getTime() < stop;
-  const watchable = isLive || canWatchPast(cu, p, now);
-  const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
-
-  const row = document.createElement("button");
-  // Приглушаем только прошедшее без архива: будущие передачи тоже нельзя
-  // включить, но это нормальная программа, а не «недоступное».
-  row.className =
-    programRowClass(state) + (state === "past" && !watchable ? " dim" : "");
-  // Нельзя включить — не кнопка для клавиатуры и мыши.
-  row.disabled = !watchable;
-
-  const t = document.createElement("span");
-  t.className = "time";
-  t.textContent = formatRange(p, currentLanguage);
-  const body = document.createElement("span");
-  body.className = "prog-body";
-  const title = document.createElement("span");
-  title.className = "title";
-  title.textContent = p.title;
-  body.append(title);
-  // Эфир и архив — плашками, а не символами в тексте: title приходит из EPG
-  if (isLive) {
-    const live = document.createElement("span");
-    live.className = "live";
-    live.textContent = tr("guide.live");
-    body.append(live);
-  } else if (state === "past" && watchable) {
-    const arch = document.createElement("span");
-    arch.className = "prog-arch";
-    arch.innerHTML = iconMarkup("archive", "i-sm");
-    arch.append(tr("guide.archive"));
-    body.append(arch);
-  }
-  row.append(t, body);
-
-  if (watchable) {
-    row.title = isLive ? tr("guide.watchNow") : tr("guide.archiveTitle");
-    row.addEventListener("click", () => void watchProgramme(c, p, now, onPlayed));
-  } else if (state === "past") {
-    row.title =
-      cu.days > 0
-        ? tr("guide.outsideArchive")
-        : tr("guide.noArchive");
-  }
-  // Описание из EPG — подсказкой на строке, полностью — в карточке (#363).
-  if (p.desc) row.title = row.title ? `${row.title}. ${p.desc}` : p.desc;
-  const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
-  wrapper.append(row, programmeInfoButton(c, p, onPlayed));
-  if (stop <= now.getTime()) {
-    // Скачивание доступной из архива передачи (#315, #359). Раньше блок стоял
-    // после раннего return для прошедших передач и не рисовался вовсе.
-    if (watchable && cu.source) wrapper.append(programmeDownloadButton(c, p, cu));
-    return wrapper;
-  }
-  wrapper.append(...programmeFutureActions(c, p));
-  return wrapper;
-}
-
-/** «Записать» и «Напомнить» для идущей и будущей передачи. */
-function programmeFutureActions(c: Channel, p: EpgProgramme): HTMLElement[] {
-  const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
-  record.textContent = tr("schedule.title");
-  const playlistId = plState.activeId;
-  record.addEventListener("click", () => { if (playlistId) scheduleUi?.plan(c, p, playlistId); });
-  const reminder = playlistId && reminderUi?.button(c, p, playlistId);
-  return reminder ? [record, reminder] : [record];
-}
-
-/** Включить эфир или архив передачи: те же проверки, что у строки программы. */
-async function watchProgramme(c: Channel, p: EpgProgramme, now: Date, onPlayed: () => void): Promise<boolean> {
-  const start = Date.parse(p.start);
-  const stop = Date.parse(p.stop);
-  if (start <= now.getTime() && now.getTime() < stop) {
-    if (!await playChannel(c)) return false;
-    onPlayed();
-    return true;
-  }
-  const url = buildCatchupUrl({ days: c.catchupDays, source: c.catchupSource }, p, now);
-  if (!url) {
-    showToast(tr("error.noArchive"));
-    return false;
-  }
-  if (!await playChannel(c, url, p)) return false;
-  onPlayed();
-  return true;
-}
-
-function programmeInfoButton(c: Channel, p: EpgProgramme, onPlayed: () => void): HTMLButtonElement {
-  const info = document.createElement("button");
-  info.type = "button";
-  info.className = "icon-btn programme-info";
-  info.title = tr("programme.details");
-  info.setAttribute("aria-label", `${tr("programme.details")}: ${p.title}`);
-  setIcon(info, "info");
-  info.addEventListener("click", () => openProgrammeCard(c, p, onPlayed));
-  return info;
-}
-
-/**
- * Карточка передачи (#363): название, время и статус, описание из EPG и
- * действия строки программы. Текст EPG вставляется только через textContent.
- */
-function openProgrammeCard(c: Channel, p: EpgProgramme, onPlayed: () => void): void {
-  const now = new Date();
-  const start = Date.parse(p.start);
-  const stop = Date.parse(p.stop);
-  const cu = { days: c.catchupDays, source: c.catchupSource };
-  const isLive = start <= now.getTime() && now.getTime() < stop;
-  const past = stop <= now.getTime();
-  const watchable = isLive || canWatchPast(cu, p, now);
-  programmeCardTitle.textContent = p.title;
-  const status = isLive ? tr("programme.statusNow") : past ? tr("programme.statusPast") : tr("programme.statusNext");
-  programmeCardMeta.textContent = `${c.name} · ${formatRange(p, currentLanguage)} · ${status}`;
-  programmeCardDesc.textContent = p.desc ?? "";
-  programmeCardDesc.hidden = !p.desc;
-  programmeCardActions.textContent = "";
-  if (watchable) {
-    const watch = document.createElement("button");
-    watch.type = "button";
-    watch.className = "btn btn-sm btn-primary programme-watch";
-    watch.textContent = isLive ? tr("guide.watchNow") : tr("guide.archive");
-    watch.addEventListener("click", async () => {
-      if (await watchProgramme(c, p, new Date(), onPlayed)) closeOverlay("programme");
-    });
-    programmeCardActions.append(watch);
-  }
-  if (past) {
-    if (watchable && cu.source) programmeCardActions.append(programmeDownloadButton(c, p, cu));
-  } else {
-    programmeCardActions.append(...programmeFutureActions(c, p));
-  }
-  programmeCardActions.hidden = programmeCardActions.childElementCount === 0;
-  openOverlay("programme");
-  programmeCardClose.focus();
-}
-
-/**
- * Кнопка скачивания передачи из архива. Пока идёт скачивание этой передачи,
- * кнопка показывает прогресс и отменяет его; другие кнопки ждут (#359).
- */
-function programmeDownloadButton(c: Channel, p: EpgProgramme, cu: { days: number; source: string | null }): HTMLButtonElement {
-  const dl = document.createElement("button");
-  dl.type = "button";
-  dl.className = "btn btn-sm programme-download";
-  dl.dataset.downloadChannel = c.url;
-  dl.dataset.downloadStart = p.start;
-  dl.addEventListener("click", () => {
-    const current = downloadStatus();
-    if (current) {
-      if (current.channelUrl === c.url && current.start === p.start) cancelProgrammeDownload();
-      return;
-    }
-    const url = buildCatchupUrl(cu, p, new Date());
-    if (!url) {
-      showToast(tr("error.noArchive"));
-      return;
-    }
-    void downloadProgramme({
-      channelName: c.name,
-      channelUrl: c.url,
-      programme: p,
+// Шторка «Программа», блок под плеером и карточка передачи — src/guide-ui.ts (#368).
+const guideUi = createGuideUi({
+  nodes: {
+    overlay: guideOverlay,
+    title: $("guide-title"),
+    days: $("guide-days"),
+    list: $("guide-list"),
+    grid: guideGrid,
+    listMode: $<HTMLButtonElement>("guide-mode-list"),
+    gridMode: $<HTMLButtonElement>("guide-mode-grid"),
+    schedule: nowSchedule,
+    scheduleList: $("sched-list"),
+    card: {
+      overlay: programmeOverlay,
+      title: $("programme-card-title"),
+      meta: $("programme-card-meta"),
+      desc: $("programme-card-desc"),
+      actions: $("programme-card-actions"),
+      close: $<HTMLButtonElement>("programme-card-close"),
+    },
+    downloadStatus: $("download-status"),
+  },
+  channel: () => lastPlayed,
+  programmes: (channel) => channelProgrammes(channel),
+  archiveProgramme: () => archivePlayback?.programme ?? null,
+  language: () => currentLanguage,
+  toast: showToast,
+  playChannel: (channel, url, programme) => playChannel(channel, url, programme),
+  isCompact,
+  renderTimeline: (day) => timelineGuideUi!.render(day),
+  openOverlay,
+  closeOverlay,
+  playlistId: () => plState.activeId,
+  planRecording: (channel, programme, playlistId) => scheduleUi?.plan(channel, programme, playlistId),
+  reminderButton: (channel, programme, playlistId) => reminderUi?.button(channel, programme, playlistId) ?? null,
+  downloads: {
+    status: downloadStatus,
+    cancel: cancelDownload,
+    start: (channel, programme, url) => void downloadProgramme({
+      channelName: channel.name,
+      channelUrl: channel.url,
+      programme,
       url,
       fs: recordingsFs,
       storage: localStorage,
       notify: showToast,
       onSaved: renderRecordings,
-      onStatus: refreshDownloadUi,
-    });
-  });
-  refreshDownloadButton(dl);
-  return dl;
-}
+      onStatus: () => guideUi.refreshDownloads(),
+    }),
+  },
+  setIcon,
+});
+window.addEventListener("resize", () => guideUi.onResize());
 
-function refreshDownloadButton(dl: HTMLButtonElement): void {
-  const current = downloadStatus();
-  const mine = current !== null && current.channelUrl === dl.dataset.downloadChannel && current.start === dl.dataset.downloadStart;
-  dl.disabled = current !== null && !mine;
-  dl.classList.toggle("downloading", mine);
-  dl.textContent = mine ? tr("download.progress", { pct: Math.floor(current.progress * 100) }) : tr("download.title");
-  dl.title = mine ? tr("download.cancel") : current ? tr("download.busy") : tr("download.title");
-  dl.setAttribute("aria-label", dl.title);
-}
-
-function cancelProgrammeDownload(): void {
-  cancelDownload();
-  showToast(tr("download.cancelled"));
-}
-
-/** Прогресс скачивания: кнопки в программе и строка в разделе «Записи». */
-function refreshDownloadUi(): void {
-  document.querySelectorAll<HTMLButtonElement>(".programme-download").forEach(refreshDownloadButton);
-  const box = $("download-status");
-  const current = downloadStatus();
-  box.hidden = current === null;
-  box.textContent = "";
-  if (!current) return;
-  const label = document.createElement("span");
-  label.className = "download-status-label ellipsis";
-  label.textContent = tr("download.status", { title: current.title, channel: current.channelName });
-  const bar = document.createElement("progress");
-  bar.max = 100;
-  bar.value = Math.floor(current.progress * 100);
-  bar.setAttribute("aria-label", label.textContent);
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "btn btn-sm download-cancel";
-  cancel.textContent = tr("download.cancel");
-  cancel.addEventListener("click", cancelProgrammeDownload);
-  box.append(label, bar, cancel);
-}
-
-/** Передачи текущего канала по телепрограмме, по времени начала. */
+/** Передачи канала по телепрограмме, по времени начала. */
 function channelProgrammes(channel: Channel | null = lastPlayed): EpgProgramme[] {
   if (!epg || !channel) return [];
   return (
@@ -2989,46 +2432,9 @@ function channelProgrammes(channel: Channel | null = lastPlayed): EpgProgramme[]
   );
 }
 
-/**
- * Программа под плеером: одна прошедшая (её можно открыть из архива), та,
- * что идёт, и три следующие. Полная — в шторке «Вся программа».
- */
-let scheduleKey = "";
-function renderSchedule(): void {
-  const all = channelProgrammes();
-  const nowMs = archivePlayback?.programme ? Date.parse(archivePlayback.programme.start) : Date.now();
-  const i = all.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
-  scheduleKey = lastPlayed && i >= 0 ? `${lastPlayed.url}|${all[i]!.start}` : "";
-  schedList.textContent = "";
-  nowSchedule.hidden = i < 0;
-  if (i < 0) return;
-  const now = new Date();
-  for (const p of all.slice(Math.max(0, i - 1), i + 4)) {
-    schedList.append(programmeRow(p, now, () => undefined));
-  }
-}
-
-btnGuide.addEventListener("click", openGuide);
-btnFullGuide.addEventListener("click", openGuide);
+btnGuide.addEventListener("click", () => guideUi.open());
+btnFullGuide.addEventListener("click", () => guideUi.open());
 guideClose.addEventListener("click", () => closeOverlay("guide"));
-programmeCardClose.addEventListener("click", () => closeOverlay("programme"));
-programmeOverlay.addEventListener("click", (e) => {
-  if (e.target === programmeOverlay) closeOverlay("programme");
-});
-// Escape закрывает карточку раньше гайда под ней: ловим в capture-фазе,
-// до обработчиков гайда и горячих клавиш плеера (#363).
-window.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape" || programmeOverlay.hidden) return;
-  e.preventDefault();
-  e.stopImmediatePropagation();
-  closeOverlay("programme");
-}, true);
-guideOverlay.addEventListener("click", (e) => {
-  if (e.target === guideOverlay) closeOverlay("guide");
-});
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !guideOverlay.hidden) closeOverlay("guide");
-});
 
 /** Край живого буфера или NaN, если поток ещё не начал грузиться. */
 function liveEdge(): number {
@@ -3161,61 +2567,29 @@ for (const ev of ["click", "keydown"] as const) {
   });
 }
 
-function recordingScrubDuration(): number {
-  return player.isRecordingPlayback && videoEl.readyState > 0 && Number.isFinite(videoEl.duration) && videoEl.duration > 0
-    ? videoEl.duration : 0;
-}
-
-function scrubPointerTime(e: PointerEvent): number | null {
-  const rect = scrub.getBoundingClientRect();
-  return scrubSeekTarget(e.clientX, rect.left, rect.width, recordingScrubDuration());
-}
-
-scrub.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || !e.isPrimary || scrubDrag) return;
-  const time = scrubPointerTime(e);
-  if (time === null) return;
-  e.preventDefault();
-  e.stopPropagation();
-  scrubDrag = { pointerId: e.pointerId, time };
-  scrub.setPointerCapture(e.pointerId);
-  scrub.focus();
-  wakeControls();
-  refreshScrub();
-});
-scrub.addEventListener("pointermove", (e) => {
-  if (scrubDrag?.pointerId !== e.pointerId) return;
-  e.stopPropagation();
-  const time = scrubPointerTime(e);
-  if (time !== null) scrubDrag.time = time;
-  wakeControls();
-  refreshScrub();
-});
-scrub.addEventListener("pointerup", (e) => {
-  if (scrubDrag?.pointerId !== e.pointerId) return;
-  e.stopPropagation();
-  const time = scrubPointerTime(e);
-  scrubDrag = null;
-  scrub.releasePointerCapture(e.pointerId);
-  if (time !== null) videoEl.currentTime = time;
-  refreshScrub();
-});
-for (const event of ["pointercancel", "lostpointercapture"] as const) {
-  scrub.addEventListener(event, (e) => {
-    if (scrubDrag?.pointerId !== e.pointerId) return;
-    scrubDrag = null;
-    refreshScrub();
-  });
-}
-scrub.addEventListener("keydown", (e) => {
-  const duration = recordingScrubDuration();
-  if (!duration || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-  e.preventDefault();
-  e.stopPropagation();
-  if (e.key === "Home") videoEl.currentTime = 0;
-  else if (e.key === "End") videoEl.currentTime = duration;
-  else player.seekBy(e.key === "ArrowLeft" ? -15 : 15);
-  refreshScrub();
+// Полоса прогресса и мини-полоска — src/scrub-ui.ts (#369).
+const scrubUi = createScrubUi({
+  nodes: {
+    scrub,
+    fill: $("scrub-fill"),
+    miniFill: $("mini-prog-fill"),
+    start: $("prog-start"),
+    end: $("prog-end"),
+    show: nowShow,
+    timeLeft: $("now-time-left"),
+  },
+  video: videoEl,
+  isRecording: () => player.isRecordingPlayback,
+  recordingDurationSec: () => player.recordingDurationSec,
+  seekBy: (seconds) => player.seekBy(seconds),
+  archiveProgramme: () => archivePlayback?.programme ?? null,
+  liveProgramme: () => (epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null),
+  channelUrl: () => lastPlayed?.url ?? null,
+  scheduleKey: () => guideUi.scheduleKey(),
+  renderSchedule: () => guideUi.renderSchedule(),
+  language: () => currentLanguage,
+  wake: () => wakeControls(),
+  refresh: () => refreshScrub(),
 });
 
 /**
@@ -3227,7 +2601,8 @@ scrub.addEventListener("keydown", (e) => {
  */
 function refreshScrub(): void {
   tvUi?.refresh();
-  refreshScrubView();
+  refreshPlaybackControls();
+  scrubUi.render();
   syncMediaSession();
 }
 
@@ -3266,81 +2641,6 @@ function mediaSession(): MediaSessionBridge {
     seekbackward: run("backward"),
   });
   return mediaSessionBridge;
-}
-
-function refreshScrubView(): void {
-  // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
-  // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
-  // а отстать от эфира на них можно ровно так же.
-  refreshPlaybackControls();
-  const duration = recordingScrubDuration();
-  if (duration) {
-    scrub.setAttribute("role", "slider");
-    scrub.tabIndex = 0;
-    scrub.setAttribute("aria-label", tr("record.position"));
-    scrub.setAttribute("aria-valuemin", "0");
-    scrub.setAttribute("aria-valuemax", String(duration));
-  } else {
-    const pointerId = scrubDrag?.pointerId;
-    scrubDrag = null;
-    if (pointerId !== undefined && scrub.hasPointerCapture(pointerId)) scrub.releasePointerCapture(pointerId);
-    for (const attr of ["role", "tabindex", "aria-label", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext"]) scrub.removeAttribute(attr);
-  }
-
-  if (player.isRecordingPlayback) {
-    const position = scrubDrag?.time ?? videoEl.currentTime;
-    const timeline = mediaScrub(position, videoEl.duration, player.recordingDurationSec);
-    if (duration) {
-      scrub.setAttribute("aria-valuenow", String(Math.max(0, Math.min(position, duration))));
-      scrub.setAttribute("aria-valuetext", `${timeline.position} / ${timeline.duration}`);
-    }
-    const pct = `${(timeline.progress * 100).toFixed(1)}%`;
-    scrubFill.style.width = pct;
-    miniProgFill.style.width = pct;
-    progStart.textContent = timeline.position;
-    progEnd.textContent = timeline.duration;
-    nowShow.textContent = "";
-    nowTimeLeft.textContent = "";
-    if (scheduleKey) renderSchedule();
-    return;
-  }
-
-  const prog =
-    archivePlayback?.programme ?? (epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null);
-  if (!prog) {
-    if (scheduleKey) renderSchedule();
-    scrubFill.style.width = "0%";
-    miniProgFill.style.width = "0%";
-    progStart.textContent = "";
-    progEnd.textContent = "";
-    nowShow.textContent = "";
-    nowTimeLeft.textContent = "";
-    return;
-  }
-  const startMs = Date.parse(prog.start);
-  const stopMs = Date.parse(prog.stop);
-  const positionMs = archivePlayback ? startMs + videoEl.currentTime * 1000 : Date.now();
-  const pct = `${(programmeProgress(positionMs, startMs, stopMs) * 100).toFixed(1)}%`;
-  scrubFill.style.width = pct;
-  miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
-  progStart.textContent = clock(startMs, currentLanguage);
-  progEnd.textContent = clock(stopMs, currentLanguage);
-
-  // Сменилась передача или канал — перестроить программу под плеером
-  if (`${lastPlayed!.url}|${prog.start}` !== scheduleKey) renderSchedule();
-
-  // Название передачи — сверху кадра, «ещё N мин» — у конца полосы
-  nowShow.textContent = prog.title;
-  nowTimeLeft.textContent = timeLeft(stopMs - positionMs);
-}
-
-/** «ещё 58 мин», «ещё 1 ч 5 мин» — до конца передачи. */
-function timeLeft(ms: number): string {
-  const min = Math.max(0, Math.round(ms / 60_000));
-  if (min < 60) return tr("player.remainingMinutes", { minutes: min });
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m === 0 ? tr("player.remainingHours", { hours: h }) : tr("player.remainingBoth", { hours: h, minutes: m });
 }
 
 /**
@@ -3444,7 +2744,7 @@ videoEl.addEventListener("timeupdate", refreshScrub);
 // и между timeupdate, которые HLS шлёт нерегулярно.
 window.setInterval(() => {
   refreshScrub();
-  if (!guideOverlay.hidden && guideGridOn) timelineGuideUi?.refresh();
+  if (!guideOverlay.hidden && guideUi.isGrid()) timelineGuideUi?.refresh();
 }, 10_000);
 
 // ---- Жесты на кадре (телефон) ----
@@ -3516,7 +2816,7 @@ function wakeControls(): void {
   controlsTimer = window.setTimeout(() => {
     // Открытое меню качества или дорожек нельзя гасить вместе с контролами
     const menuOpen = !qualityMenu.hidden || !audioMenu.hidden || !subtitleMenu.hidden;
-    if (menuOpen || scrubDrag || document.activeElement === scrub) {
+    if (menuOpen || scrubUi.isDragging() || document.activeElement === scrub) {
       wakeControls();
       return;
     }
@@ -3854,24 +3154,24 @@ function activatePlaylist(id: string): void {
 // ---------- Кросс-таб синхронизация (FR-15) ----------
 // storage-событие приходит ТОЛЬКО в табы, которые не писали ключ сами —
 // эха нет. Политика last-write-wins: состояние просто перечитывается.
-window.addEventListener("storage", (e) => {
-  if (plState.activeId && (e.key === null || e.key === groupPreferencesKey(plState.activeId))) {
+// Решение «что перечитать» — applyStorageChange в cross-tab.ts (#371),
+// здесь только реакции над состоянием main.ts.
+const storageReactions: Record<StorageReaction, () => void> = {
+  groups: () => {
     const previousHidden = groupPreferences.hidden;
-    groupPreferences = parseGroupPreferences(localStorage.getItem(groupPreferencesKey(plState.activeId)));
+    groupPreferences = parseGroupPreferences(localStorage.getItem(groupPreferencesKey(plState.activeId!)));
     refreshGroupPreferences(previousHidden);
-  }
-  if (plState.activeId && (e.key === null || e.key === parentalPinsKey(plState.activeId))) {
-    parentalPins = parseParentalPins(localStorage.getItem(parentalPinsKey(plState.activeId)));
+  },
+  pins: () => {
+    parentalPins = parseParentalPins(localStorage.getItem(parentalPinsKey(plState.activeId!)));
     // Изменение защиты в другой вкладке отменяет ранее разрешённый просмотр.
     btnClosePlayer.click();
     activeCategory = null;
     renderPinSettings();
     renderCategories();
     renderChannels();
-  }
-  const d = classifyStorageChange(e.key);
-  if (d.ignore) return;
-  if (d.playlists) {
+  },
+  playlists: () => {
     const prevActive = plState.activeId;
     plState = loadPlaylists(localStorage);
     renderPlaylistManager();
@@ -3881,24 +3181,33 @@ window.addEventListener("storage", (e) => {
       if (pl) activatePlaylist(pl.id);
       else showSetup();
     }
-  }
-  if (d.favorites) {
-    const activeId = plState.activeId;
-    if (activeId && (e.key === null || e.key === favoritesKey(activeId) || e.key === favoritesOrderKey(activeId))) {
-      favorites = loadFavoritesFor(activeId);
-      favoritesOrder = loadFavoritesOrderFor(activeId);
-      refreshNowFav();
-      if (showsChannelList(activeView)) renderChannels(false);
-    }
-  }
-  if (d.theme) {
+  },
+  favorites: () => {
+    favorites = loadFavoritesFor(plState.activeId!);
+    favoritesOrder = loadFavoritesOrderFor(plState.activeId!);
+    refreshNowFav();
+    if (showsChannelList(activeView)) renderChannels(false);
+  },
+  theme: () => {
     currentTheme = themeChoice(localStorage) === "system"
       ? resolveTheme(null, systemPrefersDark())
       : (themeChoice(localStorage) as Theme);
     applyTheme(currentTheme);
     setIcon(btnTheme, themeButtonLabel(currentTheme));
     renderThemeSeg();
-  }
+  },
+};
+window.addEventListener("storage", (e) => {
+  applyStorageChange(
+    e.key,
+    () => {
+      const id = plState.activeId;
+      return id
+        ? { groups: groupPreferencesKey(id), pins: parentalPinsKey(id), favorites: favoritesKey(id), favoritesOrder: favoritesOrderKey(id) }
+        : null;
+    },
+    (reaction) => storageReactions[reaction](),
+  );
 });
 
 /** Пересобрать список плейлистов (setup-экран), синхронизировав состояние. */
@@ -3906,117 +3215,35 @@ function renderPlaylistManager(): void {
   playlistUi.renderManager(plState);
 }
 
-// ---------- Экспорт / импорт настроек ----------
-btnExport.addEventListener("click", async () => {
-  btnExport.disabled = true;
-  btnExport.setAttribute("aria-busy", "true");
-  try {
-    saveCurrentPosition();
-    const favs: Record<string, string[]> = {};
-    for (const p of plState.items) {
-      const list = loadFavoritesFor(p.id);
-      if (list.size > 0) favs[p.id] = [...list];
-    }
-    const recentsBackup: Record<string, string[]> = {};
-    for (const p of plState.items) {
-      try {
-        const raw = localStorage.getItem(recentsKey(p.id));
-        const parsed: unknown = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(parsed)) {
-          const urls = parsed.filter((x): x is string => typeof x === "string");
-          if (urls.length > 0) recentsBackup[p.id] = urls;
-        }
-      } catch { /* битые данные — пропускаем */ }
-    }
-    const backup = buildBackup({
-      theme: themeChoice(localStorage),
-      playlists: plState.items,
-      activeId: plState.activeId,
-      favorites: favs,
-      recents: recentsBackup,
-      ...readBackupSections(localStorage, plState.items.map((p) => p.id)),
-      language: currentLanguage,
-    });
-    const local = await readLocalPlaylistFiles(backup.playlists, playlistOpfsFs);
-    backup.localPlaylists = local.files;
-    const blob = new Blob([JSON.stringify(backup, null, 2)], {
-      type: "application/json",
-    });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `iptv-hub-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.append(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-    showToast(tr("backup.exported"));
-    if (local.missing.length) {
-      const message = tr("backup.localMissing", { count: local.missing.length });
-      showToast(message);
-      pushNotification(message);
-    }
-  } catch {
-    showToast(tr("backup.writeFailed"));
-  } finally {
-    btnExport.disabled = false;
-    btnExport.removeAttribute("aria-busy");
-  }
-});
-
-// Экспорт избранного в .m3u (FR-11): совместимый файл для любых плееров
-btnExportFav.addEventListener("click", () => {
-  if (!snapshot || !plState.activeId) {
-    showToast(tr("backup.openFirst"));
-    return;
-  }
-  const favs = loadFavoritesFor(plState.activeId);
-  const m3u = buildFavoritesM3U(snapshot.channels, favs);
-  if (!m3u.includes("#EXTINF")) {
-    showToast(tr("backup.noFavorites"));
-    return;
-  }
-  const blob = new Blob([m3u], { type: "audio/x-mpegurl" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "favorites.m3u";
-  document.body.append(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  showToast(tr("backup.favoritesExported"));
-});
-
-btnImport.addEventListener("click", () => importFile.click());
-importFile.addEventListener("change", () => {
-  const file = importFile.files?.[0];
-  if (!file) return;
-  file
-    .text()
-    .then(async (text) => {
-      const result = parseBackup(text);
-      if (!result.ok) {
-        showToast(tr("backup.importFailed", { reason: translateMessage(result.error, currentLanguage) }));
-        return;
-      }
-      const data = result.data;
-      stopIfRecording();
-      await scheduleUi?.prepareImport();
-      closeMultiView(false);
-      lastPlayed = null;
-      archivePlayback = null;
-      player.stop(); // A late pause/pagehide must not overwrite imported positions.
-      let error = false;
-      try { await restoreLocalPlaylistFiles(data, playlistOpfsFs, () => restoreBackup(localStorage, data)); } catch { error = true; }
-      try { sessionStorage.setItem("iptv-hub.backup-result", JSON.stringify({ count: data.playlists.length, warnings: result.warnings, missingLocal: missingLocalFiles(data).length, error })); } catch { /* Storage unavailable. */ }
-      const url = new URL(location.href);
-      for (const key of ["p", "e", "ch"]) url.searchParams.delete(key);
-      history.replaceState(null, "", url);
-      location.reload();
-    })
-    .catch(() => showToast(tr("error.readFile")))
-    .finally(() => {
-      importFile.value = ""; // повторный выбор того же файла тоже сработает
-    });
+// ---------- Экспорт / импорт настроек — src/backup-ui.ts (#370) ----------
+const backupUi = createBackupUi({
+  nodes: { exportBtn: btnExport, exportFavBtn: btnExportFav, importBtn: btnImport, importFile },
+  storage: localStorage,
+  session: sessionStorage,
+  playlists: () => plState.items,
+  activeId: () => plState.activeId,
+  favorites: loadFavoritesFor,
+  channels: () => snapshot?.channels ?? null,
+  theme: () => themeChoice(localStorage),
+  language: () => currentLanguage,
+  localFs: playlistOpfsFs,
+  toast: showToast,
+  notify: pushNotification,
+  beforeExport: saveCurrentPosition,
+  beforeImport: async () => {
+    stopIfRecording();
+    await scheduleUi?.prepareImport();
+    closeMultiView(false);
+    lastPlayed = null;
+    archivePlayback = null;
+    player.stop(); // A late pause/pagehide must not overwrite imported positions.
+  },
+  reload: () => {
+    const url = new URL(location.href);
+    for (const key of ["p", "e", "ch"]) url.searchParams.delete(key);
+    history.replaceState(null, "", url);
+    location.reload();
+  },
 });
 
 // ---------- Переключатель плейлистов (топбар) — DOM в playlist-ui.ts ----------
@@ -4400,17 +3627,5 @@ void bootstrap().catch((e) => {
   console.error("[iptv-hub] ошибка запуска", e);
   showSetup(tr("error.loadPlaylist", { reason: e instanceof Error ? e.message : t("error.unknown"), hint: "" }));
 }).then(() => {
-  try {
-    const raw = sessionStorage.getItem("iptv-hub.backup-result");
-    sessionStorage.removeItem("iptv-hub.backup-result");
-    if (!raw) return;
-    const result = JSON.parse(raw) as { count: number; warnings: string[]; missingLocal?: number; error: boolean };
-    showToast(tr(result.error ? "backup.writeFailed" : "backup.imported", { count: result.count }));
-    if (!result.error && result.warnings.length) pushNotification(tr("backup.normalized", { sections: result.warnings.join(", ") }));
-    if (!result.error && result.missingLocal) {
-      const message = tr("backup.localMissing", { count: result.missingLocal });
-      showToast(message);
-      pushNotification(message);
-    }
-  } catch { /* No pending import report. */ }
+  backupUi.reportImport();
 });
