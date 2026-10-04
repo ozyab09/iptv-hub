@@ -29,6 +29,17 @@ describe("detectQuality", () => {
 });
 
 describe("extractAttr", () => {
+  it("accepts single quotes and mixed quote styles, preferring double quotes", () => {
+    expect(extractAttr("tvg-id='abc' group-title='_Best'", "tvg-id")).toBe("abc");
+    expect(extractAttr("tvg-id=\"x\" group-title='_Best'", "group-title")).toBe("_Best");
+    expect(extractAttr("tvg-id='single' tvg-id=\"double\"", "tvg-id")).toBe("double");
+    expect(extractAttr("tvg-id='single' tvg-id=\"\"", "tvg-id")).toBe("");
+    expect(extractAttr("TVG-ID='abc'", "tvg-id")).toBe("abc");
+  });
+  it("matches the whole attribute name and ignores attribute-like text inside values", () => {
+    expect(extractAttr('xtvg-id="wrong" tvg-id="right"', "tvg-id")).toBe("right");
+    expect(extractAttr('tvg-logo="x tvg-id=\'wrong\'"', "tvg-id")).toBeNull();
+  });
   it("parses quoted attributes", () => {
     expect(extractAttr('tvg-id="cnn.ru" group-title="Новости"', "tvg-id")).toBe(
       "cnn.ru",
@@ -39,6 +50,12 @@ describe("extractAttr", () => {
 });
 
 describe("quoted EXTINF commas", () => {
+  it("preserves commas and opposite quotes in single-quoted attributes", () => {
+    const snapshot = parseM3U("#EXTM3U tvg-url='https://fixture.test/epg.xml'\n#EXTINF:-1 tvg-id='abc' group-title='_Best, \"News\"' tvg-logo='https://fixture.test/a,b.png' catchup-days='2',Name, HD\nhttps://fixture.test/live\n");
+    expect(snapshot.headerTvgUrl).toBe("https://fixture.test/epg.xml");
+    expect(snapshot.channels[0]).toMatchObject({ tvgId: "abc", group: '_Best, "News"', logo: "https://fixture.test/a,b.png", name: "Name, HD", catchupDays: 2 });
+    expect(snapshot.categories).toEqual(['_Best, "News"']);
+  });
   it("keeps commas inside attributes and attributes after them", () => {
     const result = parseM3U('#EXTM3U\n#EXTINF:-1 group-title="News, Talk" tvg-id="x" tvg-logo="https://fixture.test/logo,a.png" catchup-days="2",My Channel\nhttps://fixture.test/live.m3u8\n');
     expect(result.channels[0]).toMatchObject({ name: "My Channel", group: "News, Talk", tvgId: "x", logo: "https://fixture.test/logo,a.png", catchupDays: 2 });

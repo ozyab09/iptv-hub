@@ -45,9 +45,13 @@ const QUALITY_RANK: Record<NonNullable<Channel["quality"]>, number> = {
 
 /** Извлечение атрибута из строки атрибутов #EXTINF. */
 export function extractAttr(attrs: string, key: string): string | null {
-  const re = new RegExp(`${key}="([^"]*)"`, "i");
-  const m = attrs.match(re);
-  return m?.[1] ?? null;
+  let singleQuoted: string | null = null;
+  for (const match of attrs.matchAll(/(?:^|\s)([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+    if (match[1]!.toLowerCase() !== key.toLowerCase()) continue;
+    if (match[2] !== undefined) return match[2];
+    singleQuoted ??= match[3] ?? null;
+  }
+  return singleQuoted;
 }
 
 /**
@@ -98,10 +102,12 @@ export function parseM3U(content: string): PlaylistSnapshot {
 
     if (line.startsWith("#EXTINF")) {
       let commaIdx = -1;
-      let quoted = false;
+      let quote: string | null = null;
       for (let i = 0; i < line.length; i++) {
-        if (line[i] === '"') quoted = !quoted;
-        if (line[i] === "," && !quoted) { commaIdx = i; break; }
+        const char = line[i];
+        if (char === quote) quote = null;
+        else if (quote === null && (char === '"' || char === "'")) quote = char;
+        if (char === "," && quote === null) { commaIdx = i; break; }
       }
       const head =
         commaIdx >= 0 ? line.slice(0, commaIdx) : line;
