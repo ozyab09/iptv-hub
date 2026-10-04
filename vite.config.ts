@@ -10,6 +10,8 @@ const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), 
  * version из package.json как запасной вариант для локальных сборок.
  */
 const appVersion = process.env.APP_VERSION?.trim() || pkg.version;
+const versionProperties = readFileSync(new URL("./android/version.properties", import.meta.url), "utf8");
+const appVersionCode = Number(versionProperties.match(/^versionCode=(\d+)\s*$/m)?.[1]);
 
 /**
  * После сборки проставляет в dist/sw.js версию приложения и хэш index.html:
@@ -40,6 +42,7 @@ export default defineConfig({
   plugins: [stampServiceWorker()],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    __APP_VERSION_CODE__: appVersionCode,
   },
   build: {
     // Дефолтный лимит 500 КБ ниже веса самого hls.js (~594 КБ): библиотека одна,

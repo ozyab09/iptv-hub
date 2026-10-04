@@ -21,6 +21,7 @@ const valid = {
 };
 
 const sections = {
+  appSettings: { checkUpdates: false },
   channelOverrides: { a: [{ url: "https://a/s1", alias: "Alias", hidden: false }] },
   groupPreferences: { a: { hidden: ["Hidden"], order: ["Sports", "News"] } },
   parentalPins: { a: [{ group: "Locked", salt: "0".repeat(32), hash: "1".repeat(64) }] },

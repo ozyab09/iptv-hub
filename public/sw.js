@@ -14,7 +14,7 @@
  */
 // При сборке к версии дописывается хэш index.html (vite.config.ts →
 // src/sw-version.ts), поэтому каждый деплой — новый SW и новый кэш.
-const VERSION = "v0.2.71";
+const VERSION = "v0.2.72";
 const SHELL_CACHE = `iptv-hub-shell-${VERSION}`;
 const DATA_CACHE = `iptv-hub-data-${VERSION}`;
 

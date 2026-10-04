@@ -2,6 +2,11 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "settings.updates": "Обновления приложения",
+  "settings.checkUpdates": "Проверять обновления APK",
+  "updates.note": "Проверка при запуске и раз в сутки. Установка — через GitHub Releases.",
+  "updates.available": "Доступна новая версия APK: {version}",
+  "updates.download": "Скачать APK",
   "playlist.xtreamVod": "Включить фильмы и сериалы",
   "catalogue.movies": "Фильмы",
   "catalogue.series": "Сериалы",
@@ -375,6 +380,11 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "settings.updates": "App updates",
+  "settings.checkUpdates": "Check for APK updates",
+  "updates.note": "Checked at startup and daily. Install from GitHub Releases.",
+  "updates.available": "A new APK version is available: {version}",
+  "updates.download": "Download APK",
   "playlist.xtreamVod": "Include movies and series",
   "catalogue.movies": "Movies",
   "catalogue.series": "Series",

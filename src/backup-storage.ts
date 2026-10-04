@@ -13,6 +13,7 @@ import { SCHEDULE_KEY, parseRecordingRules } from "./recording-schedule";
 import { POSITIONS_KEY, parsePositions } from "./positions";
 import { PLAYLISTS_KEY, ACTIVE_KEY, favoritesKey } from "./playlists";
 import { recentsKey } from "./backup";
+import { APP_SETTINGS_KEY, parseAppSettings } from "./apk-updates";
 
 type StorageKV = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const perPlaylist = {
@@ -35,6 +36,7 @@ export function readBackupSections(storage: StorageKV, ids: string[]): BackupSec
   const rules = parseRecordingRules(storage.getItem(SCHEDULE_KEY));
   input.recordingSchedule = Object.fromEntries(ids.map((id) => [id, rules.filter((r) => r.playlistId === id)]));
   input.playerSettings = parsePlayerSettings(storage.getItem(PLAYER_SETTINGS_KEY));
+  input.appSettings = parseAppSettings(storage.getItem(APP_SETTINGS_KEY));
   input.positions = parsePositions(storage.getItem(POSITIONS_KEY));
   input.language = storage.getItem(LANGUAGE_KEY) ?? "ru";
   input.refreshInterval = loadInterval(storage);
@@ -59,6 +61,7 @@ export function restoreBackup(storage: StorageKV, data: Backup): void {
       if (values) for (const [id, value] of Object.entries(values)) if (ids.has(id)) writes.set(key(id), JSON.stringify(value));
     }
     if (data.playerSettings) writes.set(PLAYER_SETTINGS_KEY, JSON.stringify(data.playerSettings));
+    if (data.appSettings) writes.set(APP_SETTINGS_KEY, JSON.stringify(data.appSettings));
     if (data.language) writes.set(LANGUAGE_KEY, data.language);
     if (data.refreshInterval !== undefined) writes.set("iptv-hub.refresh.v1", String(data.refreshInterval));
     if (data.positions) writes.set(POSITIONS_KEY, JSON.stringify(data.positions));

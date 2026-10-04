@@ -24,6 +24,7 @@ export interface Notification {
   read: boolean;
   /** A reminder can offer playback through the application's ordinary checks. */
   watch?: NotificationWatch;
+  updateVersion?: string;
 }
 
 type KV = Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
@@ -52,6 +53,7 @@ export function parseNotifications(raw: string | null): Notification[] {
           text: (n as Notification).text,
           at: (n as Notification).at,
           read: (n as Notification).read === true,
+          ...(typeof (n as Notification).updateVersion === "string" && /^\d+\.\d+\.\d+$/.test((n as Notification).updateVersion!) ? { updateVersion: (n as Notification).updateVersion } : {}),
           ...(watch && typeof watch === "object" && typeof watch.playlistId === "string" && watch.playlistId &&
             typeof watch.channelUrl === "string" && watch.channelUrl ? { watch: { playlistId: watch.playlistId, channelUrl: watch.channelUrl } } : {}),
         });
@@ -92,8 +94,9 @@ export function addNotification(
   text: string,
   now: number,
   watch?: NotificationWatch,
+  updateVersion?: string,
 ): Notification[] {
-  const item: Notification = { id: nextId, text, at: now, read: false, ...(watch ? { watch: { ...watch } } : {}) };
+  const item: Notification = { id: nextId, text, at: now, read: false, ...(watch ? { watch: { ...watch } } : {}), ...(updateVersion ? { updateVersion } : {}) };
   return [item, ...list].slice(0, MAX_NOTIFICATIONS);
 }
 
