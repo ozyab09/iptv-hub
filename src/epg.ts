@@ -98,8 +98,10 @@ export function parseEpg(xml: string): Map<string, EpgProgramme[]> {
   }
 
   const RE = /<programme\s+([^>]*?)>([\s\S]*?)<\/programme\s*>/g;
+  // Имя атрибута — от границы: иначе vps-start="…"/pdc-start="…" из XMLTV
+  // читались бы как start (#361).
   const attr = (s: string, k: string): string | null =>
-    s.match(new RegExp(`${k}="([^"]*)"`))?.[1] ?? null;
+    s.match(new RegExp(`(?:^|\\s)${k}="([^"]*)"`))?.[1] ?? null;
 
   for (const m of xml.matchAll(RE)) {
     const attrs = m[1] ?? "";
