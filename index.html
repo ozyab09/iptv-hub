@@ -134,6 +134,10 @@
                         <label for="setup-epg" data-i18n="playlist.epg">Ссылка на телепрограмму (XMLTV)</label>
                         <div class="input"><input id="setup-epg" type="url" inputmode="url" placeholder="https://…/epg.xml.gz" autocomplete="off" /></div>
                       </div>
+                      <div class="field">
+                        <label for="setup-additional-epg" data-i18n="playlist.additionalEpg">Дополнительные XMLTV (до 3 URL через пробел)</label>
+                        <div class="input"><input id="setup-additional-epg" type="text" autocomplete="off" /></div>
+                      </div>
                     </div>
                   </details>
                   <p id="setup-error" class="error" role="alert" hidden></p>
@@ -489,6 +493,8 @@
           <p id="channel-original" class="muted"></p>
           <label for="channel-alias" data-i18n="channel.alias">Имя канала (пустое — исходное)</label>
           <input id="channel-alias" class="input" type="text" maxlength="120" />
+          <label for="channel-epg-id" data-i18n="channel.epgId">EPG-id (пустое — из плейлиста)</label>
+          <input id="channel-epg-id" class="input" type="text" maxlength="120" />
           <label class="channel-hidden-label"><input id="channel-hidden" type="checkbox" /><span data-i18n="channel.hide">Скрыть из списков и поиска</span></label>
           <p class="set-note muted" data-i18n="channel.linkNote">Скрытый канал остаётся доступен по ссылке с ?ch=.</p>
           <div class="channel-editor-actions">

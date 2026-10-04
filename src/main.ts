@@ -54,7 +54,8 @@ import {
 } from "./favorites";
 import { validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtream";
 import { createOpfsFs, createTransport, type Transport } from "./playlist-transport";
-import { formatRange, getNowNext, loadEpg } from "./epg";
+import { formatRange, getNowNext, loadEpgSources } from "./epg";
+import { epgSourceUrls, epgSourcesInput } from "./epg-sources";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
 import { DEFAULT_PLAYER_SETTINGS, PLAYER_SETTINGS_KEY, parsePlayerSettings, sanitizePlayerSettings } from "./player-settings";
 import {
@@ -236,6 +237,7 @@ const playlistUiNodes: PlaylistUiNodes = {
 };
 const setupPlaylist = $<HTMLInputElement>("setup-playlist");
 const setupEpg = $<HTMLInputElement>("setup-epg");
+const setupAdditionalEpg = $<HTMLInputElement>("setup-additional-epg");
 const setupLoad = $<HTMLButtonElement>("setup-load");
 const setupName = $<HTMLInputElement>("setup-name");
 const addForm = $<HTMLFormElement>("add-form");
@@ -1113,6 +1115,7 @@ async function selectCategory(value: string | null): Promise<void> {
 const channelEditor = $<HTMLDialogElement>("channel-editor");
 channelEditor.addEventListener("keydown", (event) => event.stopPropagation());
 const channelAlias = $<HTMLInputElement>("channel-alias");
+const channelEpgId = $<HTMLInputElement>("channel-epg-id");
 const channelHidden = $<HTMLInputElement>("channel-hidden");
 let editedChannelUrl: string | null = null;
 
@@ -1122,6 +1125,7 @@ function openChannelEditor(channel: Channel): void {
   const original = snapshot?.channels.find((c) => c.url === channel.url);
   $("channel-original").textContent = original?.name ?? channel.name;
   channelAlias.value = channelOverrides.get(channel.url)?.alias ?? "";
+  channelEpgId.value = channelOverrides.get(channel.url)?.epgId ?? "";
   channelHidden.checked = channelOverrides.get(channel.url)?.hidden ?? false;
   channelEditor.showModal();
   channelAlias.focus();
@@ -1135,6 +1139,8 @@ function refreshChannelOverrides(): void {
   };
   if (lastPlayed) {
     lastPlayed.name = nameFor(lastPlayed);
+    const original = snapshot.channels.find((channel) => channel.url === lastPlayed!.url) ?? lastPlayed;
+    lastPlayed.tvgId = applyChannelOverrides([original], channelOverrides, true)[0]!.tvgId;
     refreshNowHeader(lastPlayed);
   }
   multiViewUi.updateNames(nameFor);
@@ -1146,7 +1152,7 @@ function refreshChannelOverrides(): void {
 $("channel-editor-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (!editedChannelUrl || !plState.activeId) return;
-  channelOverrides = setChannelOverride(channelOverrides, editedChannelUrl, channelAlias.value, channelHidden.checked);
+  channelOverrides = setChannelOverride(channelOverrides, editedChannelUrl, channelAlias.value, channelHidden.checked, channelEpgId.value);
   try { localStorage.setItem(channelOverridesKey(plState.activeId), serializeChannelOverrides(channelOverrides)); }
   catch { /* без персистентности сохраняем изменения в текущей сессии */ }
   channelEditor.close();
@@ -3807,8 +3813,10 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
   if (!item || !snapshot) return;
   refreshBusy = true;
   btnRefreshNow.setAttribute("aria-busy", "true");
+  const refreshLoad = epgGuard.begin();
   try {
     const fresh = await loadPlaylist(item.playlistUrl);
+    if (!refreshLoad.isCurrent() || plState.activeId !== item.id) return;
     const diff = diffSnapshots(snapshot, fresh);
     const httpNew = Math.max(0, fresh.droppedHttp - snapshot.droppedHttp);
     const interesting =
@@ -3817,12 +3825,16 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
     // Программа меняется постоянно — обновляем её при каждой проверке,
     // а не только когда изменился сам плейлист (#104). Гард (#112): если
     // во время проверки переключили плейлист, её EPG не применяется.
-    const epgUrl = item.epgUrl ?? fresh.headerTvgUrl;
+    const epgUrls = epgSourceUrls(item.epgUrl, item.additionalEpgUrls ?? [], fresh.headerTvgUrl);
     let programmes: number | null = null;
-    if (epgUrl) {
-      const epgLoad = epgGuard.begin();
+    if (epgUrls.length) {
+      const epgLoad = refreshLoad;
       try {
-        const parsed = await loadEpg(epgUrl);
+        const parsed = await loadEpgSources(epgUrls, (completed, total) => {
+          if (!epgLoad.isCurrent()) return;
+          epgNow.hidden = false;
+          setSystemText(epgNow, total === 1 ? tr("loading.epg") : tr("loading.epgSources", { completed, total }));
+        });
         if (epgLoad.isCurrent()) {
           epg = parsed;
           programmes = countProgrammes(epg);
@@ -3838,7 +3850,7 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
     }
 
     // Автоподстановка EPG в свойства плейлиста: явно заданный не трогаем (#104)
-    if (!item.epgUrl && fresh.headerTvgUrl) {
+    if (!item.epgUrl && !item.additionalEpgUrls?.length && fresh.headerTvgUrl) {
       plState = updatePlaylist(plState, item.id, { epgUrl: fresh.headerTvgUrl });
       savePlaylists(localStorage, plState);
       renderPlaylistManager();
@@ -4163,6 +4175,8 @@ addForm.addEventListener("submit", (e) => {
   e.preventDefault();
   let pUrl = setupPlaylist.value.trim();
   let eUrl = setupEpg.value.trim();
+  const additionalEpgUrls = epgSourcesInput(setupAdditionalEpg.value);
+  if (!additionalEpgUrls) { showSetup(tr("error.epgSources")); return; }
   const name = setupName.value.trim();
   if (xtreamMode) {
     const source = validateXtream({ host: xtreamHost.value, username: xtreamUser.value, password: xtreamPassword.value });
@@ -4182,10 +4196,12 @@ addForm.addEventListener("submit", (e) => {
     );
   }
   plState = addPlaylist(plState, name || tr("playlist.default"), pUrl, eUrl || null);
+  if (additionalEpgUrls.length) plState = updatePlaylist(plState, plState.items[plState.items.length - 1]!.id, { additionalEpgUrls });
   if (xtreamMode && xtreamVod.checked) plState = updatePlaylist(plState, plState.items[plState.items.length - 1]!.id, { xtreamVod: true });
   savePlaylists(localStorage, plState);
   setupPlaylist.value = "";
   setupEpg.value = "";
+  setupAdditionalEpg.value = "";
   setupName.value = "";
   xtreamHost.value = xtreamUser.value = xtreamPassword.value = "";
   xtreamVod.checked = false;
@@ -4321,14 +4337,17 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   // счётчики «Каналов: N · Категорий: M» уже видны в шапке и у категорий.
   epgNow.hidden = true;
 
-  const finalEpgUrl = epgUrl ?? snapshot.headerTvgUrl;
-  if (finalEpgUrl) {
+  const finalEpgUrls = epgSourceUrls(epgUrl, activePlaylist(plState)?.additionalEpgUrls ?? [], snapshot.headerTvgUrl);
+  if (finalEpgUrls.length) {
     epgNow.hidden = false;
     setSystemText(epgNow, t("loading.epg"));
     // Гард от гонки (#112): пока грузится EPG, можно успеть сменить плейлист —
     // поздний ответ старой загрузки не должен затирать данные нового.
     const epgLoad = epgGuard.begin();
-    loadEpg(finalEpgUrl)
+    loadEpgSources(finalEpgUrls, (completed, total) => {
+      if (!epgLoad.isCurrent()) return;
+      setSystemText(epgNow, total === 1 ? tr("loading.epg") : tr("loading.epgSources", { completed, total }));
+    })
       .then((parsed) => {
         if (!epgLoad.isCurrent()) return;
         epg = parsed;
