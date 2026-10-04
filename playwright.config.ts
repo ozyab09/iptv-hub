@@ -34,7 +34,7 @@ export default defineConfig({
     { name: "chromium", workers: process.env.CI ? 3 : 1, use: { browserName: "chromium" } },
     {
       name: "firefox-media", workers: 1,
-      testMatch: /(external-subtitles|recording-playback|multi-view|channel-mirrors|channel-health|timeshift|scheduled-recordings|xtream|xtream-catalogue|numeric-zap|volume-boost|programme-start|timeline-guide|reminders|backup-v2|backup-local|source-timeout|i18n-media)\.spec\.ts/,
+      testMatch: /(external-subtitles|recording-playback|multi-view|channel-mirrors|channel-health|timeshift|scheduled-recordings|xtream|xtream-catalogue|custom-epg|numeric-zap|volume-boost|programme-start|timeline-guide|reminders|backup-v2|backup-local|source-timeout|i18n-media)\.spec\.ts/,
       use: {
         browserName: "firefox",
         launchOptions: { firefoxUserPrefs: { "media.videocontrols.picture-in-picture.video-toggle.enabled": false } },
