@@ -32,6 +32,7 @@ export const ru = {
   "stream.copyFailed": "Не удалось скопировать ссылку — откройте редактор канала и скопируйте её вручную",
   "stream.external": "Открыть во внешнем плеере",
   "stream.externalSent": "Выберите плеер, например VLC или MX Player",
+  "incoming.dropName": "Название плейлиста",
   "programme.details": "Подробнее о передаче",
   "programme.statusNow": "Идёт сейчас",
   "programme.statusPast": "Прошла",

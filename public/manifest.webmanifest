@@ -11,6 +11,21 @@
   "background_color": "#0c0d10",
   "theme_color": "#0c0d10",
   "categories": ["entertainment", "video"],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "audio/x-mpegurl": [".m3u", ".m3u8"],
+        "application/x-mpegurl": [".m3u", ".m3u8"],
+        "application/vnd.apple.mpegurl": [".m3u8"]
+      }
+    }
+  ],
   "icons": [
     {
       "src": "./icons/icon-192.png",

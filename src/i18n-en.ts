@@ -34,6 +34,7 @@ export const en: Record<TranslationKey, string> = {
   "stream.copyFailed": "Could not copy the link — open the channel editor and copy it manually",
   "stream.external": "Open in external player",
   "stream.externalSent": "Choose a player such as VLC or MX Player",
+  "incoming.dropName": "Playlist name",
   "programme.details": "Programme details",
   "programme.statusNow": "On now",
   "programme.statusPast": "Ended",
