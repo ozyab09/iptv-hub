@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { channelHealthKey, clearChannelFailure, markChannelFailure, parseChannelHealth, serializeChannelHealth } from "../src/channel-health";
+import { channelHealthKey, clearChannelFailure, isChannelRecovered, markChannelFailure, parseChannelHealth, serializeChannelHealth } from "../src/channel-health";
 
 describe("channel health", () => {
+  it("requires playing for audio and decoded frames for a known video track", () => {
+    const audio = { readyState: 2, videoWidth: 0, error: null };
+    expect(isChannelRecovered(audio, "loadeddata", false)).toBe(false);
+    expect(isChannelRecovered(audio, "playing", false)).toBe(true);
+    expect(isChannelRecovered(audio, "playing", true)).toBe(false);
+    expect(isChannelRecovered({ ...audio, videoWidth: 160 }, "loadeddata", true)).toBe(true);
+    expect(isChannelRecovered({ ...audio, readyState: 1 }, "playing", false)).toBe(false);
+    expect(isChannelRecovered({ ...audio, error: { code: 3 } }, "playing", false)).toBe(false);
+    expect(isChannelRecovered({ ...audio, videoWidth: 160, error: { code: 3 } }, "playing", true)).toBe(false);
+  });
   const url = "https://fixture.test/live.m3u8";
   it("isolates playlists and round trips versioned failures", () => {
     expect(channelHealthKey("a")).not.toBe(channelHealthKey("b"));

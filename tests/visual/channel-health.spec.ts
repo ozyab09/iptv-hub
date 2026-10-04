@@ -5,6 +5,30 @@ test.use({ serviceWorkers: "block" });
 const key = "iptv-hub.channel-health.v1:one";
 const primary = "https://fixture.test/bad.mp4";
 
+test("audio-only HLS clears a failed channel mark after playback resumes", async ({ page }) => {
+  const url = "https://fixture.test/radio.m3u8";
+  await page.addInitScript(({ key, url }) => {
+    localStorage.setItem("iptv-hub.language.v1", "en");
+    localStorage.setItem("iptv-hub.playlists.v1", JSON.stringify([{ id: "one", name: "Radio", playlistUrl: "https://fixture.test/radio.m3u", epgUrl: null }]));
+    localStorage.setItem("iptv-hub.active-playlist.v1", "one");
+    localStorage.setItem(key, JSON.stringify({ version: 1, failures: [{ url, failedAt: Date.now(), kind: "unknown" }] }));
+  }, { key, url });
+  await page.route("https://fixture.test/**", (route) => {
+    if (route.request().url().endsWith(".m3u")) return route.fulfill({ body: `#EXTM3U\n#EXTINF:-1,Radio\n${url}\n` });
+    if (route.request().url().endsWith(".m3u8")) return route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:5\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4.1,\nradio.ts\n#EXT-X-ENDLIST\n" });
+    return route.fulfill({ body: readFileSync("tests/fixtures/radio.mpegts"), contentType: "video/mp2t" });
+  });
+  await page.goto("/");
+  const card = page.locator("#channel-list .channel-card");
+  await expect(card).toHaveClass(/has-failure/);
+  await card.click();
+  await expect.poll(() => page.locator("#video").evaluate((el: HTMLVideoElement) => el.currentTime)).toBeGreaterThan(0.2);
+  await expect(page.locator("#video")).toHaveJSProperty("videoWidth", 0);
+  await expect(page.locator("#video")).toHaveJSProperty("error", null);
+  await expect(card).not.toHaveClass(/has-failure/);
+  expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBeNull();
+});
+
 async function navigate(page: Page, name: string): Promise<void> {
   await page.locator("#side-nav button, #tabbar button").filter({ hasText: name, visible: true }).first().click();
 }
