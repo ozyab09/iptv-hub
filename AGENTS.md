@@ -123,6 +123,8 @@ push в main CI вычисляет следующий патч, штампует
   (тот же путь, что выбор файла). Android: VIEW (content/http/https + M3U mime)
   и SEND text/plain; ссылка → `START_URL?p=`, файл читается ContentResolver
   (до 20 МБ) и передаётся после onPageFinished один раз; launchMode не ставим.
+  Обработанный интент помечается extra `INCOMING_HANDLED`, а не подменяется:
+  `setIntent()` с новым интентом ломает ActivityScenario и android-tv CI (#459).
 - Алиасы и скрытие: `channel-overrides.ts`, ключ
   `iptv-hub.channel-overrides.v1:<playlist-id>`, записи по URL потока.
   Применение создаёт копии каналов и меняет отображаемое `name`, а при ручном
