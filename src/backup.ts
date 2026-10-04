@@ -5,9 +5,11 @@
 
 import { parseBackupSections, type BackupSections } from "./backup-sections";
 import { loadPlaylists, PLAYLISTS_KEY } from "./playlists";
+import { parseLocalPlaylistFiles, type LocalPlaylistFiles } from "./backup-local";
 export type { BackupSections } from "./backup-sections";
 
 export interface Backup extends BackupSections {
+  localPlaylists?: LocalPlaylistFiles;
   version: 1 | 2;
   exportedAt: string;
   theme: string;
@@ -19,6 +21,7 @@ export interface Backup extends BackupSections {
 }
 
 export interface BackupInput extends BackupSections {
+  localPlaylists?: LocalPlaylistFiles;
   theme: string;
   playlists: { id: string; name: string; playlistUrl: string; epgUrl: string | null }[];
   activeId: string | null;
@@ -65,6 +68,7 @@ export function buildBackup(input: BackupInput): Backup {
   const recents = sanitizeRecents(input.recents);
   if (recents) backup.recents = recents;
   Object.assign(backup, parseBackupSections(input as unknown as Record<string, unknown>, input.playlists.map((p) => p.id)).sections);
+  if (input.localPlaylists !== undefined) backup.localPlaylists = parseLocalPlaylistFiles(input.localPlaylists, input.playlists).files;
   return backup;
 }
 
@@ -86,16 +90,7 @@ export function parseBackup(raw: string): ParseResult {
   const b = parsed as Record<string, unknown>;
   if (b.version !== 1 && b.version !== 2) return { ok: false, error: "Неподдерживаемая версия бэкапа" };
   if (!Array.isArray(b.playlists)) return { ok: false, error: "В файле нет списка плейлистов" };
-  let playlists = b.playlists.filter(
-    (p): p is Backup["playlists"][number] =>
-      !!p &&
-      typeof p === "object" &&
-      typeof (p as { id?: unknown }).id === "string" &&
-      typeof (p as { name?: unknown }).name === "string" &&
-      typeof (p as { playlistUrl?: unknown }).playlistUrl === "string" &&
-      /^https?:\/\//.test((p as { playlistUrl: string }).playlistUrl),
-  );
-  if (b.version === 2) playlists = loadPlaylists({
+  const playlists = loadPlaylists({
     getItem: (key) => key === PLAYLISTS_KEY ? JSON.stringify(b.playlists) : null,
     setItem: () => {}, removeItem: () => {},
   }).items;
@@ -122,6 +117,11 @@ export function parseBackup(raw: string): ParseResult {
   const recents = sanitizeRecents(b.recents);
   if (recents) data.recents = recents;
   const extra = b.version === 2 ? parseBackupSections(b, playlists.map((p) => p.id)) : { sections: {}, warnings: [] };
+  if (b.version === 2 && b.localPlaylists !== undefined) {
+    const local = parseLocalPlaylistFiles(b.localPlaylists, playlists);
+    data.localPlaylists = local.files;
+    extra.warnings.push(...local.warnings);
+  }
   if (b.version === 2 && (playlists.length !== b.playlists.length || playlists.some((p, i) => {
     const raw = b.playlists as Record<string, unknown>[];
     return raw[i]?.playlistUrl !== p.playlistUrl || (raw[i]?.epgUrl !== undefined && raw[i]?.epgUrl !== p.epgUrl);

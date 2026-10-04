@@ -10,6 +10,14 @@ const categories = [{ category_id: "5", category_name: "News" }];
 const streams = [{ stream_id: 42, name: "News HD", stream_type: "live", category_id: "5", epg_channel_id: "news.epg", stream_icon: "https://provider.test/logo.png", tv_archive: 1, tv_archive_duration: "7" }];
 
 describe("Xtream", () => {
+  it.each([1, 2, 99, 0, "live", undefined])("accepts live API stream_type=%s", (stream_type) => {
+    const snapshot = parseXtream(source, [{ ...streams[0], stream_type }], categories);
+    expect(snapshot.channels).toHaveLength(1);
+    expect(snapshot.channels[0]).toMatchObject({ name: "News HD", group: "News", tvgId: "news.epg", catchupDays: 3 });
+  });
+  it.each(["movie", "vod", "series", "recorded", true])("rejects explicit non-live stream_type=%s", (stream_type) => {
+    expect(parseXtream(source, [{ ...streams[0], stream_type }], categories).channels).toEqual([]);
+  });
   it.each(["http://provider.test", "javascript:alert(1)", "https://u:p@provider.test", "https://provider.test?password=x", "https://provider.test/#hash", "invalid"])("rejects invalid host %s", (host) => {
     expect(validateXtream({ ...source, host })).toBeNull();
   });

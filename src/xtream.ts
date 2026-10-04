@@ -60,7 +60,7 @@ export function parseXtream(source: XtreamSource, streams: unknown, categories: 
   const rows = [`#EXTM3U tvg-url="${xtreamEpgUrl(source)}"`];
   for (const item of streams) {
     const stream = record(item);
-    if (!stream || (stream.stream_type && stream.stream_type !== "live")) continue;
+    if (!stream || (stream.stream_type && stream.stream_type !== "live" && typeof stream.stream_type !== "number")) continue;
     const id = text(stream.stream_id);
     const name = text(stream.name);
     if (!/^\d+$/.test(id) || !name.trim()) continue;
