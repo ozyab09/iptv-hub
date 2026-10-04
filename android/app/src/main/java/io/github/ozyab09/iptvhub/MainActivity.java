@@ -107,6 +107,8 @@ public class MainActivity extends AppCompatActivity {
                     view.evaluateJavascript("document.documentElement.dataset.tv='true';" +
                             "document.dispatchEvent(new Event('iptv-tv'))", null);
                 }
+                pageReady = true;
+                deliverPendingImport();
             }
 
             @Override
@@ -121,11 +123,6 @@ public class MainActivity extends AppCompatActivity {
                 return openExternally(request.getUrl());
             }
 
-            @Override
-            public void onPageFinished(@NonNull WebView view, @NonNull String url) {
-                pageReady = true;
-                deliverPendingImport();
-            }
         });
 
         FrameLayout root = new FrameLayout(this);
