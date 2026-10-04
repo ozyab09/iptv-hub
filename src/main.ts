@@ -122,6 +122,7 @@ import {
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
 import { canHotkey } from "./hotkey-guard";
 import { mediaKeyAction, type MediaKeyAction } from "./media-keys";
+import { createActionGate, createMediaSessionBridge, type MediaSessionBridge, type MediaSessionLike } from "./media-session";
 import { getNetworkConnection, neighborIndex, Player } from "./player";
 import {
   applyTheme,
@@ -198,6 +199,8 @@ let savedLanguage: string | null = null;
 try { savedLanguage = localStorage.getItem(LANGUAGE_KEY); } catch { /* приватный режим */ }
 let currentLanguage = resolveLanguage(savedLanguage, navigator.language);
 const tr = (key: TranslationKey, params: TranslationParams = {}): string => t(key, currentLanguage, params);
+/** Мост к MediaSession (#362); создаётся лениво — до объявления плеера его не трогаем. */
+let mediaSessionBridge: MediaSessionBridge | null = null;
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -1678,6 +1681,7 @@ btnClosePlayer.addEventListener("click", () => {
   setWatching(false);
   lastPlayed = null;
   archivePlayback = null;
+  mediaSession().clear();
   renderChannels();
 });
 
@@ -1688,10 +1692,12 @@ btnPause.addEventListener("click", () => {
   videoEl.addEventListener("play", () => {
     wakeLockState = wakeLockPlay(wakeLockState, wakeLockHooks, document.visibilityState === "visible");
     setIcon(btnPause, "pause");
+    syncMediaSession();
   });
   videoEl.addEventListener("pause", () => {
     wakeLockState = wakeLockStop(wakeLockState);
     setIcon(btnPause, "play");
+    syncMediaSession();
   });
   document.addEventListener("visibilitychange", () => {
     wakeLockState =
@@ -1740,6 +1746,13 @@ btnNext.addEventListener("click", () => playNeighbor(1));
  * клавиатура). Смена канала — как у кнопок деки: во время просмотра записи
  * prev/next скрыты и disabled, поэтому и клавиши ничего не делают.
  */
+/**
+ * Одно нажатие медиа-кнопки может прийти и keydown, и обработчиком
+ * MediaSession (#362): повтор того же действия за 100 мс отбрасывается —
+ * дубли приходят почти одновременно, а быстрые нажатия человека реже.
+ */
+const allowMediaAction = createActionGate(100, () => Date.now());
+
 function applyMediaKey(action: MediaKeyAction): void {
   switch (action) {
     case "play":
@@ -1941,7 +1954,7 @@ window.addEventListener("keydown", (e) => {
     const action = mediaKeyAction(e.code);
     if (action) {
       e.preventDefault();
-      applyMediaKey(action);
+      if (allowMediaAction(action)) applyMediaKey(action);
       return;
     }
   }
@@ -3482,6 +3495,48 @@ scrub.addEventListener("keydown", (e) => {
  * до конца передачи».
  */
 function refreshScrub(): void {
+  refreshScrubView();
+  syncMediaSession();
+}
+
+/**
+ * Карточка «что играет» в системе (#362): канал или запись, текущая
+ * передача, логотип. Повтор тех же данных мост отбрасывает сам.
+ */
+function syncMediaSession(): void {
+  const bridge = mediaSession();
+  if (playerBar.hidden) {
+    bridge.clear();
+    return;
+  }
+  bridge.update({
+    title: nowTitle.textContent ?? "",
+    artist: nowShow.textContent ?? "",
+    artwork: player.isRecordingPlayback ? null : lastPlayed?.logo ?? null,
+  });
+  bridge.setPlaying(!videoEl.paused);
+}
+
+function mediaSession(): MediaSessionBridge {
+  if (mediaSessionBridge) return mediaSessionBridge;
+  const session = (navigator as Navigator & { mediaSession?: MediaSessionLike }).mediaSession ?? null;
+  const Metadata = (window as Window & { MediaMetadata?: new (init: object) => unknown }).MediaMetadata;
+  const run = (action: MediaKeyAction) => (): void => {
+    if (!playerBar.hidden && allowMediaAction(action)) applyMediaKey(action);
+  };
+  mediaSessionBridge = createMediaSessionBridge(session && Metadata ? session : null, (init) => new Metadata!(init), {
+    play: run("play"),
+    pause: run("pause"),
+    stop: () => { if (!playerBar.hidden) btnClosePlayer.click(); },
+    nexttrack: run("next"),
+    previoustrack: run("previous"),
+    seekforward: run("forward"),
+    seekbackward: run("backward"),
+  });
+  return mediaSessionBridge;
+}
+
+function refreshScrubView(): void {
   // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
   // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
   // а отстать от эфира на них можно ровно так же.
