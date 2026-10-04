@@ -1360,16 +1360,26 @@ function renderProgrammeMatch(match: ProgrammeMatch): HTMLElement {
 }
 
 function renderChannelCard(c: Channel): HTMLElement {
-  const card = document.createElement("button");
+  // Карточка — контейнер, а не кнопка (#351): запуск канала — растянутая на
+  // всю строку кнопка .channel-hit, звезда и редактирование — соседние кнопки
+  // поверх неё. Так нет вложенных интерактивных элементов, а клик по любой
+  // точке строки по-прежнему запускает канал.
+  const card = document.createElement("div");
   card.className = channelRowClass(lastPlayed?.url === c.url);
   card.setAttribute("role", "listitem");
   card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
+  const hit = document.createElement("button");
+  hit.type = "button";
+  hit.className = "channel-hit";
+  hit.setAttribute("aria-label", c.name);
+  hit.title = c.url; // ссылка на поток при наведении
+  card.append(hit);
   if (activeView === "favorites") {
     card.draggable = true;
-    card.title = tr("favorites.reorderHint");
-    card.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
-    card.addEventListener("keydown", (event) => {
-      if (event.target !== card || !event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+    hit.title = tr("favorites.reorderHint");
+    hit.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
+    hit.addEventListener("keydown", (event) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
       event.preventDefault();
       event.stopPropagation();
       const channels = visibleResults.filter((row): row is Channel => !("programme" in row));
@@ -1415,7 +1425,6 @@ function renderChannelCard(c: Channel): HTMLElement {
   const name = document.createElement("span");
   name.className = "t-strong ellipsis";
   name.textContent = c.name;
-  name.title = c.url; // ссылка на поток при наведении
   line.append(name);
 
   if (failure) {
@@ -1792,7 +1801,8 @@ nowFav.addEventListener("click", () => {
 function focusedChannelIndex(): number {
   const t = document.activeElement;
   if (!(t instanceof HTMLElement)) return -1;
-  const index = t.dataset.resultIndex;
+  // Фокус живёт на .channel-hit внутри строки (#351) или на самой строке передачи.
+  const index = t.closest<HTMLElement>("[data-result-index]")?.dataset.resultIndex;
   return index === undefined ? -1 : Number(index);
 }
 
@@ -1800,7 +1810,8 @@ function focusChannelAt(index: number): void {
   if (!visibleResults[index]) return;
   channelList.scrollTop = Math.floor(index / CHANNEL_COLUMNS) * CHANNEL_ROW_HEIGHT;
   renderVirtualWindow();
-  channelList.querySelector<HTMLElement>(`[data-result-index="${index}"]`)?.focus();
+  const row = channelList.querySelector<HTMLElement>(`[data-result-index="${index}"]`);
+  (row?.querySelector<HTMLElement>(".channel-hit") ?? row)?.focus();
 }
 
 window.addEventListener("keydown", (e) => {
