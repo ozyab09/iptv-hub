@@ -20,7 +20,7 @@ for (const width of [390, 1440]) {
         requests.push(url.href);
         if (url.pathname.endsWith("player_api.php")) return route.fulfill({ json: url.searchParams.get("action") === "get_live_categories"
           ? [{ category_id: "1", category_name: "News" }]
-          : [{ stream_id: 42, name: "News HD", category_id: "1", epg_channel_id: "news", tv_archive: 1, tv_archive_duration: 2 }] });
+          : [{ stream_id: 42, name: "News HD", stream_type: 1, category_id: "1", epg_channel_id: "news", tv_archive: 1, tv_archive_duration: 2 }] });
         if (url.pathname.endsWith("xmltv.php")) return route.fulfill({ body: xml });
         if (url.pathname.endsWith(".ts")) return route.fulfill({ body: segment, contentType: "video/mp2t" });
         return route.fulfill({ body: "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4,\none.ts\n#EXT-X-ENDLIST\n", contentType: "application/vnd.apple.mpegurl" });
