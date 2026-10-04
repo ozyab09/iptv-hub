@@ -11,6 +11,20 @@ function normalizeProgrammeSearch(value: string): string {
   return value.normalize("NFC").toLowerCase().replace(/[\p{P}\s]+/gu, " ").trim();
 }
 
+/**
+ * Нормализованные названия считаются один раз на передачу (#357): объекты
+ * EPG живут до следующей загрузки, WeakMap освобождается вместе с ними.
+ */
+const normalizedTitles = new WeakMap<EpgProgramme, string>();
+function normalizedTitle(programme: EpgProgramme): string {
+  let title = normalizedTitles.get(programme);
+  if (title === undefined) {
+    title = normalizeProgrammeSearch(programme.title);
+    normalizedTitles.set(programme, title);
+  }
+  return title;
+}
+
 /** Ищем только передачи каналов активного списка; индекс id имеет приоритет. */
 export function searchProgrammes(
   channels: readonly Channel[],
@@ -25,11 +39,11 @@ export function searchProgrammes(
       ?? epg.get(`name:${channel.normalizedName}`) ?? [];
     const seen = new Set<string>();
     for (const programme of list) {
-      if (!normalizeProgrammeSearch(programme.title).includes(q)) continue;
+      if (!normalizedTitle(programme).includes(q)) continue;
       const start = Date.parse(programme.start);
       const stop = Date.parse(programme.stop);
       if (!Number.isFinite(start) || !Number.isFinite(stop) || stop <= start) continue;
-      const key = JSON.stringify([programme.start, programme.stop, programme.title]);
+      const key = `${programme.start}\u0000${programme.stop}\u0000${programme.title}`;
       if (seen.has(key)) continue;
       seen.add(key);
       matches.push({ channel, programme });

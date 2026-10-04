@@ -78,20 +78,30 @@ export function exportFavorites(favs: Set<string>): string {
 
 /**
  * Собрать валидный M3U из избранных каналов (FR-11): #EXTM3U + #EXTINF
- * с tvg-id/tvg-logo/group-title. Результат парсится собственным parseM3U
- * без потерь и совместим со стандартными плеерами.
+ * с tvg-id/tvg-logo/group-title и архивом (tvg-rec/catchup-days/
+ * catchup-source), зеркала — через `|` в строке URL (#354). Пустые атрибуты
+ * не пишутся. Результат парсится собственным parseM3U без потерь и
+ * совместим со стандартными плеерами.
  */
 export function buildFavoritesM3U(channels: Channel[], favs: Set<string>): string {
   const esc = (v: string): string => v.replace(/"/g, "'");
   const lines = ["#EXTM3U"];
   for (const c of channels) {
     if (!favs.has(c.url)) continue;
-    const attrs = [
-      `tvg-id="${esc(c.tvgId ?? "")}"`,
-      `tvg-logo="${esc(c.logo ?? "")}"`,
-      `group-title="${esc(c.group ?? "")}"`,
-    ].join(" ");
-    lines.push(`#EXTINF:-1 ${attrs},${esc(c.name)}`, c.url);
+    const attrs: string[] = [];
+    const put = (key: string, value: string | null | undefined): void => {
+      if (value) attrs.push(`${key}="${esc(value)}"`);
+    };
+    put("tvg-id", c.tvgId);
+    put("tvg-logo", c.logo);
+    put("group-title", c.group);
+    if (c.catchupDays > 0) {
+      put("tvg-rec", String(c.catchupDays));
+      put("catchup-days", String(c.catchupDays));
+    }
+    put("catchup-source", c.catchupSource);
+    const head = attrs.length > 0 ? `#EXTINF:-1 ${attrs.join(" ")}` : "#EXTINF:-1";
+    lines.push(`${head},${esc(c.name)}`, [c.url, ...(c.mirrors ?? [])].join("|"));
   }
   return lines.join("\n") + "\n";
 }

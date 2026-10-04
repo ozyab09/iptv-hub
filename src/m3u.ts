@@ -88,6 +88,8 @@ export function parseM3U(content: string): PlaylistSnapshot {
     attrs: string;
     name: string;
     extras: string[];
+    /** Группа из директивы #EXTGRP (VLC); group-title в #EXTINF главнее. */
+    group?: string;
   } | null = null;
 
   for (const rawLine of lines) {
@@ -119,6 +121,10 @@ export function parseM3U(content: string): PlaylistSnapshot {
 
     if (line.startsWith("#")) {
       // #EXTVLCOPT / #KODIPROP / прочие директивы — привязываем к текущему entry
+      if (pending && line.toUpperCase().startsWith("#EXTGRP:")) {
+        const group = line.slice("#EXTGRP:".length).trim();
+        if (group) pending.group = group;
+      }
       pending?.extras.push(line);
       continue;
     }
@@ -163,7 +169,7 @@ export function parseM3U(content: string): PlaylistSnapshot {
         ...(urls.length > 1 ? { mirrors: urls.slice(1) } : {}),
         tvgId,
         logo: extractAttr(pending.attrs, "tvg-logo"),
-        group: extractAttr(pending.attrs, "group-title") || "Основные",
+        group: extractAttr(pending.attrs, "group-title") || pending.group || "Основные",
         quality: detectQuality(name),
         catchupDays: catchupInfo.days,
         catchupSource: catchupInfo.source,

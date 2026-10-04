@@ -56,6 +56,7 @@ import { validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtream";
 import { createOpfsFs, createTransport, type Transport } from "./playlist-transport";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
+import { createDebounced } from "./debounce";
 import { DEFAULT_PLAYER_SETTINGS, PLAYER_SETTINGS_KEY, parsePlayerSettings, sanitizePlayerSettings } from "./player-settings";
 import {
   computeWindow,
@@ -155,7 +156,7 @@ import {
   programmesInDay,
   type DayWindow,
 } from "./catchup";
-import { downloadProgramme } from "./programme-downloader";
+import { cancelDownload, downloadProgramme, downloadStatus } from "./programme-downloader";
 import { createQualityMenu } from "./quality-menu";
 import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
@@ -1386,16 +1387,26 @@ function renderProgrammeMatch(match: ProgrammeMatch): HTMLElement {
 }
 
 function renderChannelCard(c: Channel): HTMLElement {
-  const card = document.createElement("button");
+  // Карточка — контейнер, а не кнопка (#351): запуск канала — растянутая на
+  // всю строку кнопка .channel-hit, звезда и редактирование — соседние кнопки
+  // поверх неё. Так нет вложенных интерактивных элементов, а клик по любой
+  // точке строки по-прежнему запускает канал.
+  const card = document.createElement("div");
   card.className = channelRowClass(lastPlayed?.url === c.url);
   card.setAttribute("role", "listitem");
   card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
+  const hit = document.createElement("button");
+  hit.type = "button";
+  hit.className = "channel-hit";
+  hit.setAttribute("aria-label", c.name);
+  hit.title = c.url; // ссылка на поток при наведении
+  card.append(hit);
   if (activeView === "favorites") {
     card.draggable = true;
-    card.title = tr("favorites.reorderHint");
-    card.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
-    card.addEventListener("keydown", (event) => {
-      if (event.target !== card || !event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+    hit.title = tr("favorites.reorderHint");
+    hit.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
+    hit.addEventListener("keydown", (event) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
       event.preventDefault();
       event.stopPropagation();
       const channels = visibleResults.filter((row): row is Channel => !("programme" in row));
@@ -1441,7 +1452,6 @@ function renderChannelCard(c: Channel): HTMLElement {
   const name = document.createElement("span");
   name.className = "t-strong ellipsis";
   name.textContent = c.name;
-  name.title = c.url; // ссылка на поток при наведении
   line.append(name);
 
   if (failure) {
@@ -1599,20 +1609,9 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   saveCurrentPosition();
   archivePlayback = archiveUrl === undefined ? null : { url: archiveUrl, programme: archiveProgramme ?? null, fromStart };
   lastPlayed = c;
-  // recents: дедап по url, максимум RECENTS_MAX, хранение per-плейлист
-  recents = pushRecent(recents, c.url);
-  if (plState.activeId) {
-    try {
-      localStorage.setItem(
-        recentsKey(plState.activeId),
-        JSON.stringify(recents),
-      );
-    } catch { /* приватный режим */ }
-    // Раздел «Недавние» показывает этот список — обновляем, если он открыт.
-    if (activeView === "recents") renderChannels(false);
-  }
   if (multiViewUi.isOpen) {
     multiViewUi.play(c);
+    rememberRecent(c);
     return true;
   }
   refreshNowHeader(c, archiveUrl); // единая точка обновления заголовка (#253)
@@ -1630,10 +1629,24 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
     showToast(refused);
     return false;
   }
+  // В «Недавние» — только реально запущенное: отказ плеера (DASH и т.п.)
+  // просмотром не считается (#356).
+  rememberRecent(c);
   // уровни/дорожки приходят асинхронно после парсинга манифеста
   qualityMenuUi.refreshQualityUi();
   renderChannels(false); // подсветка активного без сброса позиции
   return true;
+}
+
+/** recents: дедап по url, максимум RECENTS_MAX, хранение per-плейлист. */
+function rememberRecent(c: Channel): void {
+  recents = pushRecent(recents, c.url);
+  if (!plState.activeId) return;
+  try {
+    localStorage.setItem(recentsKey(plState.activeId), JSON.stringify(recents));
+  } catch { /* приватный режим */ }
+  // Раздел «Недавние» показывает этот список — обновляем, если он открыт.
+  if (activeView === "recents") renderChannels(false);
 }
 
 /** Переключить на соседний канал в текущем видимом списке (с зацикливанием). */
@@ -1840,7 +1853,8 @@ nowFav.addEventListener("click", () => {
 function focusedChannelIndex(): number {
   const t = document.activeElement;
   if (!(t instanceof HTMLElement)) return -1;
-  const index = t.dataset.resultIndex;
+  // Фокус живёт на .channel-hit внутри строки (#351) или на самой строке передачи.
+  const index = t.closest<HTMLElement>("[data-result-index]")?.dataset.resultIndex;
   return index === undefined ? -1 : Number(index);
 }
 
@@ -1850,7 +1864,8 @@ function focusChannelAt(index: number): void {
   const columns = catalogue ? columnsForWidth(channelList.clientWidth, 160) : CHANNEL_COLUMNS;
   channelList.scrollTop = Math.floor(index / columns) * (catalogue ? 260 : CHANNEL_ROW_HEIGHT);
   renderVirtualWindow();
-  channelList.querySelector<HTMLElement>(`[data-result-index="${index}"]`)?.focus();
+  const row = channelList.querySelector<HTMLElement>(`[data-result-index="${index}"]`);
+  (row?.querySelector<HTMLElement>(".channel-hit") ?? row)?.focus();
 }
 
 window.addEventListener("keydown", (e) => {
@@ -1858,6 +1873,8 @@ window.addEventListener("keydown", (e) => {
   const typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA";
   if (typing) {
     // Из поиска: ↓ уводит фокус в список — продолжить набор можно по «/».
+    // Отложенный рендер поиска применяем сразу, чтобы список был актуален.
+    if (e.key === "ArrowDown" && t === searchInput) searchRender.flush();
     if (e.key === "ArrowDown" && visibleResults.length > 0) {
       e.preventDefault();
       focusChannelAt(firstFocus(visibleResults.length)!);
@@ -2407,6 +2424,7 @@ function noteRecordingStop(): void {
 
 function renderRecordings(): void {
   scheduleUi?.render();
+  refreshDownloadUi();
   const list = loadRecordings(typeof localStorage !== "undefined" ? localStorage : null);
   // Раздел «Записи» — самостоятельный экран из сайдбара (см. VIEWS).
   const recordingsScreen = $("recordings-screen");
@@ -3136,33 +3154,13 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
         ? tr("guide.outsideArchive")
         : tr("guide.noArchive");
   }
-  if (stop <= now.getTime()) return row;
   const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
-  // Скачивание доступной из архива передачи (#315) — рядом с записью.
-  if (state === "past" && watchable && cu.source) {
-    const dl = document.createElement("button");
-    dl.type = "button";
-    dl.className = "btn btn-sm programme-download";
-    dl.textContent = tr("download.title");
-    dl.title = tr("download.title");
-    dl.addEventListener("click", () => {
-      const url = buildCatchupUrl(cu, p, new Date());
-      if (!url) {
-        showToast(tr("error.noArchive"));
-        return;
-      }
-      void downloadProgramme({
-        channelName: c.name,
-        channelUrl: c.url,
-        programme: p,
-        url,
-        fs: recordingsFs,
-        storage: localStorage,
-        notify: showToast,
-        onSaved: renderRecordings,
-      });
-    });
-    wrapper.append(dl);
+  if (stop <= now.getTime()) {
+    // Скачивание доступной из архива передачи (#315, #359). Раньше блок стоял
+    // после раннего return для прошедших передач и не рисовался вовсе.
+    if (!(watchable && cu.source)) return row;
+    wrapper.append(row, programmeDownloadButton(c, p, cu));
+    return wrapper;
   }
   const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
   record.textContent = tr("schedule.title");
@@ -3172,6 +3170,81 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
   const reminder = playlistId && reminderUi?.button(c, p, playlistId);
   if (reminder) wrapper.append(reminder);
   return wrapper;
+}
+
+/**
+ * Кнопка скачивания передачи из архива. Пока идёт скачивание этой передачи,
+ * кнопка показывает прогресс и отменяет его; другие кнопки ждут (#359).
+ */
+function programmeDownloadButton(c: Channel, p: EpgProgramme, cu: { days: number; source: string | null }): HTMLButtonElement {
+  const dl = document.createElement("button");
+  dl.type = "button";
+  dl.className = "btn btn-sm programme-download";
+  dl.dataset.downloadChannel = c.url;
+  dl.dataset.downloadStart = p.start;
+  dl.addEventListener("click", () => {
+    const current = downloadStatus();
+    if (current) {
+      if (current.channelUrl === c.url && current.start === p.start) cancelProgrammeDownload();
+      return;
+    }
+    const url = buildCatchupUrl(cu, p, new Date());
+    if (!url) {
+      showToast(tr("error.noArchive"));
+      return;
+    }
+    void downloadProgramme({
+      channelName: c.name,
+      channelUrl: c.url,
+      programme: p,
+      url,
+      fs: recordingsFs,
+      storage: localStorage,
+      notify: showToast,
+      onSaved: renderRecordings,
+      onStatus: refreshDownloadUi,
+    });
+  });
+  refreshDownloadButton(dl);
+  return dl;
+}
+
+function refreshDownloadButton(dl: HTMLButtonElement): void {
+  const current = downloadStatus();
+  const mine = current !== null && current.channelUrl === dl.dataset.downloadChannel && current.start === dl.dataset.downloadStart;
+  dl.disabled = current !== null && !mine;
+  dl.classList.toggle("downloading", mine);
+  dl.textContent = mine ? tr("download.progress", { pct: Math.floor(current.progress * 100) }) : tr("download.title");
+  dl.title = mine ? tr("download.cancel") : current ? tr("download.busy") : tr("download.title");
+  dl.setAttribute("aria-label", dl.title);
+}
+
+function cancelProgrammeDownload(): void {
+  cancelDownload();
+  showToast(tr("download.cancelled"));
+}
+
+/** Прогресс скачивания: кнопки в программе и строка в разделе «Записи». */
+function refreshDownloadUi(): void {
+  document.querySelectorAll<HTMLButtonElement>(".programme-download").forEach(refreshDownloadButton);
+  const box = $("download-status");
+  const current = downloadStatus();
+  box.hidden = current === null;
+  box.textContent = "";
+  if (!current) return;
+  const label = document.createElement("span");
+  label.className = "download-status-label ellipsis";
+  label.textContent = tr("download.status", { title: current.title, channel: current.channelName });
+  const bar = document.createElement("progress");
+  bar.max = 100;
+  bar.value = Math.floor(current.progress * 100);
+  bar.setAttribute("aria-label", label.textContent);
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn btn-sm download-cancel";
+  cancel.textContent = tr("download.cancel");
+  cancel.addEventListener("click", cancelProgrammeDownload);
+  box.append(label, bar, cancel);
 }
 
 /** Передачи текущего канала по телепрограмме, по времени начала. */
@@ -3728,7 +3801,14 @@ function renderFullscreenTitle(): void {
 document.addEventListener("fullscreenchange", renderFullscreenTitle);
 
 // ---------- Поиск ----------
-searchInput.addEventListener("input", () => renderChannels());
+// Поиск перерисовывает список после паузы в наборе (#357): каждая буква
+// иначе прогоняла весь EPG и пересобирала окно карточек.
+const SEARCH_DEBOUNCE_MS = 200;
+const searchRender = createDebounced(() => renderChannels(), SEARCH_DEBOUNCE_MS, {
+  set: (fn, ms) => window.setTimeout(fn, ms),
+  clear: (id) => window.clearTimeout(id),
+});
+searchInput.addEventListener("input", () => searchRender.schedule());
 
 // ---------- Недавно просмотренные ----------
 function loadRecentsFor(id: string): void {

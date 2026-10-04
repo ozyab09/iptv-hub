@@ -56,6 +56,21 @@ export function saveTheme(theme: Theme, storage: ThemeStorage): void {
 export function applyTheme(theme: Theme, doc: Document = document): void {
   doc.documentElement.dataset.theme = theme;
   doc.documentElement.style.colorScheme = theme;
+  syncThemeColor(doc);
+}
+
+/**
+ * Цвет статус-бара/тулбара браузера (meta theme-color) = фон текущей темы.
+ * Значение берётся из токена --bg, а не дублируется хексом (#360).
+ */
+function syncThemeColor(doc: Document): void {
+  const view = doc.defaultView;
+  if (!view) return;
+  const bg = view.getComputedStyle(doc.documentElement).getPropertyValue("--bg").trim();
+  if (!bg) return;
+  doc.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
+    meta.content = bg;
+  });
 }
 
 /** Синхронизировать иконку кнопки-переключателя: показывает целевую тему. */
