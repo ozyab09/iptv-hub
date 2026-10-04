@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -16,6 +16,8 @@ const root = (...p: string[]): string => join(here, "..", ...p);
 const components = readFileSync(root("src", "components.css"), "utf-8");
 const style = readFileSync(root("src", "style.css"), "utf-8");
 const mainTs = readFileSync(root("src", "main.ts"), "utf-8");
+// Виртуальный список каналов живёт в channel-list-ui.ts (#367).
+const listTs = readFileSync(root("src", "channel-list-ui.ts"), "utf-8");
 const html = readFileSync(root("index.html"), "utf-8");
 
 describe("правила дизайн-системы в выборе классов", () => {
@@ -70,11 +72,17 @@ describe("компонентные стили", () => {
 
   it("каждый класс дизайн-системы, который использует код, объявлен", () => {
     const used = new Set<string>();
-    for (const m of mainTs.matchAll(/className = "([^"]+)"/g)) {
-      for (const c of m[1]!.split(/\s+/)) used.add(c);
-    }
-    for (const m of mainTs.matchAll(/return "([a-z][a-z0-9 -]*)"/g)) {
-      for (const c of m[1]!.split(/\s+/)) used.add(c);
+    // main.ts и вынесенные из него DOM-модули (#364–#370).
+    const uiModules = ["channel-list-ui.ts", "guide-ui.ts", "recordings-ui.ts", "scrub-ui.ts", "backup-ui.ts", "screenshot-ui.ts"]
+      .filter((file) => existsSync(root("src", file)))
+      .map((file) => readFileSync(root("src", file), "utf-8"));
+    for (const source of [mainTs, ...uiModules]) {
+      for (const m of source.matchAll(/className = "([^"]+)"/g)) {
+        for (const c of m[1]!.split(/\s+/)) used.add(c);
+      }
+      for (const m of source.matchAll(/return "([a-z][a-z0-9 -]*)"/g)) {
+        for (const c of m[1]!.split(/\s+/)) used.add(c);
+      }
     }
     const missing = [...used].filter((c) => c && !known.has(c));
     expect(missing).toEqual([]);
@@ -119,7 +127,7 @@ describe("эмодзи не возвращаются через код", () => {
     /[\u{1F300}-\u{1FAFF}\u{2190}-\u{21FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{2460}-\u{24FF}\u{25A0}-\u{25FF}]/u;
 
   it("ни один строковый литерал в src/*.ts не содержит эмодзи", () => {
-    const sources = ["main.ts", "player.ts", "theme.ts", "icons.ts", "ui-classes.ts"];
+    const sources = ["main.ts", "channel-list-ui.ts", "guide-ui.ts", "player.ts", "theme.ts", "icons.ts", "ui-classes.ts"];
     const bad: string[] = [];
     for (const file of sources) {
       const text = readFileSync(root("src", file), "utf-8");
@@ -153,15 +161,15 @@ describe("виртуализация и вёрстка согласованы", 
   it("высота .row.channel-card совпадает с CHANNEL_ROW_HEIGHT", () => {
     // Виртуализация позиционирует строки арифметикой: разойдись эти числа,
     // и прокрутка поедет тем сильнее, чем длиннее список.
-    const fromJs = /const CHANNEL_ROW_HEIGHT = (\d+);/.exec(mainTs)?.[1];
+    const fromJs = /const CHANNEL_ROW_HEIGHT = (\d+);/.exec(listTs)?.[1];
     const fromCss = /\.row\.channel-card\s*\{[^}]*height:\s*(\d+)px/.exec(style)?.[1];
-    expect(fromJs, "константа не найдена в main.ts").toBeDefined();
+    expect(fromJs, "константа не найдена в channel-list-ui.ts").toBeDefined();
     expect(fromCss, "height не найден в style.css").toBeDefined();
     expect(fromCss).toBe(fromJs);
   });
 
   it("список каналов — одна колонка строк", () => {
-    expect(mainTs).toMatch(/const CHANNEL_COLUMNS = 1;/);
+    expect(listTs).toMatch(/const CHANNEL_COLUMNS = 1;/);
     expect(style).toMatch(/\.virtual-inner\s*\{[^}]*flex-direction:\s*column/);
   });
 });

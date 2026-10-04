@@ -1,5 +1,6 @@
 import "./style.css";
 import { createCatalogueCard } from "./catalogue-card";
+import { createChannelListUi } from "./channel-list-ui";
 import { resumeEpisode } from "./xtream-catalogue";
 import { parseExternalSubtitles, parseSubtitlePreference, subtitlePreferenceKey, type SubtitleCue } from "./external-subtitles";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
@@ -22,13 +23,7 @@ import {
   VIEWS,
   type View,
 } from "./views";
-import {
-  channelRowClass,
-  chipClass,
-  menuItemClass,
-  qualityBadgeClass,
-  starClass,
-} from "./ui-classes";
+import { chipClass, menuItemClass } from "./ui-classes";
 import { createRecordingSink } from "./recording-sink";
 import { createRecorderAdapter, createRecordingCapture } from "./recording-capture";
 import { createGuideUi } from "./guide-ui";
@@ -59,14 +54,9 @@ import { epgSourceUrls, epgSourcesInput } from "./epg-sources";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
 import { createDebounced } from "./debounce";
 import { DEFAULT_PLAYER_SETTINGS, PLAYER_SETTINGS_KEY, parsePlayerSettings, sanitizePlayerSettings } from "./player-settings";
-import {
-  computeWindow,
-  columnsForWidth,
-  spacerHeight,
-} from "./virtual-list";
-import { clock, isBehindLive, programmeProgress } from "./scrub";
+import { isBehindLive, programmeProgress } from "./scrub";
 import { createScrubUi } from "./scrub-ui";
-import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
+import { classifySwipe, isDoubleTap, tapSide } from "./gestures";
 import {
   loadPosition,
   savePosition,
@@ -477,16 +467,6 @@ function canNumericZap(): boolean {
  * мини-плеере и не когда панель скрыта.
  */
 export let visibleResults: (Channel | ProgrammeMatch)[] = [];
-
-/**
- * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
- * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
- * прокрутку. Тест сверяет оба значения.
- */
-const CHANNEL_ROW_HEIGHT = 72;
-
-/** Список каналов — одна колонка строк, как требует дизайн-система. */
-const CHANNEL_COLUMNS = 1;
 
 /** Недавно просмотренные (url → имя берём из snapshot при рендере). */
 let recents: string[] = [];
@@ -1208,58 +1188,41 @@ document.addEventListener("click", (e) => {
   }
 });
 
-// ---------- Рендер каналов (виртуализированный) ----------
-/** Карточки держим живыми только в видимом окне; остальное — спейсер. */
-let virtualSpacer: HTMLDivElement | null = null;
-let virtualInner: HTMLDivElement | null = null;
-
-function ensureVirtualShell(): void {
-  if (virtualInner) return;
-  virtualSpacer = document.createElement("div");
-  virtualSpacer.className = "virtual-spacer";
-  virtualInner = document.createElement("div");
-  virtualInner.className = "virtual-inner";
-  virtualSpacer.append(virtualInner);
-  channelList.append(virtualSpacer);
-  channelList.addEventListener("scroll", () => {
-    renderVirtualWindow();
-  });
-}
-
-function renderVirtualWindow(): void {
-  if (!virtualInner || !virtualSpacer) return;
-  const vh = channelList.clientHeight || 600;
-  const catalogue = (activeView === "movies" || activeView === "series") && !seriesEpisodes;
-  const columns = catalogue ? columnsForWidth(channelList.clientWidth, 160) : CHANNEL_COLUMNS;
-  const rowHeight = catalogue ? 260 : CHANNEL_ROW_HEIGHT;
-  virtualInner.dataset.catalogue = String(catalogue);
-  virtualInner.style.gridTemplateColumns = catalogue ? `repeat(${columns}, minmax(0, 1fr))` : "";
-  const win = computeWindow(
-    channelList.scrollTop,
-    vh,
-    visibleResults.length,
-    rowHeight,
-    undefined,
-    columns,
-  );
-  virtualSpacer.style.height = `${spacerHeight(visibleResults.length, rowHeight, columns)}px`;
-  virtualInner.style.transform = `translateY(${win.offset}px)`;
-  virtualInner.textContent = "";
-  const first = win.start * columns;
-  const last = Math.min(
-    visibleResults.length,
-    first + win.count * columns,
-  );
-  for (let i = first; i < last; i++) {
-    const c = visibleResults[i];
-    if (c) {
-      const row = "programme" in c ? renderProgrammeMatch(c) :
-        catalogue ? createCatalogueCard(document, c, () => { void playChannel(c); }) : renderChannelCard(c);
-      row.dataset.resultIndex = String(i);
-      virtualInner.append(row);
-    }
-  }
-}
+// ---------- Список каналов (виртуализированный) — src/channel-list-ui.ts (#367) ----------
+const channelListUi = createChannelListUi({
+  list: channelList,
+  results: () => visibleResults,
+  isCatalogue: () => (activeView === "movies" || activeView === "series") && !seriesEpisodes,
+  isFavoritesView: () => activeView === "favorites",
+  currentUrl: () => lastPlayed?.url ?? null,
+  isFavorite: (c) => isFavorite(favorites, c),
+  failure: (url) => channelHealth.get(url),
+  failureLabel: channelFailureLabel,
+  nowNext: (c) => (epg && snapshot ? getNowNext(epg, c, snapshot) : null),
+  language: () => currentLanguage,
+  toast: showToast,
+  play: (c) => void playChannel(c),
+  playProgramme: (match) => void (async () => {
+    const archive = programmeArchiveUrl(match);
+    const played = await playChannel(match.channel, archive ?? undefined, match.programme);
+    if (played && !archive && Date.parse(match.programme.start) > Date.now()) showToast(tr("guide.futureLive"));
+  })(),
+  toggleFavorite: (c) => {
+    favorites = toggleFavorite(favorites, c);
+    if (plState.activeId) saveFavoritesFor(plState.activeId);
+    refreshNowFav();
+    renderCategories();
+    renderChannels(false); // звезда не сбрасывает прокрутку (#349)
+  },
+  openEditor: openChannelEditor,
+  reorderFavorite,
+  playlistId: () => plState.activeId,
+  onDragStart: cancelNumericZap,
+  reminderButton: (match) => (plState.activeId ? reminderUi?.button(match.channel, match.programme, plState.activeId) ?? null : null),
+  catalogueCard: (c) => createCatalogueCard(document, c, () => { void playChannel(c); }),
+  setIcon,
+  canHover: () => window.matchMedia("(hover: hover)").matches,
+});
 
 // Поворот экрана / resize меняет ширину контейнера (число колонок) и питч —
 // пересчитываем окно, иначе спейсер остаётся со старой высотой и карточки
@@ -1267,7 +1230,7 @@ function renderVirtualWindow(): void {
 window.addEventListener("resize", () => {
   syncStatusBarAppearance();
   if (playerScreen.hidden) return;
-  renderVirtualWindow();
+  channelListUi.renderWindow();
 });
 
 function renderChannels(resetScroll = true): void {
@@ -1297,252 +1260,9 @@ function renderChannels(resetScroll = true): void {
   viewCount.textContent = groupDigits(visibleResults.length);
   emptyState.textContent = emptyMessage(activeView, q !== "", currentLanguage);
   emptyState.hidden = visibleResults.length > 0;
-  ensureVirtualShell();
-  // при смене фильтра сбрасываем прокрутку, чтобы окно пересчиталось с нуля
   renderContinue();
-  if (resetScroll) channelList.scrollTop = 0;
-  renderVirtualWindow();
+  channelListUi.render(resetScroll);
   if (!guideOverlay.hidden && guideUi.isGrid()) timelineGuideUi?.refresh();
-}
-
-/** Общая плитка: исходный логотип или монограмма, в том числе после ошибки. */
-function renderChannelLogo(c: Channel): HTMLSpanElement {
-  const logo = document.createElement("span");
-  logo.className = "logo sm";
-  logo.title = c.name;
-  const monogram = c.name.trim().slice(0, 2).toUpperCase();
-  logo.textContent = monogram;
-  if (c.logo) {
-    const img = document.createElement("img");
-    img.alt = "";
-    img.loading = "lazy";
-    img.addEventListener("error", () => { logo.textContent = monogram; }, { once: true });
-    img.src = c.logo;
-    logo.textContent = "";
-    logo.append(img);
-  }
-  return logo;
-}
-
-/** Результат поиска сохраняет высоту виртуальной строки канала. */
-function renderProgrammeMatch(match: ProgrammeMatch): HTMLElement {
-  const { channel, programme } = match;
-  const row = document.createElement("div");
-  row.tabIndex = 0;
-  row.className = channelRowClass(lastPlayed?.url === channel.url);
-  row.setAttribute("role", "listitem");
-  const logo = renderChannelLogo(channel);
-  const meta = document.createElement("span");
-  meta.className = "meta";
-  const name = document.createElement("span");
-  name.className = "t-strong ellipsis";
-  name.textContent = `${channel.name} · ${programme.title}`;
-  const time = document.createElement("span");
-  time.className = "row-now ellipsis muted num";
-  const date = new Date(programme.start).toLocaleDateString(currentLanguage, { day: "2-digit", month: "2-digit" });
-  time.textContent = `${date} · ${formatRange(programme, currentLanguage)}`;
-  meta.append(name, time);
-  row.append(logo, meta);
-  row.title = `${name.textContent} · ${time.textContent}`;
-  row.addEventListener("click", async () => {
-    const archive = programmeArchiveUrl(match);
-    const played = await playChannel(channel, archive ?? undefined, programme);
-    if (played && !archive && Date.parse(programme.start) > Date.now()) {
-      showToast(tr("guide.futureLive"));
-    }
-  });
-  row.addEventListener("keydown", (event) => {
-    if (event.target === row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); row.click(); }
-  });
-  const reminder = plState.activeId && reminderUi?.button(channel, programme, plState.activeId);
-  if (reminder) {
-    row.classList.add("programme-result");
-    row.append(reminder);
-  }
-  return row;
-}
-
-function renderChannelCard(c: Channel): HTMLElement {
-  // Карточка — контейнер, а не кнопка (#351): запуск канала — растянутая на
-  // всю строку кнопка .channel-hit, звезда и редактирование — соседние кнопки
-  // поверх неё. Так нет вложенных интерактивных элементов, а клик по любой
-  // точке строки по-прежнему запускает канал.
-  const card = document.createElement("div");
-  card.className = channelRowClass(lastPlayed?.url === c.url);
-  card.setAttribute("role", "listitem");
-  card.dataset.channelUrl = c.url; // для клавиатурной навигации (FR-8)
-  const hit = document.createElement("button");
-  hit.type = "button";
-  hit.className = "channel-hit";
-  hit.setAttribute("aria-label", c.name);
-  hit.title = c.url; // ссылка на поток при наведении
-  card.append(hit);
-  if (activeView === "favorites") {
-    card.draggable = true;
-    hit.title = tr("favorites.reorderHint");
-    hit.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
-    hit.addEventListener("keydown", (event) => {
-      if (!event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const channels = visibleResults.filter((row): row is Channel => !("programme" in row));
-      const index = channels.findIndex((channel) => channel.url === c.url);
-      const target = channels[index + (event.key === "ArrowUp" ? -1 : 1)];
-      if (target) reorderFavorite(c.url, target.url);
-    });
-    card.addEventListener("dragstart", (event) => {
-      if (!event.dataTransfer || event.target !== card) { event.preventDefault(); return; }
-      event.dataTransfer.setData("application/x-iptv-favorite", JSON.stringify({ playlistId: plState.activeId, url: c.url }));
-      event.dataTransfer.effectAllowed = "move";
-      cancelNumericZap();
-    });
-    card.addEventListener("dragover", (event) => {
-      if (!event.dataTransfer?.types.includes("application/x-iptv-favorite")) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-      card.classList.add("favorite-drop-target");
-    });
-    card.addEventListener("dragleave", () => card.classList.remove("favorite-drop-target"));
-    card.addEventListener("drop", (event) => {
-      event.preventDefault();
-      card.classList.remove("favorite-drop-target");
-      try {
-        const data = JSON.parse(event.dataTransfer?.getData("application/x-iptv-favorite") ?? "null");
-        if (data?.playlistId === plState.activeId && typeof data.url === "string") reorderFavorite(data.url, c.url);
-      } catch { /* Чужой drag payload. */ }
-    });
-    card.addEventListener("dragend", () => {
-      channelList.querySelectorAll(".favorite-drop-target").forEach((row) => row.classList.remove("favorite-drop-target"));
-    });
-  }
-  const failure = channelHealth.get(c.url);
-  card.classList.toggle("has-failure", failure !== undefined);
-
-  card.append(renderChannelLogo(c));
-
-  const meta = document.createElement("span");
-  meta.className = "meta";
-  const line = document.createElement("span");
-  line.className = "line";
-
-  const name = document.createElement("span");
-  name.className = "t-strong ellipsis";
-  name.textContent = c.name;
-  line.append(name);
-
-  if (failure) {
-    const badge = document.createElement("span");
-    badge.className = "channel-failure";
-    badge.textContent = "!";
-    badge.title = channelFailureLabel(failure);
-    badge.setAttribute("role", "img");
-    badge.setAttribute("aria-label", badge.title);
-    line.append(badge);
-  }
-
-  if (c.quality) {
-    const q = document.createElement("span");
-    q.className = qualityBadgeClass(c.quality);
-    q.textContent = c.quality;
-    line.append(q);
-  }
-  meta.append(line);
-
-  // Что идёт сейчас, сколько прошло и (на широком экране) что дальше:
-  // канал выбирают по передаче, а не по названию.
-  let nextText = "";
-  if (epg) {
-    const { now, next } = getNowNext(epg, c, snapshot!);
-    if (now) {
-      const e = document.createElement("span");
-      e.className = "row-now ellipsis";
-      const t = document.createElement("span");
-      t.className = "num muted";
-      t.textContent = clock(Date.parse(now.start), currentLanguage);
-      e.append(t, ` ${now.title}`);
-      meta.append(e);
-
-      const bar = document.createElement("span");
-      bar.className = "prog";
-      const fill = document.createElement("span");
-      fill.style.width = `${(programmeProgress(Date.now(), Date.parse(now.start), Date.parse(now.stop)) * 100).toFixed(1)}%`;
-      bar.append(fill);
-      meta.append(bar);
-    }
-    if (next) nextText = `${clock(Date.parse(next.start), currentLanguage)}  ${next.title}`;
-  }
-  card.append(meta);
-
-  const nextEl = document.createElement("span");
-  nextEl.className = "row-next ellipsis muted num";
-  nextEl.textContent = nextText;
-  card.append(nextEl);
-
-  const star = document.createElement("button");
-  const fav = isFavorite(favorites, c);
-  star.className = starClass(fav);
-  star.title = fav ? tr("favorites.remove") : tr("favorites.add");
-  star.setAttribute("aria-label", star.title);
-  setIcon(star, fav ? "star-on" : "star");
-  star.addEventListener("click", (ev) => {
-    ev.stopPropagation(); // не запускать воспроизведение
-    favorites = toggleFavorite(favorites, c);
-    if (plState.activeId) saveFavoritesFor(plState.activeId);
-    refreshNowFav();
-    renderCategories();
-    renderChannels(false); // звезда не сбрасывает прокрутку (#349)
-  });
-  const actions = document.createElement("span");
-  actions.className = "channel-actions";
-  const edit = document.createElement("button");
-  edit.className = "icon-btn";
-  edit.dataset.channelEdit = "";
-  edit.title = tr("channel.edit");
-  edit.setAttribute("aria-label", edit.title);
-  setIcon(edit, "edit");
-  edit.addEventListener("click", (event) => { event.stopPropagation(); openChannelEditor(c); });
-  actions.append(star, edit);
-  card.append(actions);
-  card.addEventListener("contextmenu", (event) => { event.preventDefault(); openChannelEditor(c); });
-
-  // Мини-превью: текстовый тост «сейчас в эфире» (issue #118). Никаких
-  // <video> — десяток одновременных декодеров убил бы мобильную батарею.
-  let pressT = 0;
-  let pressX = 0;
-  let pressY = 0;
-  const showPreview = (): void => {
-    if (!epg) return; // без телепрограммы превью не из чего собрать
-    const { now } = getNowNext(epg, c, snapshot!);
-    if (!now) return;
-    showToast(tr("guide.preview", { channel: c.name, title: now.title, time: clock(Date.parse(now.start), currentLanguage) }));
-  };
-  card.addEventListener("pointerdown", (ev) => {
-    if (ev.pointerType === "touch") {
-      pressT = Date.now();
-      pressX = ev.clientX;
-      pressY = ev.clientY;
-    }
-  });
-  card.addEventListener("pointerup", (ev) => {
-    if (ev.pointerType !== "touch" || pressT === 0) return;
-    const held = Date.now() - pressT;
-    pressT = 0;
-    const moved = Math.hypot(ev.clientX - pressX, ev.clientY - pressY);
-    if (isLongPress(held, moved)) {
-      ev.preventDefault();
-      showPreview();
-    }
-  });
-  card.addEventListener("pointercancel", () => {
-    pressT = 0;
-  });
-  // Мышь: обычный hover по карточке — на десктопе превью ничего не стоит.
-  card.addEventListener("mouseenter", () => {
-    if (window.matchMedia("(hover: hover)").matches) showPreview();
-  });
-
-  card.addEventListener("click", () => playChannel(c));
-  return card;
 }
 
 // ---------- Плеер ----------
@@ -1837,21 +1557,11 @@ nowFav.addEventListener("click", () => {
 // фокус уже на карточке канала (карточки — кнопки) или на поиске.
 // Математика фокуса — чистый модуль kbd-nav.ts.
 function focusedChannelIndex(): number {
-  const t = document.activeElement;
-  if (!(t instanceof HTMLElement)) return -1;
-  // Фокус живёт на .channel-hit внутри строки (#351) или на самой строке передачи.
-  const index = t.closest<HTMLElement>("[data-result-index]")?.dataset.resultIndex;
-  return index === undefined ? -1 : Number(index);
+  return channelListUi.focusedIndex();
 }
 
 function focusChannelAt(index: number): void {
-  if (!visibleResults[index]) return;
-  const catalogue = (activeView === "movies" || activeView === "series") && !seriesEpisodes;
-  const columns = catalogue ? columnsForWidth(channelList.clientWidth, 160) : CHANNEL_COLUMNS;
-  channelList.scrollTop = Math.floor(index / columns) * (catalogue ? 260 : CHANNEL_ROW_HEIGHT);
-  renderVirtualWindow();
-  const row = channelList.querySelector<HTMLElement>(`[data-result-index="${index}"]`);
-  (row?.querySelector<HTMLElement>(".channel-hit") ?? row)?.focus();
+  channelListUi.focusAt(index);
 }
 
 window.addEventListener("keydown", (e) => {
@@ -2412,7 +2122,7 @@ function setListCollapsed(on: boolean): void {
   appEl.classList.toggle("list-collapsed", on);
   btnRestorePanel.hidden = !on;
   updateMenuToggle();
-  if (!on) renderVirtualWindow();
+  if (!on) channelListUi.renderWindow();
   if (moveFocus && !on) btnCollapseList.focus();
   try {
     localStorage.setItem(LIST_COLLAPSED_KEY, on ? "1" : "0");
