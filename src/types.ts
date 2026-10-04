@@ -8,6 +8,11 @@ export interface Channel {
   url: string;
   /** Дополнительные URL того же канала, в порядке автоматического переключения. */
   mirrors?: string[];
+  /** Опциональный каталог Xtream; отсутствие означает live-канал. */
+  mediaKind?: "movie" | "series" | "episode";
+  seriesId?: string;
+  season?: number;
+  episode?: number;
   /** tvg-id из #EXTINF, если был. */
   tvgId: string | null;
   /** tvg-logo из #EXTINF, если был. */

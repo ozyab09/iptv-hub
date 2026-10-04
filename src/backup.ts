@@ -4,7 +4,7 @@
  */
 
 import { parseBackupSections, type BackupSections } from "./backup-sections";
-import { loadPlaylists, PLAYLISTS_KEY } from "./playlists";
+import { loadPlaylists, PLAYLISTS_KEY, type Playlist } from "./playlists";
 import { parseLocalPlaylistFiles, type LocalPlaylistFiles } from "./backup-local";
 export type { BackupSections } from "./backup-sections";
 
@@ -13,7 +13,7 @@ export interface Backup extends BackupSections {
   version: 1 | 2;
   exportedAt: string;
   theme: string;
-  playlists: { id: string; name: string; playlistUrl: string; epgUrl: string | null }[];
+  playlists: Playlist[];
   activeId: string | null;
   favorites: Record<string, string[]>;
   /** «Недавние» per-плейлист (URL-ы, до RECENTS_MAX). Опционально: старые файлы его не содержат. */
@@ -23,7 +23,7 @@ export interface Backup extends BackupSections {
 export interface BackupInput extends BackupSections {
   localPlaylists?: LocalPlaylistFiles;
   theme: string;
-  playlists: { id: string; name: string; playlistUrl: string; epgUrl: string | null }[];
+  playlists: Playlist[];
   activeId: string | null;
   favorites: Record<string, string[]>;
   recents?: Record<string, string[]>;

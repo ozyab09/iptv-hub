@@ -170,6 +170,19 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
         const hostIn = source ? mk("playlist.xtreamHost", source.host, "url") : null;
         const userIn = source ? mk("playlist.xtreamUser", source.username) : null;
         const passwordIn = source ? mk("playlist.xtreamPassword", source.password, "password") : null;
+        let vodInput: HTMLInputElement | null = null;
+        if (source) {
+          const label = document.createElement("label");
+          label.className = "set-note";
+          vodInput = document.createElement("input");
+          vodInput.type = "checkbox";
+          vodInput.checked = p.xtreamVod === true;
+          const text = document.createElement("span");
+          text.dataset.i18n = "playlist.xtreamVod";
+          text.textContent = t("playlist.xtreamVod", lang());
+          label.append(vodInput, text);
+          form.append(label);
+        }
         const epgIn = mk("playlist.epgOptional", source && p.epgUrl === xtreamEpgUrl(source) ? "" : p.epgUrl ?? "", "url");
         const btns = document.createElement("div");
         btns.className = "pl-edit-actions";
@@ -211,6 +224,7 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
             name: newName || p.name,
             playlistUrl: newUrl,
             epgUrl: newEpg || null,
+            ...(source ? { xtreamVod: vodInput?.checked === true } : {}),
           });
           savePlaylists(storage, state);
           deps.stateChanged(state);

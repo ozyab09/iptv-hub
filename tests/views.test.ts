@@ -53,9 +53,11 @@ describe("hidden groups", () => {
 });
 
 describe("состав разделов", () => {
-  it("пять разделов в порядке дизайн-системы", () => {
+  it("основные разделы и опциональный каталог", () => {
     expect(VIEWS.map((v) => v.id)).toEqual([
       "channels",
+      "movies",
+      "series",
       "favorites",
       "recents",
       "recordings",
@@ -63,6 +65,8 @@ describe("состав разделов", () => {
     ]);
     expect(VIEWS.map((v) => v.label)).toEqual([
       "Каналы",
+      "Фильмы",
+      "Сериалы",
       "Избранное",
       "Недавние",
       "Записи",

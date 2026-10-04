@@ -2,6 +2,13 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "playlist.xtreamVod": "Включить фильмы и сериалы",
+  "catalogue.movies": "Фильмы",
+  "catalogue.series": "Сериалы",
+  "catalogue.nextEpisode": "Следующая серия",
+  "catalogue.backSeries": "Назад к сериалам",
+  "catalogue.loading": "Загрузка фильмов и сериалов…",
+  "catalogue.episodes": "Загрузка эпизодов…",
   "player.subtitlesFile": "Субтитры из файла",
   "player.subtitlesInvalid": "Не удалось прочитать субтитры SRT/VTT",
   "player.subtitlesLastFile": "Субтитры из файла (выберите снова: {name})",
@@ -355,6 +362,13 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "playlist.xtreamVod": "Include movies and series",
+  "catalogue.movies": "Movies",
+  "catalogue.series": "Series",
+  "catalogue.nextEpisode": "Next episode",
+  "catalogue.backSeries": "Back to series",
+  "catalogue.loading": "Loading movies and series…",
+  "catalogue.episodes": "Loading episodes…",
   "player.subtitlesFile": "Subtitles from file",
   "player.subtitlesInvalid": "Could not read SRT/VTT subtitles",
   "player.subtitlesLastFile": "Subtitles from file (select again: {name})",

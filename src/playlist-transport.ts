@@ -7,6 +7,8 @@
 import type { LocalFs } from "./local-playlist";
 import { loadLocalPlaylist } from "./local-playlist";
 import { parseM3U } from "./m3u";
+import { parseXtreamCatalogue, parseXtreamEpisodes } from "./xtream-catalogue";
+import type { Channel } from "./types";
 import type { PlaylistSnapshot } from "./types";
 import { isMixedContent } from "./config";
 import { t, type Language } from "./i18n";
@@ -55,7 +57,8 @@ export interface Transport {
    * устройство), http(s) — fetch с проверкой статуса и разбором M3U.
    * Ошибки бросаются с уже переведённым сообщением.
    */
-  loadPlaylist(url: string): Promise<PlaylistSnapshot>;
+  loadPlaylist(url: string, includeVod?: boolean): Promise<PlaylistSnapshot>;
+  loadSeries(url: string, series: Channel): Promise<Channel[]>;
   /**
    * Подсказка по причине сетевого сбоя: смешанный контент или CORS.
    * Точная причина от плеера главнее: она знает, что уже предпринято
@@ -106,7 +109,7 @@ export function createOpfsFs(storage: OpfsStorageLike | null | undefined): () =>
 /** Собрать транспорт из зависимостей. */
 export function createTransport(deps: TransportDeps): Transport {
   return {
-    async loadPlaylist(url) {
+    async loadPlaylist(url, includeVod = false) {
       // Локальный источник: маркер local:<id> — читаем содержимое из OPFS.
       // Оборачиваем в тот же таймаут, что и http (#344): зависший OPFS
       // не должен оставлять «Загрузка плейлиста…» навсегда.
@@ -129,14 +132,24 @@ export function createTransport(deps: TransportDeps): Transport {
         return await withSourceTimeout(async (signal) => {
           const xtream = readXtreamUrl(url);
           if (xtream) {
-            const read = async (action: "get_live_streams" | "get_live_categories"): Promise<unknown> => {
+            const read = async (action: Parameters<typeof xtreamApiUrl>[1]): Promise<unknown> => {
               const response = await doFetch(xtreamApiUrl(xtream, action), { signal });
               if (!response.ok) throw new Error(t("error.httpPlaylist", deps.language(), { status: response.status }));
               try { return await response.json(); }
               catch { throw new Error(t("error.xtreamResponse", deps.language())); }
             };
             const [streams, categories] = await Promise.all([read("get_live_streams"), read("get_live_categories")]);
-            try { return parseXtream(xtream, streams, categories); }
+            let snapshot: PlaylistSnapshot;
+            try { snapshot = parseXtream(xtream, streams, categories); }
+            catch { throw new Error(t("error.xtreamResponse", deps.language())); }
+            if (!includeVod) return snapshot;
+            const [movies, movieGroups, series, seriesGroups] = await Promise.all([
+              read("get_vod_streams"), read("get_vod_categories"), read("get_series"), read("get_series_categories"),
+            ]);
+            try {
+              const channels = [...snapshot.channels, ...parseXtreamCatalogue(xtream, "movie", movies, movieGroups), ...parseXtreamCatalogue(xtream, "series", series, seriesGroups)];
+              return { ...snapshot, channels, categories: [...new Set(channels.map((channel) => channel.group))].sort() };
+            }
             catch { throw new Error(t("error.xtreamResponse", deps.language())); }
           }
           const resp = await doFetch(url, { signal });
@@ -146,6 +159,21 @@ export function createTransport(deps: TransportDeps): Transport {
             // не фейлимся: некоторые бакеты отдают text/plain
           }
           return parseM3U(await resp.text());
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "TimeoutError") throw new Error(t("error.sourceTimeout", deps.language()));
+        throw error;
+      }
+    },
+    async loadSeries(url, series) {
+      const source = readXtreamUrl(url);
+      if (!source || !series.seriesId) throw new Error(t("error.xtreamResponse", deps.language()));
+      try {
+        return await withSourceTimeout(async (signal) => {
+          const response = await (deps.fetch ?? fetch)(xtreamApiUrl(source, "get_series_info", series.seriesId), { signal });
+          if (!response.ok) throw new Error(t("error.httpPlaylist", deps.language(), { status: response.status }));
+          try { return parseXtreamEpisodes(source, series, await response.json()); }
+          catch { throw new Error(t("error.xtreamResponse", deps.language())); }
         });
       } catch (error) {
         if (error instanceof Error && error.name === "TimeoutError") throw new Error(t("error.sourceTimeout", deps.language()));

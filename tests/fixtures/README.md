@@ -14,3 +14,10 @@ ffmpeg -i recording.mp4 -vn -c:a copy -f mpegts radio.mpegts
 WebM использует VP8 + Opus и содержит длительность в контейнере.
 `radio.mpegts` содержит только синтетический тон AAC без видеодорожки,
 для проверки восстановления аудиоканалов HLS.
+
+`catalogue.mp4` повторяет синтетическую четырёхсекундную запись до 60 секунд
+для проверки продолжения VOD (сохранённая позиция 20 секунд):
+
+```sh
+ffmpeg -stream_loop 14 -i recording.mp4 -t 60 -c copy -movflags +faststart catalogue.mp4
+```
