@@ -33,6 +33,23 @@ describe("searchProgrammes", () => {
   it.each(["???", " — … , : «» ", "\t\n\u00a0"])("не выводит все передачи для пустого запроса «%s»", (query) => {
     expect(searchProgrammes([channel], epg, query)).toEqual([]);
   });
+  it("повторные и пошаговые запросы по тому же EPG дают те же результаты (#357)", () => {
+    const list = Array.from({ length: 50 }, (_, i) => ({
+      ...programme,
+      title: i % 5 === 0 ? `Футбол ${i}` : `Новости ${i}`,
+      start: new Date(Date.parse(programme.start) + i * 3600_000).toISOString(),
+      stop: new Date(Date.parse(programme.stop) + i * 3600_000).toISOString(),
+    }));
+    const data = new Map([["id:sport", list]]);
+    const first = searchProgrammes([channel], data, "футбол");
+    expect(first).toHaveLength(10);
+    // кэш нормализации не влияет на другие запросы и на повтор того же
+    for (const prefix of ["ф", "фу", "фут", "футб", "футбо"]) {
+      expect(searchProgrammes([channel], data, prefix)).toHaveLength(10);
+    }
+    expect(searchProgrammes([channel], data, "новости")).toHaveLength(40);
+    expect(searchProgrammes([channel], data, "футбол")).toEqual(first);
+  });
   it("пунктуация разделяет слова, не склеивая их", () => {
     expect(searchProgrammes([channel], epg, "футболфинал")).toEqual([]);
   });

@@ -56,6 +56,7 @@ import { validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtream";
 import { createOpfsFs, createTransport, type Transport } from "./playlist-transport";
 import { formatRange, getNowNext, loadEpg } from "./epg";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
+import { createDebounced } from "./debounce";
 import { DEFAULT_PLAYER_SETTINGS, PLAYER_SETTINGS_KEY, parsePlayerSettings, sanitizePlayerSettings } from "./player-settings";
 import {
   computeWindow,
@@ -1869,6 +1870,8 @@ window.addEventListener("keydown", (e) => {
   const typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA";
   if (typing) {
     // Из поиска: ↓ уводит фокус в список — продолжить набор можно по «/».
+    // Отложенный рендер поиска применяем сразу, чтобы список был актуален.
+    if (e.key === "ArrowDown" && t === searchInput) searchRender.flush();
     if (e.key === "ArrowDown" && visibleResults.length > 0) {
       e.preventDefault();
       focusChannelAt(firstFocus(visibleResults.length)!);
@@ -3739,7 +3742,14 @@ function renderFullscreenTitle(): void {
 document.addEventListener("fullscreenchange", renderFullscreenTitle);
 
 // ---------- Поиск ----------
-searchInput.addEventListener("input", () => renderChannels());
+// Поиск перерисовывает список после паузы в наборе (#357): каждая буква
+// иначе прогоняла весь EPG и пересобирала окно карточек.
+const SEARCH_DEBOUNCE_MS = 200;
+const searchRender = createDebounced(() => renderChannels(), SEARCH_DEBOUNCE_MS, {
+  set: (fn, ms) => window.setTimeout(fn, ms),
+  clear: (id) => window.clearTimeout(id),
+});
+searchInput.addEventListener("input", () => searchRender.schedule());
 
 // ---------- Недавно просмотренные ----------
 function loadRecentsFor(id: string): void {
