@@ -50,7 +50,7 @@ describe("quoted EXTINF commas", () => {
     expect(result.channels[0]!.group).toBe("News, Talk");
   });
   it("round trips comma-containing attributes and names through favorites export", () => {
-    const channel = parseM3U('#EXTINF:-1 tvg-id="x" group-title="News, Talk",My Channel, Talk\nhttps://fixture.test/live.m3u8\n').channels[0]!;
+    const channel = parseM3U('#EXTINF:-1 tvg-id="x" tvg-logo="https://fixture.test/logo,a.png" group-title="News, Talk",My Channel, Talk\nhttps://fixture.test/live.m3u8\n').channels[0]!;
     const exported = buildFavoritesM3U([channel], new Set([channel.url]));
     expect(parseM3U(exported).channels).toEqual([channel]);
   });
