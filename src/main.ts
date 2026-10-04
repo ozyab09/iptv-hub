@@ -95,11 +95,7 @@ import {
   looksLikeM3U,
   saveLocalPlaylist,
 } from "./local-playlist";
-import {
-  describeShotFailure,
-  screenshotFileName,
-  type ShotFailure,
-} from "./screenshot";
+import { createScreenshotUi } from "./screenshot-ui";
 import {
   initialSleepState,
   sleepCancel,
@@ -1997,11 +1993,7 @@ window.addEventListener("keydown", (e) => {
   ) {
     if (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "ы") {
       if (playerBar.hidden) return;
-      try {
-        takeScreenshot();
-      } catch {
-        showToast(describeShotFailure("tainted"));
-      }
+      screenshotUi.take();
       return;
     }
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -2961,51 +2953,14 @@ function startRecording(): void {
   if (recSession.isRecording() && recordPathNote) showToast(recordPathNote);
 }
 
-// ---------- Скриншот кадра (FR-14) ----------
-// drawImage(<video>) → PNG. Через MSE кадр не «запачкан», у нативных
-// cross-origin потоков без CORS канвас tainted — браузер бросит при toBlob,
-// честно сообщаем об ограничении. Логика имён/ошибок — src/screenshot.ts.
-function takeScreenshot(): void {
-  if (!lastPlayed) return;
-  const frame = multiViewUi.activeVideo ?? videoEl;
-  if (!frame.videoWidth) {
-    showToast(describeShotFailure("empty"));
-    return;
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = frame.videoWidth;
-  canvas.height = frame.videoHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.drawImage(frame, 0, 0);
-  const fail = (reason: ShotFailure): void => showToast(describeShotFailure(reason));
-  canvas.toBlob(
-    (blob) => {
-      if (!blob) {
-        fail("tainted");
-        return;
-      }
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = screenshotFileName(lastPlayed!.name, new Date());
-      document.body.append(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-      showToast(tr("player.screenshotSaved"));
-    },
-    "image/png",
-    // toBlob для tainted-канваса кидает SecurityError синхронно в некоторых
-    // браузерах, в других даёт null — покрыты оба варианта.
-  );
-}
-
-try {
-  // Обёртка try: SecurityError от toBlob может прилететь синхронно.
-  btnShot.addEventListener("click", takeScreenshot);
-} catch {
-  showToast(describeShotFailure("tainted"));
-}
+// ---------- Скриншот кадра (FR-14) — src/screenshot-ui.ts (#364) ----------
+const screenshotUi = createScreenshotUi({
+  button: btnShot,
+  frame: () => multiViewUi.activeVideo ?? videoEl,
+  channelName: () => lastPlayed?.name ?? null,
+  toast: showToast,
+  savedMessage: () => tr("player.screenshotSaved"),
+});
 
 // Единый toggle: старт из idle, стоп+сохранение из recording.
 // (Раньше здесь жили два обработчика — addEventListener + onclick — и оба

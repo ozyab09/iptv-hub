@@ -29,6 +29,8 @@
 1. **Скриншот кадра** (~2671–2765: `takeScreenshot`, кнопка, хоткей)
    → `screenshot-ui.ts`. Зависимости: `videoEl`, `multiViewUi`, toast, i18n.
    Самая маленькая и автономная единица — хороший «пилот» паттерна.
+   **Сделано в #364:** хоткей остался в main.ts под `canHotkey()` и вызывает
+   `screenshotUi.take()`.
 2. **Библиотека записей + скачивание** (~2161–2393: `renderRecordings`,
    `playRecording`, `saveRecording`, `offerDownload`, `saveToLibrary`)
    → `recordings-ui.ts`. Контракт воспроизведения (`Player.playRecording`)
