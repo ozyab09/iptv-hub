@@ -58,3 +58,29 @@ export function localProxyUrl(url: string, pageUrl: string): string | null {
 export function viaLocalProxy(url: string, pageUrl: string): string {
   return localProxyUrl(url, pageUrl) ?? url;
 }
+
+/**
+ * Прокси-адрес для загрузки данных (плейлист, EPG, API Xtream): как
+ * localProxyUrl, но с сопряжённым компаньоном через него идут и https-URL —
+ * провайдер может не отдавать CORS-заголовки, а браузер без них не может
+ * прочитать ответ; компаньон ставит их сам. Потоки https остаются прямыми:
+ * если CDN отдаёт CORS, прокси не нужен, а гнать все сегменты через 127.0.0.1
+ * нет смысла. В Android-приложении https остаётся прямым — его прокси решает
+ * только задачу http-источников (#452).
+ */
+export function localDataProxyUrl(url: string, pageUrl: string): string | null {
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return null;
+  }
+  if (isPrivateHost(target.hostname)) return null;
+  if (target.protocol === "https:") return companion ? companionProxyUrl(target, companion) : null;
+  return localProxyUrl(url, pageUrl);
+}
+
+/** URL для загрузки данных: через прокси, если он нужен, иначе исходный. */
+export function viaDataProxy(url: string, pageUrl: string): string {
+  return localDataProxyUrl(url, pageUrl) ?? url;
+}
