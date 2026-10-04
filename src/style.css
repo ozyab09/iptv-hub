@@ -1538,3 +1538,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
     bottom: calc(var(--tabbar-h) + 84px + env(safe-area-inset-bottom, 0px));
   }
 }
+video::cue {
+  color: #fff;
+  background-color: #000c;
+}

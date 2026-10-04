@@ -8,6 +8,7 @@ import { t, type Language, type TranslationKey, type TranslationParams } from ".
 import { createMirrorState, nextMirror, type MirrorState } from "./channel-mirrors";
 import { mobileQualityCap, needsMobileQualityCap, type ConnectionInfo } from "./mobile-quality";
 import { createAudioGraph, volumePlan } from "./audio-graph";
+import { subtitleCueText, type SubtitleCue } from "./external-subtitles";
 
 export type NetworkConnection = EventTarget & ConnectionInfo;
 export function getNetworkConnection(): NetworkConnection | null {
@@ -28,6 +29,8 @@ const MAX_NETWORK_RETRIES = 3;
  */
 export class Player {
   private video: HTMLVideoElement;
+  private externalTrack: TextTrack | null = null;
+  private externalTrackName: string | null = null;
   private hls: Hls | null = null;
   private currentUrl: string | null = null;
   private mirrorState: MirrorState | null = null;
@@ -420,6 +423,7 @@ export class Player {
   }
 
   private stopMedia(): void {
+    this.clearExternalSubtitles();
     this.audioGraph.teardown();
     this.video.volume = Math.min(1, this.requestedVolume);
     this.connection?.removeEventListener("change", this.refreshMobileQuality);
@@ -458,7 +462,33 @@ export class Player {
 
   /** Выбрать субтитры; -1 = выключены. */
   setSubtitleTrack(index: number): void {
+    this.setExternalSubtitleEnabled(false);
     if (this.hls) this.hls.subtitleTrack = index;
+  }
+
+  loadExternalSubtitles(cues: readonly SubtitleCue[], name: string, enabled = true): void {
+    this.clearExternalSubtitles();
+    const track = this.externalTrack ??= this.video.addTextTrack("subtitles", "External");
+    this.externalTrackName = name;
+    for (const cue of cues) track.addCue(new VTTCue(cue.start, cue.end, subtitleCueText(cue.text)));
+    this.setExternalSubtitleEnabled(enabled);
+  }
+
+  setExternalSubtitleEnabled(enabled: boolean): void {
+    if (this.externalTrack) this.externalTrack.mode = enabled ? "showing" : "disabled";
+    if (enabled && this.hls) this.hls.subtitleTrack = -1;
+  }
+
+  get externalSubtitle(): { name: string; enabled: boolean } | null {
+    return this.externalTrackName ? { name: this.externalTrackName, enabled: this.externalTrack?.mode === "showing" } : null;
+  }
+
+  private clearExternalSubtitles(): void {
+    this.externalTrackName = null;
+    if (!this.externalTrack) return;
+    this.externalTrack.mode = "hidden";
+    for (const cue of Array.from(this.externalTrack.cues ?? [])) this.externalTrack.removeCue(cue);
+    this.externalTrack.mode = "disabled";
   }
 
   /** Текущий URL потока (после https-апгрейда) — для диагностики фатальных ошибок. */

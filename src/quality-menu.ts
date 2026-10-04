@@ -37,6 +37,8 @@ export interface QualityPlayerAdapter {
   setLevel(index: number): void;
   setAudioTrack(index: number): void;
   setSubtitleTrack(index: number): void;
+  readonly externalSubtitle?: { name: string; enabled: boolean } | null;
+  setExternalSubtitleEnabled?(enabled: boolean): void;
 }
 
 export interface QualityMenuNodes {
@@ -57,6 +59,9 @@ export interface QualityMenuDeps {
   player: QualityPlayerAdapter;
   nodes: QualityMenuNodes;
   isRecordingPlayback(): boolean;
+  canLoadExternalSubtitles?(): boolean;
+  loadExternalSubtitles?(): void;
+  selectExternalSubtitles?(enabled: boolean): void;
   /** Разрешение и состояние видео — для статус-бара нативного playback. */
   videoSize(): { width: number; height: number };
   /** Фабрика элементов меню (в браузере — document.createElement). */
@@ -78,19 +83,55 @@ export function createQualityMenu(deps: QualityMenuDeps) {
   }
 
   /** Перестроить селект качества + дорожки после смены канала. */
+  function refreshSubtitleUi(hls: HlsLike | null): void {
+    const tracks = hls?.subtitleTracks ?? [];
+    const external = player.externalSubtitle;
+    const canLoad = deps.canLoadExternalSubtitles?.() ?? false;
+    nodes.subtitleWrap.hidden = tracks.length === 0 && !external && !canLoad;
+    const selectExternal = (enabled: boolean) => {
+      if (deps.selectExternalSubtitles) deps.selectExternalSubtitles(enabled);
+      else player.setExternalSubtitleEnabled?.(enabled);
+    };
+    const item = (label: string, active: boolean, select: () => void) => {
+      const button = deps.createButton();
+      button.textContent = label;
+      button.className = menuItemClass(active);
+      button.setAttribute("role", "option");
+      button.addEventListener("click", () => {
+        select();
+        refreshQualityUi();
+        nodes.subtitleMenu.hidden = true;
+        nodes.subtitleBtn.setAttribute("aria-expanded", "false");
+      });
+      nodes.subtitleMenu.append(button);
+    };
+    if (tracks.length || external) {
+      item(t("player.subtitlesOff", deps.language?.() ?? "ru"), !external?.enabled && (hls?.subtitleTrack ?? -1) === -1, () => {
+        player.setSubtitleTrack(-1);
+        selectExternal(false);
+      });
+    }
+    tracks.forEach((track, index) => item(trackLabel(track, index), !external?.enabled && index === hls?.subtitleTrack, () => {
+      selectExternal(false);
+      player.setSubtitleTrack(index);
+    }));
+    if (external) item(external.name, external.enabled, () => selectExternal(true));
+    if (canLoad) item(t("player.subtitlesFile", deps.language?.() ?? "ru"), false, () => deps.loadExternalSubtitles?.());
+  }
+
   function refreshQualityUi(): void {
     refreshQualityAvailability();
     const hls = player.getHls();
     nodes.qualityMenu.textContent = "";
     nodes.audioMenu.textContent = "";
     nodes.subtitleMenu.textContent = "";
+    refreshSubtitleUi(hls);
 
     if (!hls) {
       // нативный playback (Safari/iOS, mp4): выбор качества/дорожек недоступен
       nodes.qualityBtn.textContent = "Auto";
       nodes.qualityMenu.hidden = true;
       nodes.audioWrap.hidden = true;
-      nodes.subtitleWrap.hidden = true;
       const { width, height } = deps.videoSize();
       nodes.playerStatus.textContent = width
         ? formatStatus({ resolution: formatResolution(width, height), bitrate: "—" })
@@ -146,28 +187,6 @@ export function createQualityMenu(deps: QualityMenuDeps) {
       nodes.audioBtn.title = `Аудиодорожка: ${trackLabel(audioTracks[hls.audioTrack] ?? {}, hls.audioTrack)}`;
     }
 
-    const subTracks = hls.subtitleTracks ?? [];
-    nodes.subtitleWrap.hidden = subTracks.length === 0;
-    if (subTracks.length > 0) {
-      const off = deps.createButton();
-      off.className = menuItemClass(hls.subtitleTrack === -1);
-      off.textContent = t("player.subtitlesOff", deps.language?.() ?? "ru");
-      off.addEventListener("click", () => {
-        player.setSubtitleTrack(-1);
-        nodes.subtitleMenu.hidden = true;
-      });
-      nodes.subtitleMenu.append(off);
-      subTracks.forEach((t, i) => {
-        const b = deps.createButton();
-        b.className = menuItemClass(i === hls.subtitleTrack);
-        b.textContent = trackLabel(t, i);
-        b.addEventListener("click", () => {
-          player.setSubtitleTrack(i);
-          nodes.subtitleMenu.hidden = true;
-        });
-        nodes.subtitleMenu.append(b);
-      });
-    }
   }
 
   /** Обновить статус-бар: разрешение + текущий битрейт (при смене уровня). */

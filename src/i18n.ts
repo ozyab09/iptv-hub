@@ -2,6 +2,9 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "player.subtitlesFile": "Субтитры из файла",
+  "player.subtitlesInvalid": "Не удалось прочитать субтитры SRT/VTT",
+  "player.subtitlesLastFile": "Субтитры из файла (выберите снова: {name})",
   "refresh.updatedPlain": "Плейлист обновлён",
   "refresh.httpDropped": "Скрыто http-каналов: {count}",
   "common.close": "Закрыть",
@@ -353,6 +356,9 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "player.subtitlesFile": "Subtitles from file",
+  "player.subtitlesInvalid": "Could not read SRT/VTT subtitles",
+  "player.subtitlesLastFile": "Subtitles from file (select again: {name})",
   "refresh.updatedPlain": "Playlist updated",
   "refresh.httpDropped": "Hidden HTTP channels: {count}",
   "common.close": "Close",

@@ -94,6 +94,33 @@ function makeUi(h: HlsLike | null, isRecordingPlayback = () => false) {
   return { ui, nodes, player };
 }
 
+it("offers file subtitles and toggles an external track without HLS", () => {
+  const nodes = makeNodes();
+  const external = { name: "local.srt", enabled: true };
+  let selectedFile = false;
+  const ui = createQualityMenu({
+    player: { ...makePlayer(null), externalSubtitle: external, setExternalSubtitleEnabled: (enabled) => { external.enabled = enabled; } },
+    nodes,
+    language: () => "en",
+    isRecordingPlayback: () => true,
+    canLoadExternalSubtitles: () => true,
+    loadExternalSubtitles: () => { selectedFile = true; },
+    videoSize: () => ({ width: 160, height: 90 }),
+    createButton: () => el("button"),
+  });
+  ui.refreshQualityUi();
+  expect(nodes.subtitleWrap.hidden).toBe(false);
+  expect(nodes.qualityBtn.disabled).toBe(true);
+  const items = Array.from(nodes.subtitleMenu.children) as HTMLButtonElement[];
+  expect(items.map((item) => item.textContent)).toEqual(["Off", "local.srt", "Subtitles from file"]);
+  items[0]!.click();
+  expect(external.enabled).toBe(false);
+  items[1]!.click();
+  expect(external.enabled).toBe(true);
+  items[2]!.click();
+  expect(selectedFile).toBe(true);
+});
+
 describe("createQualityMenu: hls есть", () => {
   it("не включает качество записи после событий HLS и восстанавливает его для эфира", () => {
     let recording = false;
