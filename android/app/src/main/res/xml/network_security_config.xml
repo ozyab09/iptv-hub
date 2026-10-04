@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Прокси приложения (#452) загружает http-плейлисты и потоки провайдеров
+     через HttpURLConnection; Android 9+ без этого блокирует cleartext.
+     Сама страница остаётся на https-origin, mixed content не разрешается. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

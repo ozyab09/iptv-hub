@@ -41,6 +41,7 @@ dependencies {
     implementation 'androidx.core:core:1.13.1'
     // WebViewAssetLoader: локальный https-origin для зашитых в APK ассетов.
     implementation 'androidx.webkit:webkit:1.11.0'
+    testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'
 }
