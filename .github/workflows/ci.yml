@@ -302,6 +302,60 @@ jobs:
             android/app/build/reports/androidTests/connected/
             android/app/build/outputs/androidTest-results/connected/
 
+  # Компаньон для десктопа (#452, #463/#464): тесты и бинарники всех платформ.
+  # Без подписи. Windows/Linux — кросс-компиляция без cgo на Linux-раннере,
+  # macOS — на macOS-раннере (трей требует cgo). Имена ассетов стабильны:
+  # сайт ссылается на releases/latest/download/<имя>.
+  companion:
+    if: always() && (needs.release-check.result == 'success' || needs.release-check.result == 'skipped')
+    needs: [release-check]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            artifact: companion-linux-windows
+          - runner: macos-15
+            artifact: companion-macos
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: companion
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: companion/go.mod
+          cache-dependency-path: companion/go.sum
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Build binaries
+        env:
+          VERSION: ${{ needs.release-check.outputs.version || 'dev' }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          flags="-s -w -X main.version=${VERSION}"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            for arch in amd64 arm64; do
+              GOOS=windows GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "$flags -H windowsgui" -o dist/iptv-hub-companion-windows-$arch.exe .
+              GOOS=linux GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "$flags" -o iptv-hub-companion .
+              tar -czf dist/iptv-hub-companion-linux-$arch.tar.gz iptv-hub-companion README.md
+            done
+          else
+            for arch in amd64 arm64; do
+              clang_arch=$([ "$arch" = amd64 ] && echo x86_64 || echo arm64)
+              GOOS=darwin GOARCH=$arch CGO_ENABLED=1 CC="clang -arch $clang_arch" go build -trimpath -ldflags "$flags" -o iptv-hub-companion .
+              tar -czf dist/iptv-hub-companion-macos-$arch.tar.gz iptv-hub-companion README.md
+            done
+          fi
+          ls -l dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: companion/dist/*
+          if-no-files-found: error
+
   release:
     # Новая версия выходит на каждый push в main (release-check уже
     # поставил тег), а также на тег v* и ручной запуск.
@@ -315,7 +369,8 @@ jobs:
       && needs.visual.result == 'success'
       && needs.android.result == 'success'
       && needs.android-tv.result == 'success'
-    needs: [release-check, build, visual, android, android-tv]
+      && needs.companion.result == 'success'
+    needs: [release-check, build, visual, android, android-tv, companion]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -372,6 +427,11 @@ jobs:
         with:
           name: android-signed
           path: iptv-hub.apk
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: companion-*
+          path: companion-dist
+          merge-multiple: true
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -380,8 +440,9 @@ jobs:
           set -euo pipefail
           tag="v${VERSION}"
           # Тег уже создан release-check на этом же коммите.
-          gh release create "$tag" --title "IPTV Hub $tag" --generate-notes iptv-hub.apk \
-            || gh release upload "$tag" iptv-hub.apk --clobber
+          # APK и бинарники компаньона (#464) — одним релизом.
+          gh release create "$tag" --title "IPTV Hub $tag" --generate-notes iptv-hub.apk companion-dist/* \
+            || gh release upload "$tag" iptv-hub.apk companion-dist/* --clobber
 
       - name: Save Android metadata for future Pages builds
         env:
