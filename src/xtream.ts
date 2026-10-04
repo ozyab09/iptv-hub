@@ -66,10 +66,12 @@ export function parseXtream(source: XtreamSource, streams: unknown, categories: 
     if (!/^\d+$/.test(id) || !name.trim()) continue;
     const logo = text(stream.stream_icon);
     const logoAttribute = logo.startsWith("https://") ? ` tvg-logo="${attribute(logo)}"` : "";
+    const group = groups.get(text(stream.category_id));
+    const groupAttribute = group ? ` group-title="${attribute(group)}"` : "";
     const days = text(stream.tv_archive) === "1" ? Math.max(0, Math.floor(Number(stream.tv_archive_duration) || 0)) : 0;
     const archive = days > 0
       ? ` catchup-days="${days}" catchup-source="${source.host}/timeshift/${credentials}/{duration_minutes}/{start_utc}/${id}.m3u8"` : "";
-    rows.push(`#EXTINF:-1 tvg-id="${attribute(text(stream.epg_channel_id))}"${logoAttribute} group-title="${attribute(groups.get(text(stream.category_id)) ?? "")}"${archive},${name.replace(/[\r\n]/g, " ")}`);
+    rows.push(`#EXTINF:-1 tvg-id="${attribute(text(stream.epg_channel_id))}"${logoAttribute}${groupAttribute}${archive},${name.replace(/[\r\n]/g, " ")}`);
     rows.push(`${source.host}/live/${credentials}/${id}.m3u8`);
   }
   return parseM3U(rows.join("\n"));

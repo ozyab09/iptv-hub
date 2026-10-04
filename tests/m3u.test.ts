@@ -57,6 +57,11 @@ describe("quoted EXTINF commas", () => {
 });
 
 describe("parseM3U", () => {
+  it("uses the default category for empty or missing group-title", () => {
+    const snapshot = parseM3U('#EXTINF:-1 group-title="",Empty\nhttps://fixture.test/empty\n#EXTINF:-1,Missing\nhttps://fixture.test/missing\n');
+    expect(snapshot.channels.map((channel) => channel.group)).toEqual(["Основные", "Основные"]);
+    expect(snapshot.categories).toEqual(["Основные"]);
+  });
   const sample = [
     "#EXTM3U url-tvg=\"https://example.com/epg.xml.gz\"",
     '#EXTINF:-1 tvg-id="cnn.ru" tvg-logo="https://img/cnn.png" group-title="Новости",CNN HD',
