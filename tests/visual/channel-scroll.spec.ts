@@ -59,3 +59,41 @@ for (const theme of ["light", "dark"]) {
     });
   }
 }
+
+// #349: звезда в карточке и поздняя загрузка EPG не сбрасывают прокрутку.
+test("звезда и догрузившаяся EPG сохраняют прокрутку", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const playlist = "#EXTM3U\n" + Array.from({ length: 150 }, (_, i) =>
+    `#EXTINF:-1 tvg-id="c${i}",Channel ${String(i).padStart(3, "0")}\nhttps://fixture.test/${i}.mp4\n`).join("");
+  let releaseEpg = () => {};
+  const epgHeld = new Promise<void>((resolve) => { releaseEpg = resolve; });
+  await page.route("https://fixture.test/**", async (route) => {
+    const url = route.request().url();
+    if (url.endsWith("playlist.m3u")) return route.fulfill({ body: playlist });
+    if (url.endsWith("epg.xml")) {
+      await epgHeld;
+      return route.fulfill({ body: "<tv><channel id=\"c20\"><display-name>Channel 020</display-name></channel></tv>" });
+    }
+    return route.fulfill({ status: 404 });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("iptv-hub.playlists.v1", JSON.stringify([{ id: "star", name: "Тест", playlistUrl: "https://fixture.test/playlist.m3u", epgUrl: "https://fixture.test/epg.xml" }]));
+    localStorage.setItem("iptv-hub.active-playlist.v1", "star");
+  });
+  await page.goto("/");
+  const list = page.locator("#channel-list");
+  const row = list.locator('[data-channel-url="https://fixture.test/20.mp4"]');
+  await expect(list.locator(".channel-card").first()).toBeVisible();
+  await list.evaluate((el) => { el.scrollTop = 1440; });
+  await expect(row).toBeInViewport();
+
+  await row.getByRole("button", { name: "В избранное" }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("iptv-hub.favorites.v1:star") ?? "")).toContain("20.mp4");
+  expect(await list.evaluate((el) => el.scrollTop)).toBe(1440);
+
+  const epgDone = page.waitForResponse((r) => r.url().endsWith("epg.xml"));
+  releaseEpg();
+  await epgDone;
+  await page.waitForTimeout(500);
+  expect(await list.evaluate((el) => el.scrollTop)).toBe(1440);
+});
