@@ -1,6 +1,8 @@
 import "./style.css";
 import { createCatalogueCard } from "./catalogue-card";
-import { isAppPage, viaAppProxy } from "./app-proxy";
+import { hasLocalProxy, isAppPage, setCompanionPairing, viaLocalProxy } from "./app-proxy";
+import { connectCompanion, detectPlatform, loadCompanionEnabled, saveCompanionEnabled, takeCompanionParam, type CompanionStatus } from "./companion";
+import { createCompanionUi } from "./companion-ui";
 import { setPublicHttpAllowed } from "./m3u";
 import { createUiFeedback } from "./ui-feedback";
 import { isPlaylistFileName, shareTargetSearch } from "./incoming-playlist";
@@ -177,10 +179,10 @@ try { savedLanguage = localStorage.getItem(LANGUAGE_KEY); } catch { /* прив�
 let currentLanguage = resolveLanguage(savedLanguage, navigator.language);
 const tr = (key: TranslationKey, params: TranslationParams = {}): string => t(key, currentLanguage, params);
 // Android-приложение проксирует http публичных хостов (#452): такие каналы
-// там не скрываются; в веб-версии поведение прежнее.
+// там не скрываются; в веб-версии — только с подключённым компаньоном (#465).
 setPublicHttpAllowed(isAppPage(location.href));
 /** EPG-источники через прокси приложения, где он нужен. */
-const appProxied = (urls: readonly string[]): string[] => urls.map((url) => viaAppProxy(url, location.href));
+const appProxied = (urls: readonly string[]): string[] => urls.map((url) => viaLocalProxy(url, location.href));
 /** Мост к MediaSession (#362); создаётся лениво — до объявления плеера его не трогаем. */
 let mediaSessionBridge: MediaSessionBridge | null = null;
 
@@ -644,7 +646,7 @@ const playlistOpfsFs = createOpfsFs(typeof navigator !== "undefined" ? navigator
 const playlistTransport: Transport = createTransport({
   fs: playlistOpfsFs,
   // В Android-приложении http-плейлисты публичных хостов идут через его прокси (#452).
-  fetch: (url, init) => fetch(viaAppProxy(url, location.href), init),
+  fetch: (url, init) => fetch(viaLocalProxy(url, location.href), init),
   language: () => currentLanguage,
 });
 const playerBuffer = $<HTMLInputElement>("player-buffer");
@@ -708,7 +710,7 @@ async function diagnoseStreamFailure(): Promise<void> {
   const attempt = currentHealthAttempt();
   const failedAt = attempt ? healthFor(attempt.playlistId).get(attempt.url)?.failedAt : undefined;
   try {
-    const r = await probeStream(url, (u, init) => fetch(viaAppProxy(u, location.href), init), player.diagnosticsTimeoutMs);
+    const r = await probeStream(url, (u, init) => fetch(viaLocalProxy(u, location.href), init), player.diagnosticsTimeoutMs);
     if (attempt && currentHealthAttempt() === attempt && failedAt !== undefined && healthFor(attempt.playlistId).get(attempt.url)?.failedAt === failedAt) {
       const kind = isMixedContent(window.location.href, attempt.url) ? "mixed-content" : r.kind === "ok" ? "unknown" : r.kind;
       persistChannelHealth(markChannelFailure(healthFor(attempt.playlistId), attempt.url, { failedAt, kind, ...(r.kind === "http" ? { status: r.status } : {}) }), attempt.playlistId);
@@ -3703,9 +3705,61 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   }
 }
 
+// ---------- Компаньон для http-плейлистов (#452, #465) ----------
+// Opt-in: запрос Chrome о доступе к локальной сети видят только те, кто
+// включил режим. В Android-приложении раздел скрыт — там встроенный прокси.
+let companionEnabled = loadCompanionEnabled(localStorage);
+let companionStatus: CompanionStatus = { state: "off" };
+const companionUi = createCompanionUi({
+  nodes: {
+    section: $("companion-settings"),
+    toggle: $<HTMLInputElement>("companion-enabled"),
+    status: $("companion-status"),
+    downloads: $("companion-downloads"),
+    retry: $<HTMLButtonElement>("companion-retry"),
+  },
+  language: () => currentLanguage,
+  platform: detectPlatform(navigator.userAgent, navigator.platform),
+  onToggle: (enabled) => {
+    companionEnabled = enabled;
+    saveCompanionEnabled(localStorage, enabled);
+    void refreshCompanion(true);
+  },
+  onRetry: () => void refreshCompanion(true),
+});
+$("companion-settings").hidden = isAppPage(location.href);
+
+/** Подключиться к компаньону (или отключиться); reload — перечитать плейлист. */
+async function refreshCompanion(reload: boolean): Promise<void> {
+  if (isAppPage(location.href)) return;
+  const before = hasLocalProxy(location.href);
+  if (companionEnabled) {
+    companionUi.render(companionStatus, true, true);
+    companionStatus = await connectCompanion((url, init) => fetch(url, init));
+  } else {
+    companionStatus = { state: "off" };
+  }
+  setCompanionPairing(companionStatus.state === "connected" ? companionStatus.pairing : null);
+  setPublicHttpAllowed(hasLocalProxy(location.href));
+  companionUi.render(companionStatus, companionEnabled, false);
+  // http-каналы появились или исчезли — перечитываем активный плейлист.
+  const playlist = activePlaylist(plState);
+  if (reload && playlist && before !== hasLocalProxy(location.href)) void openPlaylist(playlist.playlistUrl, playlist.epgUrl);
+}
+
 async function bootstrap(): Promise<void> {
   renderPlaylistManager();
   renderPlaylistSwitcher();
+
+  // Компаньон (#465): ссылка из трея ?companion=1 включает режим; подключаемся
+  // до загрузки плейлиста, чтобы http-каналы сразу шли через 127.0.0.1.
+  const companionParam = takeCompanionParam(window.location.search);
+  if (companionParam.enable) {
+    companionEnabled = true;
+    saveCompanionEnabled(localStorage, true);
+    history.replaceState(null, "", `${window.location.pathname}${companionParam.search}${window.location.hash}`);
+  }
+  await refreshCompanion(false);
 
   // «Поделиться → IPTV Hub» (share_target, #373): ссылка становится ?p=.
   const shared = shareTargetSearch(window.location.search);

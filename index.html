@@ -170,6 +170,21 @@
                   </div></div>
                 </section>
 
+                <section id="companion-settings" class="set-group" hidden>
+                  <h2 class="set-label t-overline" data-i18n="companion.title">Компаньон для http-плейлистов</h2>
+                  <div class="group"><label class="item">
+                    <span data-i18n="companion.enable">Использовать компаньон на этом компьютере</span>
+                    <span class="player-switch">
+                      <input id="companion-enabled" type="checkbox">
+                      <span class="player-switch-track" aria-hidden="true"></span>
+                    </span>
+                  </label></div>
+                  <p id="companion-status" class="set-note" role="status"></p>
+                  <button id="companion-retry" type="button" class="btn btn-outline companion-retry" data-i18n="companion.retry" hidden>Проверить снова</button>
+                  <div id="companion-downloads" class="companion-downloads"></div>
+                  <p class="set-note" data-i18n="companion.note">Программа для Windows, macOS и Linux: загружает http-плейлисты и потоки на этом компьютере и отдаёт их сайту — внешних серверов нет. При первом подключении браузер может спросить доступ к локальной сети — разрешите. Файлы не подписаны: в Windows нажмите «Подробнее», затем «Выполнить в любом случае»; в macOS — правый клик и «Открыть».</p>
+                </section>
+
                 <section id="apk-updates-settings" class="set-group" hidden>
                   <h2 class="set-label t-overline" data-i18n="settings.updates">Обновления приложения</h2>
                   <div class="group"><label class="item">
