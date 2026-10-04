@@ -216,3 +216,36 @@ describe("parseM3U: скрытие http-каналов", () => {
     expect(parseM3U(allHttps).droppedHttp).toBe(0);
   });
 });
+
+// #358: директива #EXTGRP задаёт группу, если group-title в #EXTINF нет.
+describe("#EXTGRP directive (#358)", () => {
+  it("канал получает группу из #EXTGRP, категории сортируются как раньше", () => {
+    const snap = parseM3U([
+      "#EXTM3U",
+      "#EXTINF:-1,Канал Один",
+      "#EXTGRP:Новости",
+      "https://example.com/1.m3u8",
+      "#EXTINF:-1,Канал Два",
+      "#extgrp: Кино ",
+      "https://example.com/2.m3u8",
+      "#EXTINF:-1,Канал Три",
+      "https://example.com/3.m3u8",
+    ].join("\n"));
+    expect(snap.channels.find((c) => c.name === "Канал Один")?.group).toBe("Новости");
+    expect(snap.channels.find((c) => c.name === "Канал Два")?.group).toBe("Кино");
+    expect(snap.channels.find((c) => c.name === "Канал Три")?.group).toBe("Основные");
+    expect(snap.categories).toEqual([...snap.categories].sort((a, b) => a.localeCompare(b, "ru")));
+    expect(snap.categories).toEqual(expect.arrayContaining(["Новости", "Кино", "Основные"]));
+  });
+
+  it("group-title в #EXTINF главнее #EXTGRP", () => {
+    const snap = parseM3U('#EXTM3U\n#EXTINF:-1 group-title="Спорт",Матч\n#EXTGRP:Новости\nhttps://example.com/m.m3u8\n');
+    expect(snap.channels[0]?.group).toBe("Спорт");
+    expect(snap.categories).toEqual(["Спорт"]);
+  });
+
+  it("#EXTGRP не переходит на следующий канал", () => {
+    const snap = parseM3U("#EXTM3U\n#EXTINF:-1,A\n#EXTGRP:Новости\nhttps://e/a.m3u8\n#EXTINF:-1,B\nhttps://e/b.m3u8\n");
+    expect(snap.channels.find((c) => c.name === "B")?.group).toBe("Основные");
+  });
+});
