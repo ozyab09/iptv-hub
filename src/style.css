@@ -431,7 +431,22 @@ html, body {
   text-align: left;
   font: inherit;
   color: inherit;
+  position: relative;
 }
+/* Кнопка запуска растянута на всю строку под действиями (#351): содержимое
+   строки не интерактивно, звезда и редактирование лежат поверх. */
+.channel-hit {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.channel-hit:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .row.channel-card:hover { background: var(--surface-2); }
 .row.channel-card.on { background: var(--accent-soft); }
 .channel-card.has-failure .t-strong { color: var(--muted); }
@@ -462,7 +477,7 @@ html, body {
   padding: var(--space-2);
   display: inline-flex;
 }
-.channel-actions { display: flex; align-items: center; flex: none; }
+.channel-actions { display: flex; align-items: center; flex: none; position: relative; z-index: 1; }
 .channel-actions .icon-btn { width: 36px; height: 36px; }
 .channel-editor {
   width: min(440px, calc(100% - 32px));
@@ -1569,3 +1584,10 @@ video::cue {
   background: var(--surface-2);
 }
 .catalogue-poster img { width: 100%; height: 100%; object-fit: contain; }
+/* Скачивание передачи из архива (#359): прогресс и отмена в «Записях». */
+.download-status { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); }
+.download-status[hidden] { display: none; }
+.download-status-label { flex: 1 1 auto; min-width: 0; }
+.download-status progress { flex: 0 1 160px; min-width: 80px; accent-color: var(--accent); }
+.download-cancel { flex: none; font: inherit; min-height: 44px; }
+.download-cancel:focus-visible, .programme-download.downloading:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

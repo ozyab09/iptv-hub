@@ -24,6 +24,30 @@ import { channelHealthKey } from "./channel-health";
 import { favoritesOrderKey } from "./favorites-order";
 import { remindersKey } from "./reminder";
 import { epgSourcesInput } from "./epg-sources";
+import { recentsKey } from "./backup";
+import { groupPreferencesKey } from "./group-preferences";
+import { channelOverridesKey } from "./channel-overrides";
+import { parentalPinsKey } from "./parental-pin";
+import { subtitlePreferenceKey } from "./external-subtitles";
+
+/**
+ * Все localStorage-ключи, привязанные к ID плейлиста: удаление плейлиста
+ * чистит каждый, включая соль и хеш PIN (#355). Новое per-плейлистное
+ * хранилище добавляется сюда.
+ */
+export function playlistScopedKeys(id: string): string[] {
+  return [
+    favoritesKey(id),
+    favoritesOrderKey(id),
+    remindersKey(id),
+    channelHealthKey(id),
+    recentsKey(id),
+    groupPreferencesKey(id),
+    channelOverridesKey(id),
+    parentalPinsKey(id),
+    subtitlePreferenceKey(id),
+  ];
+}
 
 type KV = import("./playlists").KV;
 /** Откуда взять OPFS для удаления содержимого локального плейлиста. */
@@ -249,10 +273,7 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
       del.addEventListener("click", () => {
         if (!window.confirm(t("playlist.confirmDelete", lang(), { name: p.name }))) return;
         if (storage) {
-          storage.removeItem(favoritesKey(p.id));
-          storage.removeItem(favoritesOrderKey(p.id));
-          storage.removeItem(remindersKey(p.id));
-          storage.removeItem(channelHealthKey(p.id));
+          for (const key of playlistScopedKeys(p.id)) storage.removeItem(key);
         }
         // Локальный плейлист: чистим и содержимое в OPFS (FR-10)
         if (p.playlistUrl.startsWith("local:")) {

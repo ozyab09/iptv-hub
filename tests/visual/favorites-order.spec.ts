@@ -5,6 +5,8 @@ test.use({ serviceWorkers: "block" });
 const url = (letter: string) => `https://fixture.test/${letter}.mp4`;
 const rows = (page: Page) => page.locator("#channel-list .channel-card");
 const channel = (page: Page, letter: string) => page.locator(`#channel-list [data-channel-url="${url(letter)}"]`);
+// Фокус и клавиши — на кнопке запуска внутри строки (#351).
+const hit = (page: Page, letter: string) => channel(page, letter).locator(".channel-hit");
 const order = (page: Page) => rows(page).evaluateAll((cards) => cards.map((card) => (card as HTMLElement).dataset.channelUrl));
 const navigate = (page: Page, name: string) => page.locator("#side-nav button, #tabbar button").filter({ hasText: name, visible: true }).first().click();
 
@@ -28,9 +30,9 @@ test.beforeEach(async ({ context, page }) => {
 test("drag and Alt arrows persist order, keep focus and append new/re-added favorites", async ({ page }) => {
   await channel(page, "c").dragTo(channel(page, "a"));
   await expect.poll(() => order(page)).toEqual([url("c"), url("a"), url("b")]);
-  await channel(page, "c").press("Alt+ArrowDown");
+  await hit(page, "c").press("Alt+ArrowDown");
   await expect.poll(() => order(page)).toEqual([url("a"), url("c"), url("b")]);
-  await expect(channel(page, "c")).toBeFocused();
+  await expect(hit(page, "c")).toBeFocused();
   await expect(page.locator("#player-bar")).toBeHidden();
   await page.reload();
   await expect.poll(() => order(page)).toEqual([url("a"), url("c"), url("b")]);
@@ -41,7 +43,7 @@ test("drag and Alt arrows persist order, keep focus and append new/re-added favo
   await channel(page, "d").locator(".channel-actions button").first().click();
   await navigate(page, "Избранное");
   await expect.poll(() => order(page)).toEqual([url("a"), url("b"), url("c"), url("d")]);
-  await channel(page, "a").press("Alt+ArrowUp");
+  await hit(page, "a").press("Alt+ArrowUp");
   await expect.poll(() => order(page)).toEqual([url("a"), url("b"), url("c"), url("d")]);
 });
 
@@ -58,7 +60,7 @@ test("order synchronizes between real tabs and stays per playlist", async ({ pag
   await page.locator("#pl-switch-menu button").filter({ hasText: "one" }).click();
   await expect.poll(() => order(page)).toEqual([url("c"), url("a"), url("b")]);
   await expect.poll(() => order(other)).toEqual([url("c"), url("a"), url("b")]);
-  await channel(other, "c").press("Alt+ArrowDown");
+  await hit(other, "c").press("Alt+ArrowDown");
   await expect.poll(() => order(page)).toEqual([url("a"), url("c"), url("b")]);
 });
 

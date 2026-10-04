@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   createPlaylistUi,
+  playlistScopedKeys,
   type PlaylistUiDeps,
   type PlaylistUiNodes,
 } from "../src/playlist-ui";
@@ -416,6 +417,28 @@ describe("createPlaylistUi: удаление", () => {
     expect(storage.getItem("iptv-hub.reminders.v1:a")).toBeNull();
     expect(storage.getItem("iptv-hub.reminders.v1:b")).toBe('["reminder-b"]');
     expect(calls.settingsRenders).toBe(1);
+  });
+
+  it("удаление не оставляет ни одного ключа с ID плейлиста (#355)", () => {
+    confirmAnswer = true;
+    const { ui, nodes, storage } = makeDeps(stateAB);
+    const keysOf = (id: string): string[] => [
+      `iptv-hub.favorites.v1:${id}`,
+      `iptv-hub.favorites-order.v1:${id}`,
+      `iptv-hub.reminders.v1:${id}`,
+      `iptv-hub.channel-health.v1:${id}`,
+      `iptv-hub.recents.v1:${id}`,
+      `iptv-hub.groups.v1:${id}`,
+      `iptv-hub.channel-overrides.v1:${id}`,
+      `iptv-hub.parental-pins.v1:${id}`,
+      `iptv-hub.recording-subtitles.v1:${id}`,
+    ];
+    for (const key of [...keysOf("a"), ...keysOf("b")]) storage.setItem(key, "[]");
+    expect(playlistScopedKeys("a").sort()).toEqual(keysOf("a").sort());
+    ui.renderManager();
+    kid(kid(nodes.plList, 0), 2).click();
+    for (const key of keysOf("a")) expect(storage.getItem(key)).toBeNull();
+    for (const key of keysOf("b")) expect(storage.getItem(key)).toBe("[]");
   });
 
   it("отмена confirm ничего не меняет", () => {

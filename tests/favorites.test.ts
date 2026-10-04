@@ -9,6 +9,7 @@ import {
   buildFavoritesM3U,
 } from "../src/favorites";
 import { parseM3U } from "../src/m3u";
+import { buildCatchupUrl } from "../src/catchup";
 import type { Channel } from "../src/types";
 
 const store = (): Storage => {
@@ -99,6 +100,41 @@ describe("favorites", () => {
     expect(parsed.channels[0]!.name).toBe(A.name);
     // парсер нормализует пустые атрибуты в "": проверяем группу, она задана
     expect(parsed.channels[0]!.group).toBe(A.group);
+  });
+
+  it("buildFavoritesM3U: архив, зеркала и метаданные переживают round-trip (#354)", () => {
+    const rich: Channel = {
+      ...ch("https://cdn/live.m3u8", "Спорт HD"),
+      tvgId: "sport.ru",
+      logo: "https://cdn/logo.png",
+      group: "Спорт",
+      quality: "HD",
+      catchupDays: 3,
+      catchupSource: "https://cdn/archive.m3u8?utc={utc}&lutc={lutc}",
+      mirrors: ["https://mirror/live.m3u8"],
+    };
+    const parsed = parseM3U(buildFavoritesM3U([rich], new Set([rich.url]))).channels[0]!;
+    expect(parsed).toMatchObject({
+      url: rich.url,
+      name: rich.name,
+      tvgId: rich.tvgId,
+      logo: rich.logo,
+      group: rich.group,
+      catchupDays: 3,
+      catchupSource: rich.catchupSource,
+      mirrors: rich.mirrors,
+    });
+    // архив импортированного канала доступен: URL прошедшей передачи строится
+    const start = new Date(Date.now() - 2 * 3600_000).toISOString();
+    const stop = new Date(Date.now() - 3600_000).toISOString();
+    expect(buildCatchupUrl({ days: parsed.catchupDays, source: parsed.catchupSource }, { start, stop, title: "Матч", desc: null })).toContain("utc=");
+  });
+
+  it("buildFavoritesM3U: пустые атрибуты не пишутся", () => {
+    const bare = { ...ch("https://bare/stream", "Bare"), group: "" };
+    const m3u = buildFavoritesM3U([bare], new Set([bare.url]));
+    expect(m3u).toBe("#EXTM3U\n#EXTINF:-1,Bare\nhttps://bare/stream\n");
+    expect(m3u).not.toMatch(/=""/);
   });
 
   it("buildFavoritesM3U: без избранного — заголовок и ничего больше", () => {

@@ -86,8 +86,8 @@ for (const width of [390, 1440]) {
     else await page.locator("#btn-next-episode").click();
     await expect.poll(() => page.locator("#video").evaluate((node) => {
       const video = node as HTMLVideoElement;
-      return video.currentSrc.endsWith("/22.mp4") && video.readyState >= 2 && video.videoWidth === 160;
-    })).toBe(true);
+      return { source: video.currentSrc, ready: video.readyState >= 2, width: video.videoWidth, error: video.error?.message ?? null };
+    })).toMatchObject({ source: "https://provider.test/series/user/secret/22.mp4", ready: true, width: 160, error: null });
     await expect.poll(() => requests.some((url) => url.endsWith("/series/user/secret/22.mp4"))).toBe(true);
     await expect(page.locator("#btn-next-episode")).toBeHidden();
     await page.locator("#btn-close-player").click();
