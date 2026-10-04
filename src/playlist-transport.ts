@@ -11,6 +11,7 @@ import type { PlaylistSnapshot } from "./types";
 import { isMixedContent } from "./config";
 import { t, type Language } from "./i18n";
 import { readXtreamUrl, xtreamApiUrl, parseXtream } from "./xtream";
+import { withSourceTimeout } from "./source-timeout";
 
 /** Минимальная поверхность OPFS-файла, нужная адаптеру (в тестах — фейк). */
 export interface OpfsFileLike {
@@ -40,7 +41,7 @@ export interface TransportDeps {
   /** Провайдер OPFS-хранилища или null, если OPFS недоступен. */
   fs: () => Promise<LocalFs> | null;
   /** Сетевой доступ; по умолчанию — глобальный fetch. */
-  fetch?: (url: string) => Promise<Response>;
+  fetch?: (url: string, init?: RequestInit) => Promise<Response>;
   /** Текущий язык интерфейса (тексты ошибок и подсказок). */
   language: () => Language;
   /** Адрес текущей страницы (mixed-content-проверка); по умолчанию location. */
@@ -115,25 +116,32 @@ export function createTransport(deps: TransportDeps): Transport {
         return parseM3U(m3u);
       }
       const doFetch = deps.fetch ?? fetch;
-      const xtream = readXtreamUrl(url);
-      if (xtream) {
-        const read = async (action: "get_live_streams" | "get_live_categories"): Promise<unknown> => {
-          const response = await doFetch(xtreamApiUrl(xtream, action));
-          if (!response.ok) throw new Error(t("error.httpPlaylist", deps.language(), { status: response.status }));
-          try { return await response.json(); }
-          catch { throw new Error(t("error.xtreamResponse", deps.language())); }
-        };
-        const [streams, categories] = await Promise.all([read("get_live_streams"), read("get_live_categories")]);
-        try { return parseXtream(xtream, streams, categories); }
-        catch { throw new Error(t("error.xtreamResponse", deps.language())); }
+      try {
+        return await withSourceTimeout(async (signal) => {
+          const xtream = readXtreamUrl(url);
+          if (xtream) {
+            const read = async (action: "get_live_streams" | "get_live_categories"): Promise<unknown> => {
+              const response = await doFetch(xtreamApiUrl(xtream, action), { signal });
+              if (!response.ok) throw new Error(t("error.httpPlaylist", deps.language(), { status: response.status }));
+              try { return await response.json(); }
+              catch { throw new Error(t("error.xtreamResponse", deps.language())); }
+            };
+            const [streams, categories] = await Promise.all([read("get_live_streams"), read("get_live_categories")]);
+            try { return parseXtream(xtream, streams, categories); }
+            catch { throw new Error(t("error.xtreamResponse", deps.language())); }
+          }
+          const resp = await doFetch(url, { signal });
+          if (!resp.ok) throw new Error(t("error.httpPlaylist", deps.language(), { status: resp.status }));
+          if (!/^application\/(x-mpegurl|vnd\.apple\.mpegurl|octet-stream)/.test(
+                resp.headers.get("content-type") ?? "")) {
+            // не фейлимся: некоторые бакеты отдают text/plain
+          }
+          return parseM3U(await resp.text());
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "TimeoutError") throw new Error(t("error.sourceTimeout", deps.language()));
+        throw error;
       }
-      const resp = await doFetch(url);
-      if (!resp.ok) throw new Error(t("error.httpPlaylist", deps.language(), { status: resp.status }));
-      if (!/^application\/(x-mpegurl|vnd\.apple\.mpegurl|octet-stream)/.test(
-            resp.headers.get("content-type") ?? "")) {
-        // не фейлимся: некоторые бакеты отдают text/plain
-      }
-      return parseM3U(await resp.text());
     },
     describeFailure(url, reason) {
       // Точная причина от плеера главнее: она знает, что уже предпринято

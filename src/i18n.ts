@@ -2,6 +2,7 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "error.sourceTimeout": "Время ожидания загрузки истекло (45 секунд). Попробуйте ещё раз.",
   "nav.showMenu": "Показать меню",
   "nav.hideMenu": "Скрыть меню",
   "nav.showMenuShortcut": "Показать меню (C)",
@@ -258,6 +259,7 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "error.sourceTimeout": "Loading timed out after 45 seconds. Try again.",
   "nav.showMenu": "Show menu",
   "nav.hideMenu": "Hide menu",
   "nav.showMenuShortcut": "Show menu (C)",
