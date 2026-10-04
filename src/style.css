@@ -1629,3 +1629,5 @@ html[data-tv="true"] .numeric-zap { font-size: 96px; padding: 20px 32px; }
 }
 .tv-paused-info[hidden] { display: none; }
 .tv-paused-info p { margin: 0; }
+
+.channel-source { max-width: 100px; flex-shrink: 0; }

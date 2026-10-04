@@ -49,7 +49,8 @@ import {
 } from "./favorites";
 import { validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtream";
 import { createOpfsFs, createTransport, type Transport } from "./playlist-transport";
-import { formatRange, getNowNext, loadEpgSources } from "./epg";
+import { channelEpgKey, formatRange, getNowNext, loadEpgSources } from "./epg";
+import { aggregatePlaylists, type AggregateSource } from "./playlist-aggregate";
 import { epgSourceUrls, epgSourcesInput } from "./epg-sources";
 import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./programme-search";
 import { createDebounced } from "./debounce";
@@ -354,14 +355,19 @@ let channelHealth: ChannelHealth = new Map();
 let healthAttempt: { playlistId: string; url: string } | null = null;
 
 function currentHealthAttempt(): typeof healthAttempt {
-  return healthAttempt && healthAttempt.playlistId === plState.activeId && player.currentChannelUrl === healthAttempt.url ? healthAttempt : null;
+  return healthAttempt && healthAttempt.playlistId === (lastPlayed?.source?.id ?? plState.activeId) && player.currentChannelUrl === healthAttempt.url ? healthAttempt : null;
 }
 
-function persistChannelHealth(): void {
-  if (!plState.activeId) return;
+function healthFor(id: string): ChannelHealth {
+  return id === plState.activeId ? channelHealth : parseChannelHealth(localStorage.getItem(channelHealthKey(id)));
+}
+
+function persistChannelHealth(health = channelHealth, id = plState.activeId): void {
+  if (!id) return;
+  if (id === plState.activeId) channelHealth = health;
   try {
-    if (channelHealth.size) localStorage.setItem(channelHealthKey(plState.activeId), serializeChannelHealth(channelHealth));
-    else localStorage.removeItem(channelHealthKey(plState.activeId));
+    if (health.size) localStorage.setItem(channelHealthKey(id), serializeChannelHealth(health));
+    else localStorage.removeItem(channelHealthKey(id));
   } catch { /* Метки остаются в текущей сессии. */ }
   renderChannels(false);
 }
@@ -369,18 +375,17 @@ function persistChannelHealth(): void {
 function noteChannelFailure(): void {
   const attempt = currentHealthAttempt();
   if (!attempt) return;
-  channelHealth = markChannelFailure(channelHealth, attempt.url, {
+  const health = markChannelFailure(healthFor(attempt.playlistId), attempt.url, {
     failedAt: Date.now(), kind: isMixedContent(window.location.href, attempt.url) ? "mixed-content" : "unknown",
   });
-  persistChannelHealth();
+  persistChannelHealth(health, attempt.playlistId);
 }
 
 function noteChannelRecovered(event: Event): void {
   const attempt = currentHealthAttempt();
   const hasVideo = videoEl.videoWidth > 0 || !!player.getHls()?.levels.some((level) => level.videoCodec);
-  if (!attempt || !channelHealth.has(attempt.url) || !isChannelRecovered(videoEl, event.type, hasVideo)) return;
-  channelHealth = clearChannelFailure(channelHealth, attempt.url);
-  persistChannelHealth();
+  if (!attempt || !healthFor(attempt.playlistId).has(attempt.url) || !isChannelRecovered(videoEl, event.type, hasVideo)) return;
+  persistChannelHealth(clearChannelFailure(healthFor(attempt.playlistId), attempt.url), attempt.playlistId);
 }
 
 videoEl.addEventListener("loadeddata", noteChannelRecovered);
@@ -398,11 +403,12 @@ function channelFailureLabel(failure: ChannelFailure): string {
 let groupPreferences: GroupPreferences = parseGroupPreferences(null);
 
 function displayChannels(): Channel[] {
+  if (allPlaylists) return aggregatePlaylists(aggregateSources()).snapshot.channels;
   return filterVisibleGroups(applyChannelOverrides(snapshot?.channels ?? [], channelOverrides), groupPreferences.hidden);
 }
 
 function renderGroupSettings(): void {
-  groupPreferencesUi.render(snapshot?.categories ?? [], groupPreferences);
+  groupPreferencesUi.render((allPlaylists && plState.activeId ? playlistCache.get(plState.activeId)?.snapshot : snapshot)?.categories ?? [], groupPreferences);
 }
 
 function refreshGroupPreferences(previousHidden: ReadonlySet<string>): void {
@@ -410,7 +416,7 @@ function refreshGroupPreferences(previousHidden: ReadonlySet<string>): void {
   pinDialog.cancel();
   if (activeCategory && groupPreferences.hidden.has(activeCategory)) activeCategory = null;
   const newlyHidden = [...groupPreferences.hidden].some((group) => !previousHidden.has(group));
-  if ((multiViewUi.isOpen && newlyHidden) || (lastPlayed && groupPreferences.hidden.has(lastPlayed.group))) btnClosePlayer.click();
+  if ((multiViewUi.isOpen && newlyHidden) || (lastPlayed && (lastPlayed.source?.id ?? plState.activeId) === plState.activeId && groupPreferences.hidden.has(lastPlayed.group))) btnClosePlayer.click();
   renderGroupSettings();
   renderCategories();
   renderChannels();
@@ -434,6 +440,92 @@ let favKey: string | null = null; // favoritesKey(id) активного пле�
 void favKey;
 let favorites = new Set<string>();
 let favoritesOrder: string[] = [];
+let allPlaylists = false;
+let aggregateRequest = 0;
+const playlistCache = new Map<string, { snapshot: PlaylistSnapshot; epg: Map<string, EpgProgramme[]> | null }>();
+let aggregateFilter: { search: string; category: string | null; view: View; scroll: number } | null = null;
+
+function aggregateSources(): AggregateSource[] {
+  return plState.items.flatMap(item => {
+    const cached = playlistCache.get(item.id);
+    return cached ? [{ ...cached, id: item.id, name: item.name,
+      overrides: parseChannelOverrides(localStorage.getItem(channelOverridesKey(item.id))),
+      hiddenGroups: parseGroupPreferences(localStorage.getItem(groupPreferencesKey(item.id))).hidden }] : [];
+  });
+}
+
+function updateAggregate(): void {
+  if (!allPlaylists) return;
+  const data = aggregatePlaylists(aggregateSources());
+  snapshot = data.snapshot; epg = data.epg;
+  if (activeCategory && !snapshot.categories.includes(activeCategory)) activeCategory = null;
+  const saved = new Map(plState.items.map(item => [item.id, loadFavoritesFor(item.id)]));
+  favorites = new Set(data.snapshot.channels.filter(c => saved.get(c.source!.id)?.has(c.url)).map(c => c.url));
+  favoritesOrder = plState.items.flatMap(item => parseFavoritesOrder(localStorage.getItem(favoritesOrderKey(item.id))).filter(url => saved.get(item.id)?.has(url)));
+}
+
+/** Меняет только контекст хранилищ; текущий поток не перезапускается. */
+function playlistContext(id: string): void {
+  plState = { ...plState, activeId: id };
+  savePlaylists(localStorage, plState);
+  groupPreferences = parseGroupPreferences(localStorage.getItem(groupPreferencesKey(id)));
+  parentalPins = parseParentalPins(localStorage.getItem(parentalPinsKey(id)));
+  channelOverrides = parseChannelOverrides(localStorage.getItem(channelOverridesKey(id)));
+  channelHealth = parseChannelHealth(localStorage.getItem(channelHealthKey(id)));
+  favorites = loadFavoritesFor(id); favoritesOrder = loadFavoritesOrderFor(id);
+  loadRecentsFor(id);
+  updateAggregate();
+}
+
+async function activateAllPlaylists(refresh = false): Promise<void> {
+  const request = ++aggregateRequest;
+  epgGuard.begin();
+  if (lastPlayed && !lastPlayed.source && plState.activeId) {
+    const item = activePlaylist(plState)!;
+    lastPlayed = { ...lastPlayed, source: { id: item.id, name: item.name, group: lastPlayed.group } };
+  }
+  allPlaylists = true;
+  seriesEpisodes = null;
+  showPlayer();
+  await Promise.all(plState.items.map(async item => {
+    const cached = playlistCache.get(item.id);
+    if (!refresh && cached?.epg) return;
+    try {
+      const fresh = !refresh && cached ? cached.snapshot : await loadPlaylist(item.playlistUrl);
+      const diff = cached ? diffSnapshots(cached.snapshot, fresh) : null;
+      if (request !== aggregateRequest) return;
+      playlistCache.set(item.id, { snapshot: fresh, epg: playlistCache.get(item.id)?.epg ?? null });
+      updateAggregate(); renderCategories(); renderChannels(false); renderPlaylistSwitcher();
+      const urls = epgSourceUrls(item.epgUrl, item.additionalEpgUrls ?? [], fresh.headerTvgUrl);
+      if (urls.length) {
+        const programmes = await loadEpgSources(urls);
+        if (request === aggregateRequest) playlistCache.set(item.id, { snapshot: fresh, epg: programmes });
+      }
+      if (refresh && request === aggregateRequest && diff && (diff.added || diff.removed || diff.changed)) {
+        const programmes = playlistCache.get(item.id)?.epg;
+        pushNotification(item.name + " · " + checkSummary(diff, fresh.channels.length, programmes ? countProgrammes(programmes) : 0, !!programmes, currentLanguage));
+      }
+    } catch { if (request === aggregateRequest) pushNotification(tr("playlist.partial", { name: item.name })); }
+  }));
+  if (request !== aggregateRequest || !allPlaylists) return;
+  updateAggregate();
+  if (aggregateFilter && !refresh) {
+    searchInput.value = aggregateFilter.search; activeCategory = aggregateFilter.category;
+    setView(aggregateFilter.view);
+    channelList.scrollTop = aggregateFilter.scroll;
+  }
+  renderNav(); renderCategories(); renderChannels(false); renderPlaylistSwitcher(); refreshNowFav();
+}
+
+function toggleChannelFavorite(c: Channel): void {
+  const id = c.source?.id ?? plState.activeId;
+  if (!id) return;
+  const next = toggleFavorite(loadFavoritesFor(id), c);
+  try { localStorage.setItem(favoritesKey(id), JSON.stringify([...next])); }
+  catch { /* приватный режим / quota */ }
+  if (id === plState.activeId) { favorites = next; saveFavoritesFor(id); }
+  updateAggregate(); refreshNowFav(); renderCategories(); renderChannels(false);
+}
 const VIEW_KEY = "iptv-hub.view.v1";
 let activeView: View = parseView(
   typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null,
@@ -496,8 +588,18 @@ const playlistUi = createPlaylistUi({
   },
   showPlayer,
   activatePlaylist,
+  allPlaylists: () => allPlaylists,
+  activateAll: () => { void activateAllPlaylists(); },
   renderSettingsMode,
-  stateChanged: (next) => { plState = next; },
+  stateChanged: (next) => {
+    for (const item of plState.items) {
+      const updated = next.items.find(p => p.id === item.id);
+      if (!updated || JSON.stringify(updated) !== JSON.stringify(item)) playlistCache.delete(item.id);
+    }
+    plState = next;
+    if (lastPlayed?.source && !next.items.some(item => item.id === lastPlayed!.source!.id)) btnClosePlayer.click();
+    if (allPlaylists) void activateAllPlaylists();
+  },
 });
 
 const groupPreferencesUi = createGroupPreferencesUi({
@@ -509,7 +611,7 @@ const groupPreferencesUi = createGroupPreferencesUi({
     if (visible) hidden.delete(group); else hidden.add(group);
     saveGroupPreferences({ ...groupPreferences, hidden });
   },
-  move: (group, step) => saveGroupPreferences({ ...groupPreferences, order: moveGroup(snapshot?.categories ?? [], groupPreferences.order, group, step) }),
+  move: (group, step) => saveGroupPreferences({ ...groupPreferences, order: moveGroup((allPlaylists && plState.activeId ? playlistCache.get(plState.activeId)?.snapshot : snapshot)?.categories ?? [], groupPreferences.order, group, step) }),
   showAll: () => saveGroupPreferences({ ...groupPreferences, hidden: new Set() }),
   resetOrder: () => saveGroupPreferences({ ...groupPreferences, order: [] }),
 });
@@ -581,13 +683,12 @@ async function diagnoseStreamFailure(): Promise<void> {
   if (!url || url.startsWith("blob:") || diagnosticsFor === url) return;
   diagnosticsFor = url;
   const attempt = currentHealthAttempt();
-  const failedAt = attempt ? channelHealth.get(attempt.url)?.failedAt : undefined;
+  const failedAt = attempt ? healthFor(attempt.playlistId).get(attempt.url)?.failedAt : undefined;
   try {
     const r = await probeStream(url, (u, init) => fetch(u, init), player.diagnosticsTimeoutMs);
-    if (attempt && currentHealthAttempt() === attempt && failedAt !== undefined && channelHealth.get(attempt.url)?.failedAt === failedAt) {
+    if (attempt && currentHealthAttempt() === attempt && failedAt !== undefined && healthFor(attempt.playlistId).get(attempt.url)?.failedAt === failedAt) {
       const kind = isMixedContent(window.location.href, attempt.url) ? "mixed-content" : r.kind === "ok" ? "unknown" : r.kind;
-      channelHealth = markChannelFailure(channelHealth, attempt.url, { failedAt, kind, ...(r.kind === "http" ? { status: r.status } : {}) });
-      persistChannelHealth();
+      persistChannelHealth(markChannelFailure(healthFor(attempt.playlistId), attempt.url, { failedAt, kind, ...(r.kind === "http" ? { status: r.status } : {}) }), attempt.playlistId);
     }
     const verdict = probeVerdict(r);
     const detail =
@@ -656,6 +757,7 @@ const multiViewUi = createMultiViewUi({
   settings: () => playerSettings,
   toast: showToast,
   select: (channel) => {
+    if (channel?.source) playlistContext(channel.source.id);
     archivePlayback = null;
     lastPlayed = channel;
     // Заголовок и звезда следуют за активным окном (#253): раньше здесь
@@ -672,7 +774,9 @@ const multiViewUi = createMultiViewUi({
   // Восстановление сетки при повторном входе (#254): URL → канал из
   // ТЕКУЩЕГО snapshot с алиасами и скрытием. PIN-каналы нужно выбрать
   // заново через playChannel(), а не запускать без нового подтверждения.
-  resolve: (url) => displayChannels().find((c) => c.url === url && !parentalPins.has(c.group)) ?? null,
+  resolve: (url) => displayChannels().find((c) => c.url === url && !(c.source
+    ? parseParentalPins(localStorage.getItem(parentalPinsKey(c.source.id))).has(c.source.group)
+    : parentalPins.has(c.group))) ?? null,
 });
 
 function closeMultiView(resume: boolean): void {
@@ -999,7 +1103,7 @@ const pinRemove = $<HTMLButtonElement>("pin-remove");
 
 function renderPinSettings(): void {
   const previous = pinGroup.value;
-  pinGroup.replaceChildren(...(snapshot?.categories ?? []).map((group) => {
+  pinGroup.replaceChildren(...((allPlaylists && plState.activeId ? playlistCache.get(plState.activeId)?.snapshot : snapshot)?.categories ?? []).map((group) => {
     const option = document.createElement("option");
     option.value = group;
     option.textContent = parentalPins.has(group) ? `${group} · ${tr("pin.protected")}` : group;
@@ -1031,7 +1135,7 @@ pinSet.addEventListener("click", async () => {
   });
   if (!saved || plState.activeId !== id) return;
   // Уже открытый канал не должен продолжать играть после установки защиты.
-  if (multiViewUi.isOpen || lastPlayed?.group === group) btnClosePlayer.click();
+  if (multiViewUi.isOpen || (lastPlayed?.group === group && (lastPlayed.source?.id ?? id) === id)) btnClosePlayer.click();
   if (activeCategory === group) activeCategory = null;
   renderPinSettings();
   renderCategories();
@@ -1054,6 +1158,15 @@ pinRemove.addEventListener("click", async () => {
 });
 
 async function selectCategory(value: string | null): Promise<void> {
+  if (allPlaylists) {
+    const source = displayChannels().find(c => c.group === value)?.source;
+    if (source) {
+      const record = parseParentalPins(localStorage.getItem(parentalPinsKey(source.id))).get(source.group);
+      if (record && !await pinDialog.ask(source.group, false, pin => verifyPin(pin, record))) return;
+    }
+    activeCategory = value; catMenu.hidden = true;
+    btnCategories.setAttribute("aria-expanded", "false"); renderCategories(); renderChannels(); return;
+  }
   if (value !== null && groupPreferences.hidden.has(value)) return;
   const id = plState.activeId;
   if (!await authorizeGroup(value) || plState.activeId !== id) return;
@@ -1073,8 +1186,9 @@ let editedChannelUrl: string | null = null;
 
 function openChannelEditor(channel: Channel): void {
   if (!snapshot) return;
+  if (channel.source) playlistContext(channel.source.id);
   editedChannelUrl = channel.url;
-  const original = snapshot?.channels.find((c) => c.url === channel.url);
+  const original = (channel.source ? playlistCache.get(channel.source.id)?.snapshot : snapshot)?.channels.find((c) => c.url === channel.url);
   $("channel-original").textContent = original?.name ?? channel.name;
   channelAlias.value = channelOverrides.get(channel.url)?.alias ?? "";
   channelEpgId.value = channelOverrides.get(channel.url)?.epgId ?? "";
@@ -1086,16 +1200,18 @@ function openChannelEditor(channel: Channel): void {
 function refreshChannelOverrides(): void {
   if (!snapshot) return;
   const nameFor = (channel: Channel): string => {
-    const original = snapshot!.channels.find((c) => c.url === channel.url) ?? channel;
-    return applyChannelOverrides([original], channelOverrides, true)[0]!.name;
+    const original = (channel.source ? playlistCache.get(channel.source.id)?.snapshot : snapshot)!.channels.find((c) => c.url === channel.url) ?? channel;
+    const overrides = channel.source ? parseChannelOverrides(localStorage.getItem(channelOverridesKey(channel.source.id))) : channelOverrides;
+    return applyChannelOverrides([original], overrides, true)[0]!.name;
   };
-  if (lastPlayed) {
+  if (lastPlayed && (lastPlayed.source?.id ?? plState.activeId) === plState.activeId) {
     lastPlayed.name = nameFor(lastPlayed);
-    const original = snapshot.channels.find((channel) => channel.url === lastPlayed!.url) ?? lastPlayed;
+    const original = (lastPlayed.source ? playlistCache.get(lastPlayed.source.id)?.snapshot : snapshot)?.channels.find((channel) => channel.url === lastPlayed!.url) ?? lastPlayed;
     lastPlayed.tvgId = applyChannelOverrides([original], channelOverrides, true)[0]!.tvgId;
     refreshNowHeader(lastPlayed);
   }
   multiViewUi.updateNames(nameFor);
+  updateAggregate();
   renderCategories();
   renderChannels(false);
   renderPlaylistSwitcher();
@@ -1131,13 +1247,14 @@ function renderCategories(): void {
     n.textContent = String(count);
     b.append(n);
     b.className = chipClass(activeCategory === value);
-    if (value !== null && parentalPins.has(value)) b.title = tr("pin.protected");
+    const source = allPlaylists ? channels.find(c => c.group === value)?.source : null;
+    if (value !== null && (source ? parseParentalPins(localStorage.getItem(parentalPinsKey(source.id))).has(source.group) : parentalPins.has(value))) b.title = tr("pin.protected");
     b.addEventListener("click", () => { void selectCategory(value); });
     return b;
   };
   const entries: Array<[string, string | null, number]> = [
     [tr("categories.all"), null, channels.length],
-    ...orderedGroups([...new Set(channels.map((channel) => channel.group))], groupPreferences.order).filter((g) => !groupPreferences.hidden.has(g)).map(
+    ...orderedGroups([...new Set(channels.map((channel) => channel.group))], allPlaylists ? [] : groupPreferences.order).filter((g) => allPlaylists || !groupPreferences.hidden.has(g)).map(
       (g) =>
         [g, g, channels.filter((c) => c.group === g).length] as [
           string,
@@ -1198,7 +1315,10 @@ const channelListUi = createChannelListUi({
   isFavoritesView: () => activeView === "favorites",
   currentUrl: () => lastPlayed?.url ?? null,
   isFavorite: (c) => isFavorite(favorites, c),
-  failure: (url) => channelHealth.get(url),
+  failure: (url) => {
+    const source = allPlaylists ? snapshot?.channels.find(c => c.url === url)?.source : undefined;
+    return source ? parseChannelHealth(localStorage.getItem(channelHealthKey(source.id))).get(url) : channelHealth.get(url);
+  },
   failureLabel: channelFailureLabel,
   nowNext: (c) => (epg && snapshot ? getNowNext(epg, c, snapshot) : null),
   language: () => currentLanguage,
@@ -1210,17 +1330,16 @@ const channelListUi = createChannelListUi({
     if (played && !archive && Date.parse(match.programme.start) > Date.now()) showToast(tr("guide.futureLive"));
   })(),
   toggleFavorite: (c) => {
-    favorites = toggleFavorite(favorites, c);
-    if (plState.activeId) saveFavoritesFor(plState.activeId);
-    refreshNowFav();
-    renderCategories();
-    renderChannels(false); // звезда не сбрасывает прокрутку (#349)
+    toggleChannelFavorite(c);
   },
   openEditor: openChannelEditor,
   reorderFavorite,
   playlistId: () => plState.activeId,
   onDragStart: cancelNumericZap,
-  reminderButton: (match) => (plState.activeId ? reminderUi?.button(match.channel, match.programme, plState.activeId) ?? null : null),
+  reminderButton: (match) => {
+    const id = match.channel.source?.id ?? plState.activeId;
+    return id ? reminderUi?.button(match.channel, match.programme, id) ?? null : null;
+  },
   catalogueCard: (c) => createCatalogueCard(document, c, () => { void playChannel(c); }),
   setIcon,
   canHover: () => window.matchMedia("(hover: hover)").matches,
@@ -1269,16 +1388,36 @@ function renderChannels(resetScroll = true): void {
 
 // ---------- Плеер ----------
 async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: EpgProgramme, fromStart = false): Promise<boolean> {
+  cancelNumericZap();
+  const request = ++playRequest;
+  ++seriesRequest;
+  if (c.mediaKind !== "episode") episodeQueue = [];
+  const previousId = plState.activeId;
+  const source = c.source;
+  const id = source?.id ?? previousId;
+  const original = (source ? playlistCache.get(source.id)?.snapshot : snapshot)?.channels.find(original => original.url === c.url) ?? c;
+  const overrides = source ? parseChannelOverrides(localStorage.getItem(channelOverridesKey(source.id))) : channelOverrides;
+  c = { ...applyChannelOverrides([original], overrides, true)[0]!, ...(source ? { source } : {}) };
+  const groups = source ? parseGroupPreferences(localStorage.getItem(groupPreferencesKey(source.id))) : groupPreferences;
+  if (groups.hidden.has(c.group)) { showToast(tr("groups.hidden")); return false; }
+  const record = source ? parseParentalPins(localStorage.getItem(parentalPinsKey(source.id))).get(c.group) : parentalPins.get(c.group);
+  if (!record) pinDialog.cancel();
+  const authorized = record ? await pinDialog.ask(c.group, false, pin => verifyPin(pin, record)) : true;
+  if (!authorized || request !== playRequest || plState.activeId !== previousId) return false;
+  if (source && id && id !== previousId) playlistContext(id);
   if (c.mediaKind === "series") {
     const request = ++seriesRequest;
     const playlist = activePlaylist(plState);
     if (!playlist?.xtreamVod || groupPreferences.hidden.has(c.group)) return false;
     showToast(tr("catalogue.episodes"));
     try {
-      const episodes = await playlistTransport.loadSeries(playlist.playlistUrl, c);
+      const loaded = await playlistTransport.loadSeries(playlist.playlistUrl, c);
+      const episodes = source ? loaded.map(channel => ({ ...channel, source: { ...source, group: channel.group } })) : loaded;
       if (request !== seriesRequest || plState.activeId !== playlist.id) return false;
       seriesEpisodes = episodes;
       episodeQueue = episodes;
+      const cached = playlistCache.get(playlist.id);
+      if (cached) cached.snapshot = { ...cached.snapshot, channels: [...cached.snapshot.channels.filter(item => item.mediaKind !== "episode" || item.seriesId !== c.seriesId), ...loaded] };
       snapshot = snapshot ? { ...snapshot, channels: [...snapshot.channels.filter((item) => item.mediaKind !== "episode" || item.seriesId !== c.seriesId), ...episodes] } : null;
       searchInput.value = "";
       activeCategory = null;
@@ -1287,14 +1426,6 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
       return resume ? playChannel(resume) : false;
     } catch (error) { if (request === seriesRequest) showToast(error instanceof Error ? error.message : tr("error.xtreamResponse")); return false; }
   }
-  cancelNumericZap();
-  const request = ++playRequest;
-  ++seriesRequest;
-  if (c.mediaKind !== "episode") episodeQueue = [];
-  const id = plState.activeId;
-  c = applyChannelOverrides([snapshot?.channels.find((original) => original.url === c.url) ?? c], channelOverrides, true)[0]!;
-  if (groupPreferences.hidden.has(c.group)) { showToast(tr("groups.hidden")); return false; }
-  if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
   if (multiViewUi.isOpen && (archiveUrl !== undefined || c.mediaKind)) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
   // lastPlayed может быть null (плеер закрыли сразу после старта записи —
@@ -1527,7 +1658,7 @@ function refreshNowFav(): void {
     nowFav.title = tr("favorites.add");
     return;
   }
-  const fav = isFavorite(favorites, lastPlayed);
+  const fav = isFavorite(lastPlayed.source ? loadFavoritesFor(lastPlayed.source.id) : favorites, lastPlayed);
   setIcon(nowFav, fav ? "star-on" : "star");
   nowFav.classList.toggle("active", fav);
   nowFav.title = fav ? tr("favorites.remove") : tr("favorites.add");
@@ -1548,10 +1679,7 @@ function refreshNowHeader(channel: Channel | null, archiveUrl?: string): void {
 
 nowFav.addEventListener("click", () => {
   if (!lastPlayed) return;
-  favorites = toggleFavorite(favorites, lastPlayed);
-  if (plState.activeId) saveFavoritesFor(plState.activeId);
-  refreshNowFav();
-  renderChannels(false);
+  toggleChannelFavorite(lastPlayed);
 });
 
 // ---------- Клавиатурная навигация по списку каналов (FR-8) ----------
@@ -2401,8 +2529,8 @@ const guideUi = createGuideUi({
   openOverlay,
   closeOverlay,
   playlistId: () => plState.activeId,
-  planRecording: (channel, programme, playlistId) => scheduleUi?.plan(channel, programme, playlistId),
-  reminderButton: (channel, programme, playlistId) => reminderUi?.button(channel, programme, playlistId) ?? null,
+  planRecording: (channel, programme, playlistId) => scheduleUi?.plan(channel, programme, channel.source?.id ?? playlistId),
+  reminderButton: (channel, programme, playlistId) => reminderUi?.button(channel, programme, channel.source?.id ?? playlistId) ?? null,
   downloads: {
     status: downloadStatus,
     cancel: cancelDownload,
@@ -2426,8 +2554,8 @@ window.addEventListener("resize", () => guideUi.onResize());
 function channelProgrammes(channel: Channel | null = lastPlayed): EpgProgramme[] {
   if (!epg || !channel) return [];
   return (
-    epg.get(`id:${channel.tvgId?.toLowerCase() ?? ""}`) ??
-    epg.get(`name:${channel.normalizedName}`) ??
+    epg.get(channelEpgKey(channel)) ??
+    epg.get(channelEpgKey(channel, true)) ??
     []
   );
 }
@@ -2971,6 +3099,12 @@ refreshSeg.addEventListener("click", (e) => {
  */
 async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
   if (refreshBusy) return;
+  if (allPlaylists) {
+    refreshBusy = true; btnRefreshNow.setAttribute("aria-busy", "true");
+    try { await activateAllPlaylists(true); if (!silentOnNoChange) pushNotification(tr("playlist.all") + " · " + tr("refresh.updatedPlain")); }
+    finally { refreshBusy = false; btnRefreshNow.removeAttribute("aria-busy"); saveLastCheck(Date.now(), localStorage); }
+    return;
+  }
   const item = plState.items.find((p) => p.id === plState.activeId);
   if (!item || !snapshot) return;
   refreshBusy = true;
@@ -2999,7 +3133,10 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
         });
         if (epgLoad.isCurrent()) {
           epg = parsed;
-          programmes = countProgrammes(epg);
+          const cached = playlistCache.get(item.id);
+          if (cached) cached.epg = parsed;
+          epg = new Map([...aggregatePlaylists(aggregateSources()).epg, ...parsed]);
+          programmes = countProgrammes(parsed);
           epgNow.hidden = true;
         }
       } catch {
@@ -3021,6 +3158,7 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
     if (interesting || !silentOnNoChange) {
       if (interesting) {
         snapshot = fresh;
+        playlistCache.set(item.id, { snapshot: fresh, epg: playlistCache.get(item.id)?.epg ?? null });
         renderGroupSettings();
         renderCategories();
         renderChannels();
@@ -3129,6 +3267,14 @@ function loadFavoritesOrderFor(id: string): string[] {
 
 function reorderFavorite(url: string, target: string): void {
   if (activeView !== "favorites" || !plState.activeId || !snapshot || !favorites.has(url) || !favorites.has(target)) return;
+  if (allPlaylists) {
+    const id = snapshot.channels.find(c => c.url === url)?.source?.id;
+    if (!id || snapshot.channels.find(c => c.url === target)?.source?.id !== id) return;
+    const saved = loadFavoritesFor(id);
+    const order = applyFavoritesOrder(playlistCache.get(id)!.snapshot.channels, saved, parseFavoritesOrder(localStorage.getItem(favoritesOrderKey(id)))).map(c => c.url);
+    try { localStorage.setItem(favoritesOrderKey(id), JSON.stringify(moveFavorite(order, url, target))); } catch { /* текущая сессия */ }
+    updateAggregate(); renderChannels(false); return;
+  }
   const order = applyFavoritesOrder(snapshot.channels, favorites, favoritesOrder).map((channel) => channel.url);
   favoritesOrder = moveFavorite(order, url, target);
   try { localStorage.setItem(favoritesOrderKey(plState.activeId), JSON.stringify(favoritesOrder)); } catch { /* текущая сессия */ }
@@ -3140,6 +3286,17 @@ function reorderFavorite(url: string, target: string): void {
 /** Активировать плейлист по id: перезагрузить его избранное и список. */
 function activatePlaylist(id: string): void {
   cancelNumericZap();
+  if (allPlaylists) {
+    aggregateFilter = { search: searchInput.value, category: activeCategory, view: activeView, scroll: channelList.scrollTop };
+    allPlaylists = false; ++aggregateRequest;
+    const cached = playlistCache.get(id);
+    if (cached) {
+      const combined = aggregatePlaylists(aggregateSources()).epg;
+      playlistContext(id); snapshot = cached.snapshot; epg = new Map([...combined, ...(cached.epg ?? [])]);
+      activeCategory = null; searchInput.value = "";
+      renderNav(); renderCategories(); renderChannels(); renderPlaylistSwitcher(); refreshNowFav(); return;
+    }
+  }
   plState = { ...plState, activeId: id };
   savePlaylists(localStorage, plState);
   renderSettingsMode();
@@ -3165,7 +3322,7 @@ const storageReactions: Record<StorageReaction, () => void> = {
   pins: () => {
     parentalPins = parseParentalPins(localStorage.getItem(parentalPinsKey(plState.activeId!)));
     // Изменение защиты в другой вкладке отменяет ранее разрешённый просмотр.
-    btnClosePlayer.click();
+    if ((lastPlayed?.source?.id ?? plState.activeId) === plState.activeId) btnClosePlayer.click();
     activeCategory = null;
     renderPinSettings();
     renderCategories();
@@ -3173,7 +3330,17 @@ const storageReactions: Record<StorageReaction, () => void> = {
   },
   playlists: () => {
     const prevActive = plState.activeId;
+    const previous = plState.items;
     plState = loadPlaylists(localStorage);
+    for (const item of previous) {
+      const updated = plState.items.find(p => p.id === item.id);
+      if (!updated || JSON.stringify(updated) !== JSON.stringify(item)) playlistCache.delete(item.id);
+    }
+    if (allPlaylists) {
+      if (lastPlayed?.source && !plState.items.some(item => item.id === lastPlayed!.source!.id)) btnClosePlayer.click();
+      if (plState.activeId) playlistContext(plState.activeId);
+      void activateAllPlaylists(); return;
+    }
     renderPlaylistManager();
     renderPlaylistSwitcher();
     if (plState.activeId !== prevActive) {
@@ -3185,6 +3352,7 @@ const storageReactions: Record<StorageReaction, () => void> = {
   favorites: () => {
     favorites = loadFavoritesFor(plState.activeId!);
     favoritesOrder = loadFavoritesOrderFor(plState.activeId!);
+    updateAggregate();
     refreshNowFav();
     if (showsChannelList(activeView)) renderChannels(false);
   },
@@ -3198,6 +3366,14 @@ const storageReactions: Record<StorageReaction, () => void> = {
   },
 };
 window.addEventListener("storage", (e) => {
+  if (allPlaylists && e.key !== null && plState.items.some(item => item.id !== plState.activeId &&
+    [groupPreferencesKey(item.id), channelOverridesKey(item.id), parentalPinsKey(item.id), channelHealthKey(item.id), favoritesKey(item.id)].includes(e.key!))) {
+    pinDialog.cancel(); ++playRequest;
+    updateAggregate(); renderCategories(); renderChannels(false); renderPlaylistSwitcher();
+  }
+  const playingSource = lastPlayed?.source;
+  if (playingSource && playingSource.id !== plState.activeId && (e.key === parentalPinsKey(playingSource.id) ||
+      (e.key === groupPreferencesKey(playingSource.id) && parseGroupPreferences(localStorage.getItem(e.key)).hidden.has(playingSource.group)))) btnClosePlayer.click();
   applyStorageChange(
     e.key,
     () => {
@@ -3223,7 +3399,7 @@ const backupUi = createBackupUi({
   playlists: () => plState.items,
   activeId: () => plState.activeId,
   favorites: loadFavoritesFor,
-  channels: () => snapshot?.channels ?? null,
+  channels: () => (allPlaylists && plState.activeId ? playlistCache.get(plState.activeId)?.snapshot : snapshot)?.channels ?? null,
   theme: () => themeChoice(localStorage),
   language: () => currentLanguage,
   localFs: playlistOpfsFs,
@@ -3390,6 +3566,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
 
   try {
     snapshot = await loadPlaylist(url);
+    if (plState.activeId) playlistCache.set(plState.activeId, { snapshot, epg: null });
     renderNav();
   } catch (e) {
     showSetup(
@@ -3440,6 +3617,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
       .then((parsed) => {
         if (!epgLoad.isCurrent()) return;
         epg = parsed;
+        if (plState.activeId && snapshot) playlistCache.set(plState.activeId, { snapshot, epg: parsed });
         // EPG догружается позже списка — пролистанная позиция сохраняется (#349).
         renderChannels(false);
         refreshNowFav();

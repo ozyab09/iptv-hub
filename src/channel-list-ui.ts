@@ -94,6 +94,15 @@ export function renderChannelLogo(c: Channel): HTMLSpanElement {
 
 const FAVORITE_DRAG = "application/x-iptv-favorite";
 
+function sourceBadge(c: Channel): HTMLElement | null {
+  if (!c.source) return null;
+  const badge = document.createElement("span");
+  badge.className = "badge channel-source ellipsis";
+  badge.textContent = c.source.name;
+  badge.title = c.source.name;
+  return badge;
+}
+
 export function createChannelListUi(deps: ChannelListUiDeps): ChannelListUi {
   const { list } = deps;
   const tr = (key: TranslationKey, params: TranslationParams = {}): string => t(key, deps.language(), params);
@@ -138,7 +147,12 @@ export function createChannelListUi(deps: ChannelListUiDeps): ChannelListUi {
     time.className = "row-now ellipsis muted num";
     const date = new Date(programme.start).toLocaleDateString(lang, { day: "2-digit", month: "2-digit" });
     time.textContent = `${date} · ${formatRange(programme, lang)}`;
-    meta.append(name, time);
+    const line = document.createElement("span");
+    line.className = "line";
+    line.append(name);
+    const source = sourceBadge(channel);
+    if (source) line.append(source);
+    meta.append(line, time);
     row.append(renderChannelLogo(channel), meta);
     row.title = `${name.textContent} · ${time.textContent}`;
     row.addEventListener("click", () => deps.playProgramme(match));
@@ -224,6 +238,8 @@ export function createChannelListUi(deps: ChannelListUiDeps): ChannelListUi {
     name.className = "t-strong ellipsis";
     name.textContent = c.name;
     line.append(name);
+    const source = sourceBadge(c);
+    if (source) line.append(source);
 
     if (failure) {
       const badge = document.createElement("span");

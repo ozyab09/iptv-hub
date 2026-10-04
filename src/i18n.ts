@@ -2,6 +2,8 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "playlist.all": "Все плейлисты",
+  "playlist.partial": "Не удалось загрузить плейлист: {name}",
   "tv.now": "Сейчас: {title}",
   "tv.next": "Далее: {title}",
   "settings.updates": "Обновления приложения",
@@ -382,6 +384,8 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "playlist.all": "All playlists",
+  "playlist.partial": "Could not load playlist: {name}",
   "tv.now": "Now: {title}",
   "tv.next": "Next: {title}",
   "settings.updates": "App updates",
