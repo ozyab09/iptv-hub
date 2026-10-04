@@ -49,6 +49,19 @@ describe("extractAttr", () => {
   });
 });
 
+describe("extractAttr: имя атрибута от границы (#361)", () => {
+  it("xtvg-id перед tvg-id не подменяет значение", () => {
+    expect(extractAttr('#EXTINF:-1 xtvg-id="wrong" tvg-id="right"', "tvg-id")).toBe("right");
+    expect(extractAttr('tvg-id="right" xgroup-title="x"', "tvg-id")).toBe("right");
+    expect(extractAttr('#EXTINF:-1 xgroup-title="wrong"', "group-title")).toBeNull();
+  });
+  it("в разборе плейлиста канал получает свой tvg-id и группу", () => {
+    const ch = parseM3U('#EXTM3U\n#EXTINF:-1 xtvg-id="wrong" tvg-id="right" xgroup-title="bad" group-title="Новости",Канал\nhttps://e/a.m3u8\n').channels[0]!;
+    expect(ch.tvgId).toBe("right");
+    expect(ch.group).toBe("Новости");
+  });
+});
+
 describe("quoted EXTINF commas", () => {
   it("preserves commas and opposite quotes in single-quoted attributes", () => {
     const snapshot = parseM3U("#EXTM3U tvg-url='https://fixture.test/epg.xml'\n#EXTINF:-1 tvg-id='abc' group-title='_Best, \"News\"' tvg-logo='https://fixture.test/a,b.png' catchup-days='2',Name, HD\nhttps://fixture.test/live\n");
