@@ -1,5 +1,6 @@
 import "./style.css";
 import { createCatalogueCard } from "./catalogue-card";
+import { createUiFeedback } from "./ui-feedback";
 import { isPlaylistFileName, shareTargetSearch } from "./incoming-playlist";
 import { createChannelListUi } from "./channel-list-ui";
 import { copyText, externalPlayerBridge, isExternalPlayable, openExternally, selectionCopy, streamLink } from "./external-player";
@@ -294,6 +295,14 @@ const btnHidePanel = $<HTMLButtonElement>("btn-hide-panel");
 const btnRestorePanel = $<HTMLButtonElement>("btn-restore-panel");
 const btnShowMenu = $<HTMLButtonElement>("btn-show-menu");
 const toastEl = $("toast");
+/** Единая обратная связь для main и DOM-модулей (#378); колокольчик подключается лениво. */
+const uiFeedback = createUiFeedback({
+  toastEl,
+  setText: (el, message) => setSystemText(el, message),
+  createButton: () => document.createElement("button"),
+  createSpan: () => document.createElement("span"),
+  push: (message, watch) => notifBellUi.push(message, watch),
+});
 const notifBell = $<HTMLButtonElement>("notif-bell");
 const notifBadge = $("notif-badge");
 const notifPanel = $("notif-panel");
@@ -885,45 +894,14 @@ $("language-seg").addEventListener("click", (event) => {
   renderFullscreenTitle();
 });
 
-// ---------- UI helpers ----------
-// Токен показа: таймер скрытия гасит тост, только если поверх не показали
-// новый. Иначе короткий тост («Запись остановлена») уносил с собой кнопку
-// скачивания, которая должна жить 15с (issue #58).
-let toastToken = 0;
-
+// ---------- UI helpers — тосты и уведомления: src/ui-feedback.ts (#378) ----------
 function showToast(msg: string): void {
-  const token = ++toastToken;
-  setSystemText(toastEl, msg);
-  toastEl.hidden = false;
-  window.setTimeout(() => {
-    if (toastToken === token) toastEl.hidden = true;
-  }, 3500);
+  uiFeedback.toast(msg);
 }
 
 /** Тост с кнопкой действия (для Firefox-скачивания нужен новый user gesture). */
-function showToastAction(
-  msg: string,
-  actionLabel: string,
-  action: () => void,
-  durationMs = 15_000,
-): void {
-  const token = ++toastToken;
-  delete toastEl.dataset.systemMessage;
-  toastEl.textContent = "";
-  const span = document.createElement("span");
-  setSystemText(span, msg);
-  const btn = document.createElement("button");
-  btn.className = "toast-action";
-  setSystemText(btn, actionLabel);
-  btn.addEventListener("click", () => {
-    action();
-    toastEl.hidden = true;
-  });
-  toastEl.append(span, btn);
-  toastEl.hidden = false;
-  window.setTimeout(() => {
-    if (toastToken === token) toastEl.hidden = true;
-  }, durationMs);
+function showToastAction(msg: string, actionLabel: string, action: () => void, durationMs?: number): void {
+  uiFeedback.toastAction(msg, actionLabel, action, durationMs);
 }
 
 // ---------- Центр уведомлений (#98) — UI-слой вынесен в notification-bell.ts ----------
@@ -943,7 +921,7 @@ const notifBellUi = createNotificationBell({
 });
 /** Положить уведомление в колокольчик (данные + бейдж). */
 function pushNotification(message: string): void {
-  notifBellUi.push(message);
+  uiFeedback.notify(message);
 }
 
 async function watchReminder(target: NotificationWatch): Promise<void> {
@@ -2523,7 +2501,7 @@ reminderUi = createProgrammeReminders({ root: document, minutes: $<HTMLInputElem
   storage: localStorage,
   playlistIds: () => plState.items.map((p) => p.id),
   language: () => currentLanguage,
-  notify: (reminder, playlistId) => notifBellUi.push(tr("reminder.message", { channel: reminder.channelName, title: reminder.title,
+  notify: (reminder, playlistId) => uiFeedback.notify(tr("reminder.message", { channel: reminder.channelName, title: reminder.title,
     time: new Date(reminder.start).toLocaleTimeString(currentLanguage, { hour: "2-digit", minute: "2-digit" }) }), { playlistId, channelUrl: reminder.channelUrl }),
   watch: (playlistId, channelUrl) => { void watchReminder({ playlistId, channelUrl }); },
 });
