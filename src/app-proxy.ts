@@ -1,15 +1,27 @@
 /**
- * Прокси внутри Android-приложения (#452). Не серверный: запросы
- * `https://appassets.androidplatform.net/proxy/<scheme>/<authority>/<path>`
- * перехватывает MainActivity и сам загружает исходный ресурс. Для страницы
- * это тот же origin — ни mixed content, ни CORS. На GitHub Pages и в
- * обычном браузере перехватчика нет: функции возвращают исходный URL.
+ * Локальный прокси для http-источников (#452). Не серверный — работает на
+ * устройстве пользователя, внешних сервисов нет:
+ *
+ * - Android-приложение: запросы `https://appassets.androidplatform.net/proxy/
+ *   <scheme>/<authority>/<path>` перехватывает MainActivity — тот же origin,
+ *   ни mixed content, ни CORS;
+ * - десктоп: сопряжённый компаньон на http://127.0.0.1:47800 (#465).
+ *
+ * Без них (GitHub Pages в обычном браузере) функции возвращают исходный URL.
  */
 import { isPrivateHost } from "./config";
+import { companionProxyUrl, type CompanionPairing } from "./companion";
 
 /** Локальный origin Android-приложения (WebViewAssetLoader). */
 export const APP_HOST = "appassets.androidplatform.net";
 export const APP_PROXY_PATH = "/proxy/";
+
+let companion: CompanionPairing | null = null;
+
+/** Сопряжение с компаньоном (null — отключён или не отвечает). */
+export function setCompanionPairing(pairing: CompanionPairing | null): void {
+  companion = pairing;
+}
 
 /** Страница открыта внутри Android-приложения. */
 export function isAppPage(pageUrl: string): boolean {
@@ -21,13 +33,16 @@ export function isAppPage(pageUrl: string): boolean {
   }
 }
 
+/** Есть ли локальный прокси: приложение или сопряжённый компаньон. */
+export function hasLocalProxy(pageUrl: string): boolean {
+  return isAppPage(pageUrl) || companion !== null;
+}
+
 /**
- * Прокси-адрес для http-ресурса публичного хоста или null: страница не в
- * приложении, URL не http, адрес локальный/приватный (его WebView и так
- * загрузит как раньше) или уже проксирован.
+ * Прокси-адрес для http-ресурса публичного хоста или null: прокси нет, URL
+ * не http или адрес локальный/приватный (его и так грузят напрямую).
  */
-export function appProxyUrl(url: string, pageUrl: string): string | null {
-  if (!isAppPage(pageUrl)) return null;
+export function localProxyUrl(url: string, pageUrl: string): string | null {
   let target: URL;
   try {
     target = new URL(url);
@@ -35,10 +50,11 @@ export function appProxyUrl(url: string, pageUrl: string): string | null {
     return null;
   }
   if (target.protocol !== "http:" || isPrivateHost(target.hostname)) return null;
-  return `https://${APP_HOST}${APP_PROXY_PATH}http/${target.host}${target.pathname}${target.search}`;
+  if (isAppPage(pageUrl)) return `https://${APP_HOST}${APP_PROXY_PATH}http/${target.host}${target.pathname}${target.search}`;
+  return companion ? companionProxyUrl(target, companion) : null;
 }
 
-/** URL для загрузки: через прокси приложения, если он нужен, иначе исходный. */
-export function viaAppProxy(url: string, pageUrl: string): string {
-  return appProxyUrl(url, pageUrl) ?? url;
+/** URL для загрузки: через локальный прокси, если он нужен, иначе исходный. */
+export function viaLocalProxy(url: string, pageUrl: string): string {
+  return localProxyUrl(url, pageUrl) ?? url;
 }

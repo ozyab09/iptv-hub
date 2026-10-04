@@ -1,7 +1,7 @@
 /** Ядро плеера (#376): источники, https-апгрейд, зеркала, записи, жизненный цикл; управление — Player. */
 import Hls from "hls.js";
 import { isMixedContent } from "./config";
-import { appProxyUrl } from "./app-proxy";
+import { localProxyUrl } from "./app-proxy";
 import type { Channel } from "./types";
 import { DEFAULT_PLAYER_SETTINGS, sanitizePlayerSettings, type PlayerSettings } from "./player-settings";
 import { recordingSources } from "./recording-playback";
@@ -89,7 +89,7 @@ export class PlayerCore {
   protected resolvePlayableUrl(url: string): string {
     this.httpsUpgraded = false;
     // Android-приложение: http публичного хоста — через его прокси (#452), без https-апгрейда.
-    const proxied = appProxyUrl(url, window.location.href);
+    const proxied = localProxyUrl(url, window.location.href);
     if (proxied) return proxied;
     if (!isMixedContent(window.location.href, url)) return url;
     const upgraded = httpToHttps(url);

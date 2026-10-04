@@ -846,6 +846,15 @@ CI (#464): job `companion` (матрица ubuntu-24.04 + macos-15) — `go vet`
 macOS amd64/arm64 (cgo); `release` ждёт `companion` и прикладывает к релизу
 `iptv-hub-companion-{windows-*.exe,linux-*.tar.gz,macos-*.tar.gz}` — имена
 стабильны для ссылок `releases/latest/download/<имя>` на сайте. Без подписи.
+Сайт (#465): `companion.ts` (чистый) — `connectCompanion()` (`/health` →
+`/pair`, таймаут 2,5 с, проверка `protocol` и `proxyBase`), opt-in
+`iptv-hub.companion.v1`, `?companion=1` из трея включает режим и убирается
+из адреса, `detectPlatform()` и ссылки на бинарники. `app-proxy.ts` обобщён:
+`localProxyUrl()`/`viaLocalProxy()` — прокси приложения или сопряжённого
+компаньона (`setCompanionPairing`), `hasLocalProxy()` управляет
+`setPublicHttpAllowed()`. `companion-ui.ts` — раздел настроек (скрыт в
+Android-приложении). Подключение — до загрузки плейлиста в `bootstrap()`;
+переключатель и «Проверить снова» перечитывают плейлист при смене режима.
 
 ## Android: локальное приложение (#160, #246)
 
