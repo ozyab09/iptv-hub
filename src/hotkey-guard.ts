@@ -36,12 +36,13 @@ export function canHotkey(ctx: HotkeyContext): boolean {
   );
 }
 
-/** Открыт ли верхний оверлей/модальный интерфейс. */
+/**
+ * Открыт ли верхний оверлей/модальный интерфейс. Меню и гайд живут в
+ * разметке постоянно и прячутся атрибутом hidden (на себе или на обёртке) —
+ * открытым считается только видимый (#346).
+ */
 function isOverlayOpen(): boolean {
-  return (
-    !!document.querySelector("dialog[open]") ||
-    !!document.querySelector('[role="dialog"]') ||
-    !!document.querySelector('[role="menu"]') ||
-    !!document.querySelector('[role="listbox"]')
-  );
+  if (document.querySelector("dialog[open]")) return true;
+  const overlays = document.querySelectorAll('[role="dialog"], [role="menu"], [role="listbox"]');
+  return Array.from(overlays).some((el) => !el.closest("[hidden]"));
 }
