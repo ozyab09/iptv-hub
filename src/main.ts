@@ -1478,7 +1478,7 @@ function renderChannelCard(c: Channel): HTMLElement {
     if (plState.activeId) saveFavoritesFor(plState.activeId);
     refreshNowFav();
     renderCategories();
-    renderChannels();
+    renderChannels(false); // звезда не сбрасывает прокрутку (#349)
   });
   const actions = document.createElement("span");
   actions.className = "channel-actions";
@@ -1782,7 +1782,7 @@ nowFav.addEventListener("click", () => {
   favorites = toggleFavorite(favorites, lastPlayed);
   if (plState.activeId) saveFavoritesFor(plState.activeId);
   refreshNowFav();
-  renderChannels();
+  renderChannels(false);
 });
 
 // ---------- Клавиатурная навигация по списку каналов (FR-8) ----------
@@ -3953,7 +3953,7 @@ window.addEventListener("storage", (e) => {
       favorites = loadFavoritesFor(activeId);
       favoritesOrder = loadFavoritesOrderFor(activeId);
       refreshNowFav();
-      if (showsChannelList(activeView)) renderChannels();
+      if (showsChannelList(activeView)) renderChannels(false);
     }
   }
   if (d.theme) {
@@ -4265,7 +4265,8 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
       .then((parsed) => {
         if (!epgLoad.isCurrent()) return;
         epg = parsed;
-        renderChannels();
+        // EPG догружается позже списка — пролистанная позиция сохраняется (#349).
+        renderChannels(false);
         refreshNowFav();
         epgNow.hidden = true;
       })
