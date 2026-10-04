@@ -526,6 +526,8 @@ upsert в список плейлистов и активация; `?debug=1` в
 npm test           # vitest run (node env): 277 тестов
 npm run test:watch
 npm run build      # tsc --noEmit (strict, noUncheckedIndexedAccess) + vite build
+npm run build:types  # только строгая проверка типов, incremental
+npm run build:assets # только Vite; не заменяет полную проверку
 npm run dev        # vite dev server
 npm run preview    # предпросмотр dist/
 ```
@@ -533,6 +535,22 @@ npm run preview    # предпросмотр dist/
 - Чистые модули (весь список — в «Архитектурных принципах») обязаны оставаться
   без DOM/fetch внутри — это делает их тестируемыми в node без jsdom.
 - Тесты не должны зависеть от сети.
+
+**Ускорение сборки (#308).** `incremental` сохраняет результаты проверки в
+`node_modules/.cache/iptv-hub-types.tsbuildinfo`; strict, noUnused и
+noUncheckedIndexedAccess остаются включёнными. CI восстанавливает этот файл
+после `npm ci`, ключ учитывает ОС, Node, lockfile и tsconfig; TypeScript
+проверяет изменения исходников. `build:types` и `build:assets` запускаются
+параллельно, шаг ждёт оба процесса и падает при ошибке любого. Локальная
+`npm run build` сохраняет последовательную полную проверку.
+Vitest 2 использует `pool: "forks"` и `singleFork: true`; поддерживаемый
+`sequence.concurrent` выключен, поскольку тесты используют общие моки и часы.
+Неподдерживаемый `test.concurrency` удалён. Замер Windows / Node 24.15.0,
+767 тестов: один fork 13,62 с, два fork 14,90 с; оба прогона зелёные.
+Прямой запуск `tsc --noEmit`: до incremental 2,50 с, повторный с кэшем 1,11 с.
+Новый файл с ошибкой типа отвергается и при тёплом кэше. Это локальные замеры,
+не обещание такого же времени на runner CI.
+Vite уже выделяет hls.js в vendor, дополнительные зависимости не нужны.
 
 ## 🔄 CI/CD
 
@@ -548,7 +566,8 @@ https://github.com/ozyab09/iptv-hub/actions/runs/37180547211.
 предупреждения собственного кода оставались видны. При обновлении actions
 снова проверяйте указанные коды в логах и удаляйте заметку после их устранения.
 
-Workflow `ci.yml` (Node 22, actions v5): PR — `npm test` + `npm run build`;
+Workflow `ci.yml` (Node 22, actions v5): PR — `npm test` + параллельные
+`npm run build:types` и `npm run build:assets`;
 push в `main` — то же + деплой `dist/` в GitHub Pages (artifact +
 `actions/deploy-pages@v5`). Required check — `build`. Pages включить руками:
 Settings → Pages → Source: **GitHub Actions**.
