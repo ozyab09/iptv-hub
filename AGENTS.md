@@ -42,10 +42,11 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
-   (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts` —
+   (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
+   `screenshot-ui.ts` (#364) —
    узлы и зависимости приходят через create, логика тестируется на фейках.
    Осторожно с топ-левельным кодом `main.ts`: он исполняется по порядку, и
    вызов функции, трогающей `const X = createX(...)` до строки её объявления,
@@ -176,6 +177,12 @@ push в main CI вычисляет следующий патч, штампует
   просмотра записи (кнопки prev/next тогда скрыты). Кнопки prev/next деки
   рисуются иконками `prev-track`/`next-track` (⏮/⏭), а шевроны `prev`/`next`
   остаются для навигации по интерфейсу.
+  MediaSession (#362, `media-session.ts`, чистый): `refreshScrub()` →
+  `syncMediaSession()` берёт заголовок/передачу из `#now-title`/`#now-show` и
+  логотип (только https/data), мост не пересоздаёт одинаковые метаданные;
+  play/pause видео обновляют `playbackState`, закрытие плеера — `clear()`.
+  Действия системы идут через `applyMediaKey()`; `createActionGate(100 мс)`
+  отбрасывает дубль одного нажатия (keydown + MediaSession), `stop` закрывает плеер.
   Chromium/Firefox проверяют трёхминутное развитие sliding-манифеста на паузе
   с ускоренными таймерами, реальными TS-кадрами, продолжением и возвратом.
 - Запись эфира: HLS — сегментами без перекодирования (`segment-recorder.ts`
@@ -255,6 +262,17 @@ push в main CI вычисляет следующий патч, штампует
 просмотр. Установка защиты останавливает канал группы и открытое мульти-вью.
 В backup JSON v2 переносится соль и хеш PIN. Забытый PIN — очистка всех данных сайта; это
 локальное ограничение интерфейса, не защита от владельца браузера.
+
+### Карточка передачи (#363)
+
+`programmeRow()` всегда возвращает `.programme-recordable` со строкой и кнопкой
+`.programme-info`; `openProgrammeCard()` открывает оверлей `programme` (общий
+стек, history, popstate). Escape ловится в capture-фазе window и закрывает
+карточку раньше гайда. Текст EPG — только `textContent`, `desc` с переносами
+(`white-space: pre-line`), без desc блок скрыт. Действия переиспользуют
+`watchProgramme()` (тот же путь, что клик по строке: `playChannel()` с PIN,
+`buildCatchupUrl()`), `programmeDownloadButton()` и `programmeFutureActions()`
+(«Записать» и «Напомнить»). Подсказка строки дополняется `desc`.
 
 ### Скачивание передачи из архива (#315, #359)
 
@@ -370,6 +388,7 @@ iptv-hub/
 │   ├── playlist-ui.ts      # UI менеджера плейлистов: setup-список + переключатель
 │   ├── playlist-transport.ts # транспорт плейлистов: OPFS-адаптер, loadPlaylist, диагностика сбоев
 │   ├── quality.ts          # лейблы уровней/дорожек, формат статуса
+│   ├── screenshot-ui.ts    # DOM скриншота кадра: canvas → PNG, кнопка (#364)
 │   ├── recorder.ts         # запись перекодированием: mime, имя файла, жизненный цикл
 │   ├── segment-recorder.ts # запись HLS сегментами: контейнер, потолок, init-сегмент
 │   ├── recording-sink.ts   # куда писать: OPFS на диск, откат — память

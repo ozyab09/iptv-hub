@@ -1591,3 +1591,17 @@ video::cue {
 .download-status progress { flex: 0 1 160px; min-width: 80px; accent-color: var(--accent); }
 .download-cancel { flex: none; font: inherit; min-height: 44px; }
 .download-cancel:focus-visible, .programme-download.downloading:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Карточка передачи (#363): поверх гайда, тот же язык оверлеев. */
+.programme-overlay { position: fixed; inset: 0; z-index: 95; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
+.programme-overlay[hidden] { display: none; }
+.programme-card { width: min(520px, 100%); max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); background: var(--surface-1); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); }
+.programme-card-title { margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; overflow-wrap: anywhere; }
+.programme-card-meta { color: var(--muted); font-size: 13px; line-height: 18px; }
+.programme-card-desc { margin: 0; white-space: pre-line; overflow-wrap: anywhere; font-size: 15px; line-height: 22px; }
+.programme-card-desc[hidden] { display: none; }
+.programme-card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.programme-card-actions .btn { margin: 0; font: inherit; min-height: 44px; }
+.programme-card-actions .btn:focus-visible, .programme-info:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.programme-info { flex: none; width: 44px; height: 44px; }
+.programme-watch { flex: none; }

@@ -95,11 +95,7 @@ import {
   looksLikeM3U,
   saveLocalPlaylist,
 } from "./local-playlist";
-import {
-  describeShotFailure,
-  screenshotFileName,
-  type ShotFailure,
-} from "./screenshot";
+import { createScreenshotUi } from "./screenshot-ui";
 import {
   initialSleepState,
   sleepCancel,
@@ -123,6 +119,7 @@ import {
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
 import { canHotkey } from "./hotkey-guard";
 import { mediaKeyAction, type MediaKeyAction } from "./media-keys";
+import { createActionGate, createMediaSessionBridge, type MediaSessionBridge, type MediaSessionLike } from "./media-session";
 import { getNetworkConnection, neighborIndex, Player } from "./player";
 import {
   applyTheme,
@@ -200,6 +197,8 @@ let savedLanguage: string | null = null;
 try { savedLanguage = localStorage.getItem(LANGUAGE_KEY); } catch { /* приватный режим */ }
 let currentLanguage = resolveLanguage(savedLanguage, navigator.language);
 const tr = (key: TranslationKey, params: TranslationParams = {}): string => t(key, currentLanguage, params);
+/** Мост к MediaSession (#362); создаётся лениво — до объявления плеера его не трогаем. */
+let mediaSessionBridge: MediaSessionBridge | null = null;
 
 // Ставится первым, чтобы поймать и самые ранние сообщения.
 installDebugLog(window.location.search);
@@ -366,6 +365,12 @@ const subtitleMenu = $("subtitle-menu");
 const playerStatus = $("player-status");
 const btnGuide = $<HTMLButtonElement>("btn-guide");
 const guideOverlay = $("guide-overlay");
+const programmeOverlay = $("programme-overlay");
+const programmeCardTitle = $("programme-card-title");
+const programmeCardMeta = $("programme-card-meta");
+const programmeCardDesc = $("programme-card-desc");
+const programmeCardActions = $("programme-card-actions");
+const programmeCardClose = $<HTMLButtonElement>("programme-card-close");
 const guideTitle = $("guide-title");
 const guideDays = $("guide-days");
 const guideList = $("guide-list");
@@ -1686,6 +1691,7 @@ btnClosePlayer.addEventListener("click", () => {
   setWatching(false);
   lastPlayed = null;
   archivePlayback = null;
+  mediaSession().clear();
   renderChannels();
 });
 
@@ -1696,10 +1702,12 @@ btnPause.addEventListener("click", () => {
   videoEl.addEventListener("play", () => {
     wakeLockState = wakeLockPlay(wakeLockState, wakeLockHooks, document.visibilityState === "visible");
     setIcon(btnPause, "pause");
+    syncMediaSession();
   });
   videoEl.addEventListener("pause", () => {
     wakeLockState = wakeLockStop(wakeLockState);
     setIcon(btnPause, "play");
+    syncMediaSession();
   });
   document.addEventListener("visibilitychange", () => {
     wakeLockState =
@@ -1748,6 +1756,13 @@ btnNext.addEventListener("click", () => playNeighbor(1));
  * клавиатура). Смена канала — как у кнопок деки: во время просмотра записи
  * prev/next скрыты и disabled, поэтому и клавиши ничего не делают.
  */
+/**
+ * Одно нажатие медиа-кнопки может прийти и keydown, и обработчиком
+ * MediaSession (#362): повтор того же действия за 100 мс отбрасывается —
+ * дубли приходят почти одновременно, а быстрые нажатия человека реже.
+ */
+const allowMediaAction = createActionGate(100, () => Date.now());
+
 function applyMediaKey(action: MediaKeyAction): void {
   switch (action) {
     case "play":
@@ -1949,7 +1964,7 @@ window.addEventListener("keydown", (e) => {
     const action = mediaKeyAction(e.code);
     if (action) {
       e.preventDefault();
-      applyMediaKey(action);
+      if (allowMediaAction(action)) applyMediaKey(action);
       return;
     }
   }
@@ -1980,11 +1995,7 @@ window.addEventListener("keydown", (e) => {
   ) {
     if (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "ы") {
       if (playerBar.hidden) return;
-      try {
-        takeScreenshot();
-      } catch {
-        showToast(describeShotFailure("tainted"));
-      }
+      screenshotUi.take();
       return;
     }
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -2631,6 +2642,7 @@ let historyGuard = false; // не зеркалить собственные hist
 /** Показать/скрыть DOM-узел оверлея по имени. */
 function applyOverlay(name: OverlayName, on: boolean): void {
   if (name === "guide") guideOverlay.hidden = !on;
+  else if (name === "programme") programmeOverlay.hidden = !on;
   else if (name === "notifications") {
     notifPanel.hidden = !on;
     notifBell.setAttribute("aria-expanded", String(on));
@@ -2944,51 +2956,14 @@ function startRecording(): void {
   if (recSession.isRecording() && recordPathNote) showToast(recordPathNote);
 }
 
-// ---------- Скриншот кадра (FR-14) ----------
-// drawImage(<video>) → PNG. Через MSE кадр не «запачкан», у нативных
-// cross-origin потоков без CORS канвас tainted — браузер бросит при toBlob,
-// честно сообщаем об ограничении. Логика имён/ошибок — src/screenshot.ts.
-function takeScreenshot(): void {
-  if (!lastPlayed) return;
-  const frame = multiViewUi.activeVideo ?? videoEl;
-  if (!frame.videoWidth) {
-    showToast(describeShotFailure("empty"));
-    return;
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = frame.videoWidth;
-  canvas.height = frame.videoHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.drawImage(frame, 0, 0);
-  const fail = (reason: ShotFailure): void => showToast(describeShotFailure(reason));
-  canvas.toBlob(
-    (blob) => {
-      if (!blob) {
-        fail("tainted");
-        return;
-      }
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = screenshotFileName(lastPlayed!.name, new Date());
-      document.body.append(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-      showToast(tr("player.screenshotSaved"));
-    },
-    "image/png",
-    // toBlob для tainted-канваса кидает SecurityError синхронно в некоторых
-    // браузерах, в других даёт null — покрыты оба варианта.
-  );
-}
-
-try {
-  // Обёртка try: SecurityError от toBlob может прилететь синхронно.
-  btnShot.addEventListener("click", takeScreenshot);
-} catch {
-  showToast(describeShotFailure("tainted"));
-}
+// ---------- Скриншот кадра (FR-14) — src/screenshot-ui.ts (#364) ----------
+const screenshotUi = createScreenshotUi({
+  button: btnShot,
+  frame: () => multiViewUi.activeVideo ?? videoEl,
+  channelName: () => lastPlayed?.name ?? null,
+  toast: showToast,
+  savedMessage: () => tr("player.screenshotSaved"),
+});
 
 // Единый toggle: старт из idle, стоп+сохранение из recording.
 // (Раньше здесь жили два обработчика — addEventListener + onclick — и оба
@@ -3145,40 +3120,103 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
 
   if (watchable) {
     row.title = isLive ? tr("guide.watchNow") : tr("guide.archiveTitle");
-    row.addEventListener("click", async () => {
-      if (isLive) {
-        if (await playChannel(c)) onPlayed();
-        return;
-      }
-      const url = buildCatchupUrl(cu, p, now);
-      if (!url) {
-        showToast(tr("error.noArchive"));
-        return;
-      }
-      if (await playChannel(c, url, p)) onPlayed();
-    });
+    row.addEventListener("click", () => void watchProgramme(c, p, now, onPlayed));
   } else if (state === "past") {
     row.title =
       cu.days > 0
         ? tr("guide.outsideArchive")
         : tr("guide.noArchive");
   }
+  // Описание из EPG — подсказкой на строке, полностью — в карточке (#363).
+  if (p.desc) row.title = row.title ? `${row.title}. ${p.desc}` : p.desc;
   const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
+  wrapper.append(row, programmeInfoButton(c, p, onPlayed));
   if (stop <= now.getTime()) {
     // Скачивание доступной из архива передачи (#315, #359). Раньше блок стоял
     // после раннего return для прошедших передач и не рисовался вовсе.
-    if (!(watchable && cu.source)) return row;
-    wrapper.append(row, programmeDownloadButton(c, p, cu));
+    if (watchable && cu.source) wrapper.append(programmeDownloadButton(c, p, cu));
     return wrapper;
   }
+  wrapper.append(...programmeFutureActions(c, p));
+  return wrapper;
+}
+
+/** «Записать» и «Напомнить» для идущей и будущей передачи. */
+function programmeFutureActions(c: Channel, p: EpgProgramme): HTMLElement[] {
   const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
   record.textContent = tr("schedule.title");
   const playlistId = plState.activeId;
   record.addEventListener("click", () => { if (playlistId) scheduleUi?.plan(c, p, playlistId); });
-  wrapper.append(row, record);
   const reminder = playlistId && reminderUi?.button(c, p, playlistId);
-  if (reminder) wrapper.append(reminder);
-  return wrapper;
+  return reminder ? [record, reminder] : [record];
+}
+
+/** Включить эфир или архив передачи: те же проверки, что у строки программы. */
+async function watchProgramme(c: Channel, p: EpgProgramme, now: Date, onPlayed: () => void): Promise<boolean> {
+  const start = Date.parse(p.start);
+  const stop = Date.parse(p.stop);
+  if (start <= now.getTime() && now.getTime() < stop) {
+    if (!await playChannel(c)) return false;
+    onPlayed();
+    return true;
+  }
+  const url = buildCatchupUrl({ days: c.catchupDays, source: c.catchupSource }, p, now);
+  if (!url) {
+    showToast(tr("error.noArchive"));
+    return false;
+  }
+  if (!await playChannel(c, url, p)) return false;
+  onPlayed();
+  return true;
+}
+
+function programmeInfoButton(c: Channel, p: EpgProgramme, onPlayed: () => void): HTMLButtonElement {
+  const info = document.createElement("button");
+  info.type = "button";
+  info.className = "icon-btn programme-info";
+  info.title = tr("programme.details");
+  info.setAttribute("aria-label", `${tr("programme.details")}: ${p.title}`);
+  setIcon(info, "info");
+  info.addEventListener("click", () => openProgrammeCard(c, p, onPlayed));
+  return info;
+}
+
+/**
+ * Карточка передачи (#363): название, время и статус, описание из EPG и
+ * действия строки программы. Текст EPG вставляется только через textContent.
+ */
+function openProgrammeCard(c: Channel, p: EpgProgramme, onPlayed: () => void): void {
+  const now = new Date();
+  const start = Date.parse(p.start);
+  const stop = Date.parse(p.stop);
+  const cu = { days: c.catchupDays, source: c.catchupSource };
+  const isLive = start <= now.getTime() && now.getTime() < stop;
+  const past = stop <= now.getTime();
+  const watchable = isLive || canWatchPast(cu, p, now);
+  programmeCardTitle.textContent = p.title;
+  const status = isLive ? tr("programme.statusNow") : past ? tr("programme.statusPast") : tr("programme.statusNext");
+  programmeCardMeta.textContent = `${c.name} · ${formatRange(p, currentLanguage)} · ${status}`;
+  programmeCardDesc.textContent = p.desc ?? "";
+  programmeCardDesc.hidden = !p.desc;
+  programmeCardActions.textContent = "";
+  if (watchable) {
+    const watch = document.createElement("button");
+    watch.type = "button";
+    watch.className = "btn btn-sm btn-primary programme-watch";
+    watch.textContent = isLive ? tr("guide.watchNow") : tr("guide.archive");
+    watch.addEventListener("click", async () => {
+      if (await watchProgramme(c, p, new Date(), onPlayed)) closeOverlay("programme");
+    });
+    programmeCardActions.append(watch);
+  }
+  if (past) {
+    if (watchable && cu.source) programmeCardActions.append(programmeDownloadButton(c, p, cu));
+  } else {
+    programmeCardActions.append(...programmeFutureActions(c, p));
+  }
+  programmeCardActions.hidden = programmeCardActions.childElementCount === 0;
+  openOverlay("programme");
+  programmeCardClose.focus();
 }
 
 /**
@@ -3288,6 +3326,18 @@ function renderSchedule(): void {
 btnGuide.addEventListener("click", openGuide);
 btnFullGuide.addEventListener("click", openGuide);
 guideClose.addEventListener("click", () => closeOverlay("guide"));
+programmeCardClose.addEventListener("click", () => closeOverlay("programme"));
+programmeOverlay.addEventListener("click", (e) => {
+  if (e.target === programmeOverlay) closeOverlay("programme");
+});
+// Escape закрывает карточку раньше гайда под ней: ловим в capture-фазе,
+// до обработчиков гайда и горячих клавиш плеера (#363).
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || programmeOverlay.hidden) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  closeOverlay("programme");
+}, true);
 guideOverlay.addEventListener("click", (e) => {
   if (e.target === guideOverlay) closeOverlay("guide");
 });
@@ -3491,6 +3541,48 @@ scrub.addEventListener("keydown", (e) => {
  * до конца передачи».
  */
 function refreshScrub(): void {
+  refreshScrubView();
+  syncMediaSession();
+}
+
+/**
+ * Карточка «что играет» в системе (#362): канал или запись, текущая
+ * передача, логотип. Повтор тех же данных мост отбрасывает сам.
+ */
+function syncMediaSession(): void {
+  const bridge = mediaSession();
+  if (playerBar.hidden) {
+    bridge.clear();
+    return;
+  }
+  bridge.update({
+    title: nowTitle.textContent ?? "",
+    artist: nowShow.textContent ?? "",
+    artwork: player.isRecordingPlayback ? null : lastPlayed?.logo ?? null,
+  });
+  bridge.setPlaying(!videoEl.paused);
+}
+
+function mediaSession(): MediaSessionBridge {
+  if (mediaSessionBridge) return mediaSessionBridge;
+  const session = (navigator as Navigator & { mediaSession?: MediaSessionLike }).mediaSession ?? null;
+  const Metadata = (window as Window & { MediaMetadata?: new (init: object) => unknown }).MediaMetadata;
+  const run = (action: MediaKeyAction) => (): void => {
+    if (!playerBar.hidden && allowMediaAction(action)) applyMediaKey(action);
+  };
+  mediaSessionBridge = createMediaSessionBridge(session && Metadata ? session : null, (init) => new Metadata!(init), {
+    play: run("play"),
+    pause: run("pause"),
+    stop: () => { if (!playerBar.hidden) btnClosePlayer.click(); },
+    nexttrack: run("next"),
+    previoustrack: run("previous"),
+    seekforward: run("forward"),
+    seekbackward: run("backward"),
+  });
+  return mediaSessionBridge;
+}
+
+function refreshScrubView(): void {
   // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
   // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
   // а отстать от эфира на них можно ровно так же.
