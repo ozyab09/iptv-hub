@@ -2,6 +2,8 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "refresh.updatedPlain": "Плейлист обновлён",
+  "refresh.httpDropped": "Скрыто http-каналов: {count}",
   "common.close": "Закрыть",
   "player.goLive": "К эфиру",
   "guide.title": "Программа",
@@ -350,6 +352,8 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "refresh.updatedPlain": "Playlist updated",
+  "refresh.httpDropped": "Hidden HTTP channels: {count}",
   "common.close": "Close",
   "player.goLive": "Go live",
   "guide.title": "Programme guide",

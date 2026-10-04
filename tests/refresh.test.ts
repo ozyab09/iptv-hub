@@ -147,6 +147,13 @@ function prog(): EpgProgramme {
 }
 
 describe("refresh: текст уведомления", () => {
+  it("builds English summaries and notices directly in the requested language", () => {
+    const diff = { added: 3, removed: 1, changed: 2 };
+    expect(checkSummary(diff, 20, 50, true, "en")).toBe("Playlist updated: +3, −1, changed: 2. Channels: 20, programmes: 50");
+    expect(checkSummary({ added: 0, removed: 0, changed: 0 }, 20, 0, false, "en")).toBe("Playlist checked: no changes. Channels: 20, no programmes");
+    expect(refreshNotice(diff, 5, "en")).toBe("Playlist updated: +3, −1, changed: 2. Hidden HTTP channels: 5");
+    expect(refreshNotice({ added: 0, removed: 0, changed: 0 }, 5, "en")).toBe("Playlist updated. Hidden HTTP channels: 5");
+  });
   it("без изменений — короткое подтверждение", () => {
     expect(refreshNotice({ added: 0, removed: 0, changed: 0 }, 0)).toBe(
       "Плейлист проверён: без изменений",

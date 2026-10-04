@@ -5,6 +5,8 @@
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/iptv-hub-types.tsbuildinfo",
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,

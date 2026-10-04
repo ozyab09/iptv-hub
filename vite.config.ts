@@ -61,9 +61,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
-    // node-окружение + независимые тесты: параллельные процессы без jsdom,
-    // чтобы `npm test` не держал целую машину под один файл.
-    concurrency: true,
+    // Один fork быстрее двух на текущем наборе тестов (см. AGENTS.md, #308).
+    // Внутри файлов сохраняем последовательность: тесты используют fake timers и моки.
+    sequence: { concurrent: false },
     pool: "forks",
     poolOptions: {
       forks: { singleFork: true },

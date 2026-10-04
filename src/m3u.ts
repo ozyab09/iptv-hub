@@ -97,7 +97,12 @@ export function parseM3U(content: string): PlaylistSnapshot {
     }
 
     if (line.startsWith("#EXTINF")) {
-      const commaIdx = line.indexOf(",");
+      let commaIdx = -1;
+      let quoted = false;
+      for (let i = 0; i < line.length; i++) {
+        if (line[i] === '"') quoted = !quoted;
+        if (line[i] === "," && !quoted) { commaIdx = i; break; }
+      }
       const head =
         commaIdx >= 0 ? line.slice(0, commaIdx) : line;
       const name =

@@ -1,5 +1,9 @@
 name: CI + Pages
 
+# #318: setup-node@v5 and download-artifact@v8 still emit upstream Node
+# DEP0040/DEP0169/DEP0005 warnings (including setup-node post-steps).
+# See AGENTS.md, CI/CD, for the verified run and recheck procedure.
+
 on:
   push:
     branches: [main]
@@ -84,6 +88,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Restore typecheck cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/iptv-hub-types.tsbuildinfo
+          key: types-${{ runner.os }}-node22-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-${{ github.sha }}
+          restore-keys: |
+            types-${{ runner.os }}-node22-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-
       - run: npm test
       - name: Restore published Android metadata
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -100,7 +111,17 @@ jobs:
           VERSION_NAME: ${{ needs.release-check.outputs.version }}
           VERSION_CODE: ${{ needs.release-check.outputs.version_code }}
         run: node android/scripts/release-version.mjs --write
-      - run: npm run build
+      - name: Typecheck and build assets in parallel
+        run: |
+          npm run build:types &
+          types_pid=$!
+          npm run build:assets &
+          assets_pid=$!
+          types_status=0
+          wait "$types_pid" || types_status=$?
+          assets_status=0
+          wait "$assets_pid" || assets_status=$?
+          test "$types_status" -eq 0 && test "$assets_status" -eq 0
         env:
           APP_VERSION: ${{ needs.release-check.outputs.version }}
       # Одна web-сборка для visual, Android и Pages на любом событии.
