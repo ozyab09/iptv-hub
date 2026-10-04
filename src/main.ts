@@ -488,6 +488,8 @@ async function activateAllPlaylists(refresh = false): Promise<void> {
   allPlaylists = true;
   seriesEpisodes = null;
   showPlayer();
+  epgNow.hidden = false;
+  setSystemText(epgNow, tr("loading.playlist"));
   await Promise.all(plState.items.map(async item => {
     const cached = playlistCache.get(item.id);
     if (!refresh && cached?.epg) return;
@@ -509,6 +511,7 @@ async function activateAllPlaylists(refresh = false): Promise<void> {
     } catch { if (request === aggregateRequest) pushNotification(tr("playlist.partial", { name: item.name })); }
   }));
   if (request !== aggregateRequest || !allPlaylists) return;
+  epgNow.hidden = true;
   updateAggregate();
   if (aggregateFilter && !refresh) {
     searchInput.value = aggregateFilter.search; activeCategory = aggregateFilter.category;
@@ -3333,6 +3336,7 @@ function activatePlaylist(id: string): void {
     if (cached) {
       const combined = aggregatePlaylists(aggregateSources()).epg;
       playlistContext(id); snapshot = cached.snapshot; epg = new Map([...combined, ...(cached.epg ?? [])]);
+      epgNow.hidden = true;
       activeCategory = null; searchInput.value = "";
       renderNav(); renderCategories(); renderChannels(); renderPlaylistSwitcher(); refreshNowFav(); return;
     }
