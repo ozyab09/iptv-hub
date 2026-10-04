@@ -1884,7 +1884,7 @@ window.addEventListener("keydown", (e) => {
       showsChannelList,
     })
   ) {
-    if (e.key === "s" || e.key === "ы") {
+    if (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "ы") {
       if (playerBar.hidden) return;
       try {
         takeScreenshot();
@@ -2757,18 +2757,6 @@ try {
 } catch {
   showToast(describeShotFailure("tainted"));
 }
-
-window.addEventListener("keydown", (e) => {
-  if (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "ы") {
-    if (playerBar.hidden) return;
-    e.preventDefault();
-    try {
-      takeScreenshot();
-    } catch {
-      showToast(describeShotFailure("tainted"));
-    }
-  }
-});
 
 // Единый toggle: старт из idle, стоп+сохранение из recording.
 // (Раньше здесь жили два обработчика — addEventListener + onclick — и оба
