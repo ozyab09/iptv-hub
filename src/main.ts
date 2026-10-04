@@ -65,7 +65,8 @@ import {
   columnsForWidth,
   spacerHeight,
 } from "./virtual-list";
-import { clock, isBehindLive, mediaScrub, programmeProgress, scrubSeekTarget } from "./scrub";
+import { clock, isBehindLive, programmeProgress } from "./scrub";
+import { createScrubUi } from "./scrub-ui";
 import { classifySwipe, isDoubleTap, isLongPress, tapSide } from "./gestures";
 import {
   loadPosition,
@@ -288,21 +289,15 @@ const videoEl = $<HTMLVideoElement>("video");
 const videoStage = $("video-stage");
 const liveBadge = $("live-badge");
 const scrub = $("scrub");
-let scrubDrag: { pointerId: number; time: number } | null = null;
-const scrubFill = $("scrub-fill");
-const progStart = $("prog-start");
-const progEnd = $("prog-end");
 const btnLive = $<HTMLButtonElement>("btn-live");
 const btnProgrammeStart = $<HTMLButtonElement>("btn-programme-start");
 let archivePlayback: { url: string; programme: EpgProgramme | null; fromStart: boolean } | null = null;
-const miniProgFill = $("mini-prog-fill");
 const continueBlock = $("continue-block");
 const continueRow = $("continue-row");
 
 const nowTitle = $("now-title");
 const nowCategory = $("now-category");
 const nowShow = $("now-show");
-const nowTimeLeft = $("now-time-left");
 const btnCollapseList = $<HTMLButtonElement>("btn-collapse-list");
 const btnHidePanel = $<HTMLButtonElement>("btn-hide-panel");
 const btnRestorePanel = $<HTMLButtonElement>("btn-restore-panel");
@@ -2863,61 +2858,29 @@ for (const ev of ["click", "keydown"] as const) {
   });
 }
 
-function recordingScrubDuration(): number {
-  return player.isRecordingPlayback && videoEl.readyState > 0 && Number.isFinite(videoEl.duration) && videoEl.duration > 0
-    ? videoEl.duration : 0;
-}
-
-function scrubPointerTime(e: PointerEvent): number | null {
-  const rect = scrub.getBoundingClientRect();
-  return scrubSeekTarget(e.clientX, rect.left, rect.width, recordingScrubDuration());
-}
-
-scrub.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || !e.isPrimary || scrubDrag) return;
-  const time = scrubPointerTime(e);
-  if (time === null) return;
-  e.preventDefault();
-  e.stopPropagation();
-  scrubDrag = { pointerId: e.pointerId, time };
-  scrub.setPointerCapture(e.pointerId);
-  scrub.focus();
-  wakeControls();
-  refreshScrub();
-});
-scrub.addEventListener("pointermove", (e) => {
-  if (scrubDrag?.pointerId !== e.pointerId) return;
-  e.stopPropagation();
-  const time = scrubPointerTime(e);
-  if (time !== null) scrubDrag.time = time;
-  wakeControls();
-  refreshScrub();
-});
-scrub.addEventListener("pointerup", (e) => {
-  if (scrubDrag?.pointerId !== e.pointerId) return;
-  e.stopPropagation();
-  const time = scrubPointerTime(e);
-  scrubDrag = null;
-  scrub.releasePointerCapture(e.pointerId);
-  if (time !== null) videoEl.currentTime = time;
-  refreshScrub();
-});
-for (const event of ["pointercancel", "lostpointercapture"] as const) {
-  scrub.addEventListener(event, (e) => {
-    if (scrubDrag?.pointerId !== e.pointerId) return;
-    scrubDrag = null;
-    refreshScrub();
-  });
-}
-scrub.addEventListener("keydown", (e) => {
-  const duration = recordingScrubDuration();
-  if (!duration || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-  e.preventDefault();
-  e.stopPropagation();
-  if (e.key === "Home") videoEl.currentTime = 0;
-  else if (e.key === "End") videoEl.currentTime = duration;
-  else player.seekBy(e.key === "ArrowLeft" ? -15 : 15);
-  refreshScrub();
+// Полоса прогресса и мини-полоска — src/scrub-ui.ts (#369).
+const scrubUi = createScrubUi({
+  nodes: {
+    scrub,
+    fill: $("scrub-fill"),
+    miniFill: $("mini-prog-fill"),
+    start: $("prog-start"),
+    end: $("prog-end"),
+    show: nowShow,
+    timeLeft: $("now-time-left"),
+  },
+  video: videoEl,
+  isRecording: () => player.isRecordingPlayback,
+  recordingDurationSec: () => player.recordingDurationSec,
+  seekBy: (seconds) => player.seekBy(seconds),
+  archiveProgramme: () => archivePlayback?.programme ?? null,
+  liveProgramme: () => (epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null),
+  channelUrl: () => lastPlayed?.url ?? null,
+  scheduleKey: () => guideUi.scheduleKey(),
+  renderSchedule: () => guideUi.renderSchedule(),
+  language: () => currentLanguage,
+  wake: () => wakeControls(),
+  refresh: () => refreshScrub(),
 });
 
 /**
@@ -2928,7 +2891,11 @@ scrub.addEventListener("keydown", (e) => {
  * до конца передачи».
  */
 function refreshScrub(): void {
-  refreshScrubView();
+  // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
+  // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
+  // а отстать от эфира на них можно ровно так же.
+  refreshPlaybackControls();
+  scrubUi.render();
   syncMediaSession();
 }
 
@@ -2967,81 +2934,6 @@ function mediaSession(): MediaSessionBridge {
     seekbackward: run("backward"),
   });
   return mediaSessionBridge;
-}
-
-function refreshScrubView(): void {
-  // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
-  // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
-  // а отстать от эфира на них можно ровно так же.
-  refreshPlaybackControls();
-  const duration = recordingScrubDuration();
-  if (duration) {
-    scrub.setAttribute("role", "slider");
-    scrub.tabIndex = 0;
-    scrub.setAttribute("aria-label", tr("record.position"));
-    scrub.setAttribute("aria-valuemin", "0");
-    scrub.setAttribute("aria-valuemax", String(duration));
-  } else {
-    const pointerId = scrubDrag?.pointerId;
-    scrubDrag = null;
-    if (pointerId !== undefined && scrub.hasPointerCapture(pointerId)) scrub.releasePointerCapture(pointerId);
-    for (const attr of ["role", "tabindex", "aria-label", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext"]) scrub.removeAttribute(attr);
-  }
-
-  if (player.isRecordingPlayback) {
-    const position = scrubDrag?.time ?? videoEl.currentTime;
-    const timeline = mediaScrub(position, videoEl.duration, player.recordingDurationSec);
-    if (duration) {
-      scrub.setAttribute("aria-valuenow", String(Math.max(0, Math.min(position, duration))));
-      scrub.setAttribute("aria-valuetext", `${timeline.position} / ${timeline.duration}`);
-    }
-    const pct = `${(timeline.progress * 100).toFixed(1)}%`;
-    scrubFill.style.width = pct;
-    miniProgFill.style.width = pct;
-    progStart.textContent = timeline.position;
-    progEnd.textContent = timeline.duration;
-    nowShow.textContent = "";
-    nowTimeLeft.textContent = "";
-    if (guideUi.scheduleKey()) guideUi.renderSchedule();
-    return;
-  }
-
-  const prog =
-    archivePlayback?.programme ?? (epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot).now : null);
-  if (!prog) {
-    if (guideUi.scheduleKey()) guideUi.renderSchedule();
-    scrubFill.style.width = "0%";
-    miniProgFill.style.width = "0%";
-    progStart.textContent = "";
-    progEnd.textContent = "";
-    nowShow.textContent = "";
-    nowTimeLeft.textContent = "";
-    return;
-  }
-  const startMs = Date.parse(prog.start);
-  const stopMs = Date.parse(prog.stop);
-  const positionMs = archivePlayback ? startMs + videoEl.currentTime * 1000 : Date.now();
-  const pct = `${(programmeProgress(positionMs, startMs, stopMs) * 100).toFixed(1)}%`;
-  scrubFill.style.width = pct;
-  miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
-  progStart.textContent = clock(startMs, currentLanguage);
-  progEnd.textContent = clock(stopMs, currentLanguage);
-
-  // Сменилась передача или канал — перестроить программу под плеером
-  if (`${lastPlayed!.url}|${prog.start}` !== guideUi.scheduleKey()) guideUi.renderSchedule();
-
-  // Название передачи — сверху кадра, «ещё N мин» — у конца полосы
-  nowShow.textContent = prog.title;
-  nowTimeLeft.textContent = timeLeft(stopMs - positionMs);
-}
-
-/** «ещё 58 мин», «ещё 1 ч 5 мин» — до конца передачи. */
-function timeLeft(ms: number): string {
-  const min = Math.max(0, Math.round(ms / 60_000));
-  if (min < 60) return tr("player.remainingMinutes", { minutes: min });
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m === 0 ? tr("player.remainingHours", { hours: h }) : tr("player.remainingBoth", { hours: h, minutes: m });
 }
 
 /**
@@ -3217,7 +3109,7 @@ function wakeControls(): void {
   controlsTimer = window.setTimeout(() => {
     // Открытое меню качества или дорожек нельзя гасить вместе с контролами
     const menuOpen = !qualityMenu.hidden || !audioMenu.hidden || !subtitleMenu.hidden;
-    if (menuOpen || scrubDrag || document.activeElement === scrub) {
+    if (menuOpen || scrubUi.isDragging() || document.activeElement === scrub) {
       wakeControls();
       return;
     }
