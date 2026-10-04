@@ -42,7 +42,7 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts` —
@@ -90,6 +90,8 @@ push в main CI вычисляет следующий патч, штампует
   содержит канал, передачу, дату и время; доступное прошедшее открывается
   через catchup, остальные результаты включают эфир. Без EPG остаётся поиск
   каналов. Общий список результатов виртуализирован.
+  Ввод в поиск дебаунсится 200 мс (`debounce.ts`, ↓ из поиска делает flush);
+  нормализованные названия передач кэшируются в WeakMap по объекту EPG (#357).
   Поиск передач нормализует регистр, Unicode-пунктуацию (как разделитель слов)
   и пробелы отдельно от имён каналов; пустой после нормализации запрос не
   даёт результатов EPG. Отображается исходное название передачи.
