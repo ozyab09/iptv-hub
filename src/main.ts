@@ -1528,7 +1528,10 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
   if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
-  if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined || archivePlayback !== null)) {
+  // lastPlayed может быть null (плеер закрыли сразу после старта записи —
+  // осиротевший асинхронный старт): такую запись тоже останавливаем, иначе
+  // индикатор записи загорится для нового канала, куда она не относится (#342).
+  if (isRecordingNow() && (lastPlayed === null || lastPlayed.url !== c.url || archiveUrl !== undefined || archivePlayback !== null)) {
     stopRecordingNow();
     showToast(tr("record.channelStopped"));
   }
@@ -2693,7 +2696,18 @@ function startRecording(): void {
   // (нативное воспроизведение, прямые mp4).
   if (player.getHls()) {
     pinLevelForRecording();
+    // Канал, на который стартует запись: если пока создавалось хранилище
+    // (start асинхронен) плеер закрыли или ушли на другой канал — осиротевший
+    // старт отменяется без сохранения, чтобы индикатор записи не загорелся
+    // для чужого канала (#342).
+    const recordingUrl = lastPlayed?.url ?? null;
     void segSession.start().then(() => {
+      const movedOn = playerBar.hidden || lastPlayed?.url !== recordingUrl;
+      if (segSession.isRecording() && movedOn) {
+        void segSession.stop(false);
+        restoreLevelAfterRecording();
+        return;
+      }
       // старт мог не состояться (не создалось хранилище) — не держим качество
       if (!segSession.isRecording()) restoreLevelAfterRecording();
     });
