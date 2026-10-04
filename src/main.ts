@@ -647,12 +647,14 @@ const player = new Player(
   () => {
     if (!segSession.isRecording()) return;
     stopRecordingNow();
-    showToast("Запись остановлена: поток переключён на зеркало");
+    showToast(tr("record.mirrorStopped"));
   },
+  () => currentLanguage,
 );
 
 // Меню качества/дорожек — DOM-слой вынесен в quality-menu.ts (issue #123)
 const qualityMenuUi = createQualityMenu({
+  language: () => currentLanguage,
   player,
   isRecordingPlayback: () => player.isRecordingPlayback,
   nodes: {
@@ -784,6 +786,17 @@ $("language-seg").addEventListener("click", (event) => {
   try { localStorage.setItem(LANGUAGE_KEY, currentLanguage); } catch { /* приватный режим */ }
   applyLanguage();
   renderPinSettings();
+  renderCategories();
+  renderChannels(false);
+  renderContinue();
+  renderRecordings();
+  refreshNowFav();
+  renderRecButton(isRecordingNow());
+  if (!player.isRecordingPlayback) qualityMenuUi.refreshQualityUi();
+  refreshScrub();
+  renderSchedule();
+  if (!guideOverlay.hidden) renderGuide();
+  renderFullscreenTitle();
 });
 
 // ---------- UI helpers ----------
@@ -815,7 +828,7 @@ function showToastAction(
   setSystemText(span, msg);
   const btn = document.createElement("button");
   btn.className = "toast-action";
-  btn.textContent = actionLabel;
+  setSystemText(btn, actionLabel);
   btn.addEventListener("click", () => {
     action();
     toastEl.hidden = true;
@@ -1139,7 +1152,7 @@ function renderCategories(): void {
     return b;
   };
   const entries: Array<[string, string | null, number]> = [
-    ["Все", null, channels.length],
+    [tr("categories.all"), null, channels.length],
     ...orderedGroups(snapshot.categories, groupPreferences.order).filter((g) => !groupPreferences.hidden.has(g)).map(
       (g) =>
         [g, g, channels.filter((c) => c.group === g).length] as [
@@ -1170,7 +1183,7 @@ function renderCategories(): void {
     catMenu.append(item);
   }
   const current = entries.find(([, v]) => v === activeCategory);
-  btnCategories.textContent = current ? current[0] : "Все";
+  btnCategories.textContent = current ? current[0] : tr("categories.all");
 }
 
 btnCategories.addEventListener("click", (e) => {
@@ -1263,7 +1276,7 @@ function renderChannels(resetScroll = true): void {
   visibleResults = [...(activeView === "favorites" ? applyFavoritesOrder(sorted, favorites, favoritesOrder) : sorted), ...programmes];
   visibleChannels = [...new Map([...sorted, ...programmes.map((m) => m.channel)].map((c) => [c.url, c])).values()];
   viewCount.textContent = groupDigits(visibleResults.length);
-  emptyState.textContent = emptyMessage(activeView, q !== "");
+  emptyState.textContent = emptyMessage(activeView, q !== "", currentLanguage);
   emptyState.hidden = visibleResults.length > 0;
   ensureVirtualShell();
   // при смене фильтра сбрасываем прокрутку, чтобы окно пересчиталось с нуля
@@ -1307,8 +1320,8 @@ function renderProgrammeMatch(match: ProgrammeMatch): HTMLElement {
   name.textContent = `${channel.name} · ${programme.title}`;
   const time = document.createElement("span");
   time.className = "row-now ellipsis muted num";
-  const date = new Date(programme.start).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
-  time.textContent = `${date} · ${formatRange(programme)}`;
+  const date = new Date(programme.start).toLocaleDateString(currentLanguage, { day: "2-digit", month: "2-digit" });
+  time.textContent = `${date} · ${formatRange(programme, currentLanguage)}`;
   meta.append(name, time);
   row.append(logo, meta);
   row.title = `${name.textContent} · ${time.textContent}`;
@@ -1316,7 +1329,7 @@ function renderProgrammeMatch(match: ProgrammeMatch): HTMLElement {
     const archive = programmeArchiveUrl(match);
     const played = await playChannel(channel, archive ?? undefined, programme);
     if (played && !archive && Date.parse(programme.start) > Date.now()) {
-      showToast("Передача ещё не началась — включён эфир канала");
+      showToast(tr("guide.futureLive"));
     }
   });
   row.addEventListener("keydown", (event) => {
@@ -1417,7 +1430,7 @@ function renderChannelCard(c: Channel): HTMLElement {
       e.className = "row-now ellipsis";
       const t = document.createElement("span");
       t.className = "num muted";
-      t.textContent = clock(Date.parse(now.start));
+      t.textContent = clock(Date.parse(now.start), currentLanguage);
       e.append(t, ` ${now.title}`);
       meta.append(e);
 
@@ -1428,7 +1441,7 @@ function renderChannelCard(c: Channel): HTMLElement {
       bar.append(fill);
       meta.append(bar);
     }
-    if (next) nextText = `${clock(Date.parse(next.start))}  ${next.title}`;
+    if (next) nextText = `${clock(Date.parse(next.start), currentLanguage)}  ${next.title}`;
   }
   card.append(meta);
 
@@ -1440,7 +1453,7 @@ function renderChannelCard(c: Channel): HTMLElement {
   const star = document.createElement("button");
   const fav = isFavorite(favorites, c);
   star.className = starClass(fav);
-  star.title = fav ? "Убрать из избранного" : "В избранное";
+  star.title = fav ? tr("favorites.remove") : tr("favorites.add");
   star.setAttribute("aria-label", star.title);
   setIcon(star, fav ? "star-on" : "star");
   star.addEventListener("click", (ev) => {
@@ -1473,7 +1486,7 @@ function renderChannelCard(c: Channel): HTMLElement {
     if (!epg) return; // без телепрограммы превью не из чего собрать
     const { now } = getNowNext(epg, c, snapshot!);
     if (!now) return;
-    showToast(`${c.name} · сейчас: ${now.title} (с ${clock(Date.parse(now.start))})`);
+    showToast(tr("guide.preview", { channel: c.name, title: now.title, time: clock(Date.parse(now.start), currentLanguage) }));
   };
   card.addEventListener("pointerdown", (ev) => {
     if (ev.pointerType === "touch") {
@@ -1516,7 +1529,7 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
   if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined || archivePlayback !== null)) {
     stopRecordingNow();
-    showToast("Запись остановлена: канал переключён");
+    showToast(tr("record.channelStopped"));
   }
   saveCurrentPosition();
   archivePlayback = archiveUrl === undefined ? null : { url: archiveUrl, programme: archiveProgramme ?? null, fromStart };
@@ -1576,7 +1589,7 @@ btnClosePlayer.addEventListener("click", () => {
   closeMultiView(false);
   if (isRecordingNow()) {
     stopRecordingNow(); // закрытие плеера — тоже сохраняем записанное
-    showToast("Запись остановлена: плеер закрыт");
+    showToast(tr("record.closedStopped"));
   }
   if (document.fullscreenElement) void document.exitFullscreen();
   player.stop();
@@ -1617,7 +1630,7 @@ videoEl.addEventListener("loadedmetadata", () => {
     const saved = loadPosition(localStorage, archivePlayback?.url ?? lastPlayed.url, Date.now(), dur);
     if (saved !== null && saved > 15) {
       videoEl.currentTime = saved;
-      showToast(`Продолжаю с ${Math.floor(saved / 60)}:${String(Math.floor(saved % 60)).padStart(2, "0")} · перемотайте назад, чтобы начать сначала`);
+      showToast(tr("player.resume", { time: `${Math.floor(saved / 60)}:${String(Math.floor(saved % 60)).padStart(2, "0")}` }));
     }
   }
 });
@@ -1643,7 +1656,7 @@ btnRetry.addEventListener("click", () => {
   diagnosticsFor = null;
   btnRetry.hidden = true;
   player.retry();
-  showToast("Перезапуск потока…");
+  showToast(tr("player.restarting"));
 });
 
 btnMute.addEventListener("click", () => {
@@ -1684,19 +1697,22 @@ function refreshNowFav(): void {
     // помнить прошлый канал (#253).
     setIcon(nowFav, "star");
     nowFav.classList.remove("active");
-    nowFav.title = "В избранное";
+    nowFav.title = tr("favorites.add");
     return;
   }
   const fav = isFavorite(favorites, lastPlayed);
   setIcon(nowFav, fav ? "star-on" : "star");
   nowFav.classList.toggle("active", fav);
-  nowFav.title = fav ? "Убрать из избранного" : "В избранное";
+  nowFav.title = fav ? tr("favorites.remove") : tr("favorites.add");
+  nowFav.setAttribute("aria-label", nowFav.title);
 }
 /** Обновить заголовок плеера под текущий канал — одна функция для
  *  одиночного воспроизведения, архива, алиасов и выбора окна в мульти-вью
  *  (#253). Вызывающий обязан уже записать канал в lastPlayed. */
 function refreshNowHeader(channel: Channel | null, archiveUrl?: string): void {
   const header = nowHeaderFor(channel, archiveUrl);
+  delete nowTitle.dataset.systemMessage;
+  delete playerStatus.dataset.systemMessage;
   nowTitle.textContent = header.title;
   nowTitle.title = header.href;
   nowCategory.textContent = header.category;
@@ -1931,7 +1947,7 @@ function refreshPlayerStatus(): void {
 function stopIfRecording(): void {
   if (isRecordingNow()) {
     stopRecordingNow();
-    showToast("Запись остановлена: плейлист переключён");
+    showToast(tr("record.playlistStopped"));
   }
 }
 
@@ -1991,7 +2007,7 @@ function captureFromVideo(): RecordingSource | null {
     }
     const audio = stream.getAudioTracks().length;
     console.debug(`[iptv-hub] rec: захват с <video>, video=1 audio=${audio}`);
-    recordPathNote = audio > 0 ? "Запись со звуком" : "Запись без звука";
+    recordPathNote = audio > 0 ? tr("record.withAudio") : tr("record.noAudio");
     return { stream };
   } catch (e) {
     console.debug("[iptv-hub] rec: захват с <video> не удался:", e);
@@ -2082,7 +2098,7 @@ function captureFromCanvas(withAudio: boolean): RecordingSource {
     console.warn("[iptv-hub] rec: канвас не получает кадров — записывать нечего");
     recSession.stop(false);
     showToast(
-      "Этот браузер не отдаёт кадры видео — записать нельзя. На Android попробуйте Chrome.",
+      tr("record.noFrames"),
     );
   };
   window.setTimeout(probeCanvas, 1000);
@@ -2090,8 +2106,8 @@ function captureFromCanvas(withAudio: boolean): RecordingSource {
   const audio = withAudio ? captureAudioTrack() : null;
   if (audio) stream.addTrack(audio.track);
   recordPathNote = audio
-    ? "Запись со звуком (запасной путь)"
-    : "Запись без звука (запасной путь)";
+    ? tr("record.fallbackAudio")
+    : tr("record.fallbackSilent");
   const [track] = stream.getVideoTracks();
   console.debug(
     `[iptv-hub] rec: track=${track?.label ?? "?"} readyState=${track?.readyState} audio=${audio ? 1 : 0}`,
@@ -2170,7 +2186,7 @@ async function saveToLibrary(blob: Blob, ext: string, _mime: string): Promise<vo
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const meta: RecordingMeta = {
     id,
-    channelName: recordingChannel?.name ?? "Запись",
+    channelName: recordingChannel?.name ?? tr("record.defaultName"),
     channelUrl: recordingChannel?.url ?? "",
     programmeTitle: recordingProgrammeTitle,
     startedAt: recordingStartedAt || Date.now(),
@@ -2224,7 +2240,7 @@ function renderRecordings(): void {
     play.type = "button";
     play.className = "recording-play";
     const when = new Date(r.startedAt);
-    card.title = `${r.channelName} · ${when.toLocaleString("ru")} · ${formatDuration(r.durationSec)}`;
+    card.title = `${r.channelName} · ${when.toLocaleString(currentLanguage)} · ${formatDuration(r.durationSec)}`;
 
     const name = document.createElement("span");
     name.className = "recording-name ellipsis";
@@ -2233,7 +2249,7 @@ function renderRecordings(): void {
 
     const sub = document.createElement("span");
     sub.className = "recording-sub muted num";
-    sub.textContent = `${r.channelName} · ${when.toLocaleDateString("ru")} ${when.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} · ${formatDuration(r.durationSec)} · ${formatBytes(r.sizeBytes)}`;
+    sub.textContent = `${r.channelName} · ${when.toLocaleDateString(currentLanguage)} ${when.toLocaleTimeString(currentLanguage, { hour: "2-digit", minute: "2-digit" })} · ${formatDuration(r.durationSec)} · ${formatBytes(r.sizeBytes)}`;
     play.append(sub);
     card.append(play);
 
@@ -2254,8 +2270,8 @@ function renderRecordings(): void {
     const download = document.createElement("button");
     download.type = "button";
     download.className = "recording-act";
-    download.title = "Скачать файл";
-    download.setAttribute("aria-label", "Скачать файл записи");
+    download.title = tr("record.download");
+    download.setAttribute("aria-label", tr("record.downloadLabel"));
     download.innerHTML = iconMarkup("download");
     download.addEventListener("click", () => {
       if (!recordingsFs) return;
@@ -2268,8 +2284,8 @@ function renderRecordings(): void {
     const del = document.createElement("button");
     del.type = "button";
     del.className = "recording-act";
-    del.title = "Удалить запись";
-    del.setAttribute("aria-label", "Удалить запись");
+    del.title = tr("record.delete");
+    del.setAttribute("aria-label", tr("record.delete"));
     del.innerHTML = iconMarkup("trash");
     del.addEventListener("click", () => {
       if (!recordingsFs) return;
@@ -2303,13 +2319,13 @@ function playRecording(file: File, r: RecordingMeta): void {
   // Заголовок сейчас про запись, а не про канал: сбрасываем канал,
   // категорию и звезду, потом пишем своё (#253).
   refreshNowHeader(null);
-  nowTitle.textContent = `${r.channelName} · запись`;
+  setSystemText(nowTitle, tr("record.title", { channel: r.channelName }));
   nowTitle.title = r.programmeTitle ?? "";
-  playerStatus.textContent = "Записанный эфир";
+  setSystemText(playerStatus, tr("record.playback"));
   btnRetry.hidden = true;
   liveBadge.hidden = true;
   refreshScrub();
-  showToast(`Запись от ${new Date(r.startedAt).toLocaleString("ru")}`);
+  showToast(tr("record.from", { date: new Date(r.startedAt).toLocaleString(currentLanguage) }));
 }
 
 function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {
@@ -2360,7 +2376,7 @@ function offerDownload(blob: Blob, name: string): void {
 
   // Кнопка в тосте живёт 15с: если авто-скачивание не сработало (Firefox),
   // явный клик = свежий жест → загрузка начнётся наверняка.
-  showToastAction("Автоскачивание не началось?", `Скачать ${name}`, download, 15_000);
+  showToastAction(tr("record.autoDownload"), tr("record.downloadName", { name }), download, 15_000);
 }
 
 /**
@@ -2520,8 +2536,8 @@ try {
 function renderRecButton(active: boolean): void {
   btnRec.classList.toggle("recording", active);
   btnRec.title = active
-    ? "Остановить запись и сохранить файл"
-    : "Записать эфир в файл";
+    ? tr("record.stopSave")
+    : tr("record.start");
 }
 
 const recSession = createRecordingSession({
@@ -2529,6 +2545,7 @@ const recSession = createRecordingSession({
   createRecorder: createRecorderAdapter,
   onSave: saveRecording,
   onNotify: showToast,
+  language: () => currentLanguage,
   onState: (state) => {
     console.debug(`[iptv-hub] rec: state=${state}`);
     renderRecButton(state === "recording");
@@ -2539,7 +2556,7 @@ const recSession = createRecordingSession({
     if (sourceStrategy < SOURCE_STRATEGIES.length - 1) {
       sourceStrategy++;
       console.debug(`[iptv-hub] rec: переключаюсь на ${SOURCE_STRATEGIES[sourceStrategy]}`);
-      showToast("Запись сорвалась — пробую другой способ захвата");
+      showToast(tr("record.captureFallback"));
       startRecording();
       return;
     }
@@ -2555,6 +2572,7 @@ const recSession = createRecordingSession({
 const segSession = createSegmentSession({
   createSink: createRecordingSink,
   onNotify: showToast,
+  language: () => currentLanguage,
   onState: (state) => {
     console.debug(`[iptv-hub] seg: state=${state}`);
     renderRecButton(state === "recording");
@@ -2674,7 +2692,7 @@ function takeScreenshot(): void {
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-      showToast("Скриншот сохранён");
+      showToast(tr("player.screenshotSaved"));
     },
     "image/png",
     // toBlob для tainted-канваса кидает SecurityError синхронно в некоторых
@@ -2761,7 +2779,7 @@ function openGuide(): void {
 }
 
 function renderGuide(): void {
-  guideTitle.textContent = guideGridOn ? tr("guide.gridTitle") : `Программа${lastPlayed ? ` · ${lastPlayed.name}` : ""}`;
+  guideTitle.textContent = guideGridOn ? tr("guide.gridTitle") : `${tr("guide.title")}${lastPlayed ? ` · ${lastPlayed.name}` : ""}`;
   guideOverlay.querySelector(".guide")!.classList.toggle("timeline-mode", guideGridOn);
   guideListMode.textContent = tr("guide.list");
   guideGridMode.textContent = tr("guide.grid");
@@ -2769,7 +2787,7 @@ function renderGuide(): void {
   guideGridMode.setAttribute("aria-pressed", String(guideGridOn));
   guideList.hidden = guideGridOn;
   guideGrid.hidden = !guideGridOn;
-  const wins = dayWindows();
+  const wins = dayWindows(new Date(), currentLanguage);
   guideDays.textContent = "";
   wins.forEach((w, i) => {
     const b = document.createElement("button");
@@ -2798,7 +2816,7 @@ function renderGuide(): void {
   if (progs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "muted";
-    empty.textContent = "Нет данных на этот день";
+    empty.textContent = tr("guide.noDay");
     guideList.append(empty);
     return;
   }
@@ -2832,7 +2850,7 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
 
   const t = document.createElement("span");
   t.className = "time";
-  t.textContent = formatRange(p);
+  t.textContent = formatRange(p, currentLanguage);
   const body = document.createElement("span");
   body.className = "prog-body";
   const title = document.createElement("span");
@@ -2843,19 +2861,19 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
   if (isLive) {
     const live = document.createElement("span");
     live.className = "live";
-    live.textContent = "Эфир";
+    live.textContent = tr("guide.live");
     body.append(live);
   } else if (state === "past" && watchable) {
     const arch = document.createElement("span");
     arch.className = "prog-arch";
     arch.innerHTML = iconMarkup("archive", "i-sm");
-    arch.append("Смотреть из архива");
+    arch.append(tr("guide.archive"));
     body.append(arch);
   }
   row.append(t, body);
 
   if (watchable) {
-    row.title = isLive ? "Смотреть сейчас" : "Смотреть из архива (catchup)";
+    row.title = isLive ? tr("guide.watchNow") : tr("guide.archiveTitle");
     row.addEventListener("click", async () => {
       if (isLive) {
         if (await playChannel(c)) onPlayed();
@@ -2871,8 +2889,8 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
   } else if (state === "past") {
     row.title =
       cu.days > 0
-        ? "Вне глубины архива"
-        : "Архив недоступен на этом канале (нет tvg-rec)";
+        ? tr("guide.outsideArchive")
+        : tr("guide.noArchive");
   }
   if (stop <= now.getTime()) return row;
   const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
@@ -3023,7 +3041,7 @@ function sleepApplyFired(): void {
   }
   if (!videoEl.paused) videoEl.pause();
   videoStage.classList.add("sleep-dim");
-  showToast("Sleep-таймер: воспроизведение остановлено");
+  showToast(tr("player.sleepStopped"));
 }
 
 btnSleep.addEventListener("click", (e) => {
@@ -3151,7 +3169,7 @@ function refreshScrub(): void {
   if (duration) {
     scrub.setAttribute("role", "slider");
     scrub.tabIndex = 0;
-    scrub.setAttribute("aria-label", "Позиция записи");
+    scrub.setAttribute("aria-label", tr("record.position"));
     scrub.setAttribute("aria-valuemin", "0");
     scrub.setAttribute("aria-valuemax", String(duration));
   } else {
@@ -3197,8 +3215,8 @@ function refreshScrub(): void {
   const pct = `${(programmeProgress(positionMs, startMs, stopMs) * 100).toFixed(1)}%`;
   scrubFill.style.width = pct;
   miniProgFill.style.width = pct; // та же цифра: свёрнутый плеер не врёт
-  progStart.textContent = clock(startMs);
-  progEnd.textContent = clock(stopMs);
+  progStart.textContent = clock(startMs, currentLanguage);
+  progEnd.textContent = clock(stopMs, currentLanguage);
 
   // Сменилась передача или канал — перестроить программу под плеером
   if (`${lastPlayed!.url}|${prog.start}` !== scheduleKey) renderSchedule();
@@ -3211,10 +3229,10 @@ function refreshScrub(): void {
 /** «ещё 58 мин», «ещё 1 ч 5 мин» — до конца передачи. */
 function timeLeft(ms: number): string {
   const min = Math.max(0, Math.round(ms / 60_000));
-  if (min < 60) return `ещё ${min} мин`;
+  if (min < 60) return tr("player.remainingMinutes", { minutes: min });
   const h = Math.floor(min / 60);
   const m = min % 60;
-  return m === 0 ? `ещё ${h} ч` : `ещё ${h} ч ${m} мин`;
+  return m === 0 ? tr("player.remainingHours", { hours: h }) : tr("player.remainingBoth", { hours: h, minutes: m });
 }
 
 /**
@@ -3259,7 +3277,7 @@ function renderContinue(): void {
     if (prog) {
       const live = document.createElement("span");
       live.className = "live on-video";
-      live.textContent = "Эфир";
+      live.textContent = tr("guide.live");
       frame.append(live);
 
       const bar = document.createElement("div");
@@ -3282,7 +3300,7 @@ function renderContinue(): void {
     if (prog) {
       const nowLine = document.createElement("span");
       nowLine.className = "t-caption muted ellipsis num";
-      nowLine.textContent = `${formatRange(prog)} · ${prog.title}`;
+      nowLine.textContent = `${formatRange(prog, currentLanguage)} · ${prog.title}`;
       card.append(nowLine);
     }
 
@@ -3355,7 +3373,7 @@ videoStage.addEventListener("pointerup", (e) => {
   if (side && isDoubleTap(lastTapMs, e.timeStamp)) {
     lastTapMs = null;
     player.seekBy(side === "left" ? -15 : 15);
-    showToast(side === "left" ? "−15 секунд" : "+15 секунд");
+    showToast(side === "left" ? tr("player.seekBack") : tr("player.seekForward"));
     return;
   }
   lastTapMs = e.timeStamp;
@@ -3452,12 +3470,13 @@ btnFullscreen.addEventListener("click", () => {
     });
   }
 });
-document.addEventListener("fullscreenchange", () => {
+function renderFullscreenTitle(): void {
   // Иконка одна на оба состояния — меняется только подсказка.
   btnFullscreen.title = document.fullscreenElement
-    ? "Выйти из полного экрана (F)"
-    : "На весь экран (F)";
-});
+    ? tr("player.exitFullscreen")
+    : tr("player.fullscreen");
+}
+document.addEventListener("fullscreenchange", renderFullscreenTitle);
 
 // ---------- Поиск ----------
 searchInput.addEventListener("input", () => renderChannels());

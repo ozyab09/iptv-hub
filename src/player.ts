@@ -4,7 +4,7 @@ import type { Channel } from "./types";
 import { DEFAULT_PLAYER_SETTINGS, playerHlsConfig, sanitizePlayerSettings, TIMESHIFT_BUFFER_SECONDS, type PlayerSettings } from "./player-settings";
 import { bufferedSeekTarget } from "./scrub";
 import { recordingManifest } from "./recording-playback";
-import { t } from "./i18n";
+import { t, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { createMirrorState, nextMirror, type MirrorState } from "./channel-mirrors";
 import { mobileQualityCap, needsMobileQualityCap, type ConnectionInfo } from "./mobile-quality";
 import { createAudioGraph, volumePlan } from "./audio-graph";
@@ -70,6 +70,10 @@ export class Player {
   private boostEnabled = false;
   private boostWarningUrl: string | null = null;
 
+  private tr(key: TranslationKey, params: TranslationParams = {}): string {
+    return t(key, this.language(), params);
+  }
+
   constructor(
     video: HTMLVideoElement,
     toast: (msg: string) => void,
@@ -77,6 +81,7 @@ export class Player {
     onFatalError?: () => void,
     readSettings: () => PlayerSettings = () => ({ ...DEFAULT_PLAYER_SETTINGS }),
     onMirrorChange?: () => void,
+    private language: () => Language = () => "ru",
   ) {
     this.video = video;
     this.audioGraph = createAudioGraph(video);
@@ -124,7 +129,7 @@ export class Player {
     if (!upgraded) return url;
     console.debug(`[iptv-hub] mixed content: пробую ${upgraded}`);
     this.httpsUpgraded = true;
-    this.toast("http-канал на https-странице: пробую https…");
+    this.toast(this.tr("player.upgrade"));
     return upgraded;
   }
 
@@ -136,7 +141,7 @@ export class Player {
   private handleVideoError = (): void => {
     if (this.hls || !this.currentUrl) return;
     if (this.recordingUrls.length > 0) {
-      this.toast(t("error.recordPlayback"));
+      this.toast(this.tr("error.recordPlayback"));
       this.onFatalError?.();
       return;
     }
@@ -146,7 +151,7 @@ export class Player {
       `[iptv-hub] native video error: code=${err?.code} ${err?.message ?? ""}`,
     );
     if (this.httpsFallbackTried) {
-      this.toast("Поток не отвечает и по https — попробуйте другой канал");
+      this.toast(this.tr("player.httpsFailed"));
       this.onFatalError?.();
       return;
     }
@@ -154,15 +159,15 @@ export class Player {
     if (!upgraded) {
       this.toast(
         isMixedContent(window.location.href, this.currentUrl)
-          ? "Канал отдаётся по http с адреса без TLS (локальный или приватный) — на https-странице браузер его не пропустит"
-          : "Браузер не смог воспроизвести поток (подробности в консоли)",
+          ? this.tr("player.privateHttp")
+          : this.tr("player.nativeFailed"),
       );
       this.onFatalError?.();
       return;
     }
     this.httpsFallbackTried = true;
     this.httpsUpgraded = true;
-    this.toast("Поток заблокирован на https-странице — пробую https…");
+    this.toast(this.tr("player.blockedUpgrade"));
     this.currentUrl = upgraded;
     this.video.src = upgraded;
     this.video.play().catch(() => undefined);
@@ -194,7 +199,7 @@ export class Player {
     const url = this.resolvePlayableUrl(source);
     const isHls = forceHls || /\.m3u8(\?|$)/i.test(url) || /[?&]type=m3u8/i.test(url);
     if (!isHls && /\.mpd(\?|$)/i.test(url)) {
-      return "MPEG-DASH не поддерживается в MVP (см. ROADMAP)";
+      return this.tr("player.dash");
     }
     this.stopMedia();
     this.forceHls = forceHls;
@@ -212,7 +217,7 @@ export class Player {
         if (this.hls !== hls) return;
         if (!data.fatal) return;
         if (this.recordingUrls.length > 0) {
-          this.toast(t("error.recordPlayback"));
+          this.toast(this.tr("error.recordPlayback"));
           this.onFatalError?.();
           return;
         }
@@ -223,8 +228,8 @@ export class Player {
             console.debug(`[iptv-hub] hls network error: ${data.details}, сдаёмся`);
             this.toast(
               this.httpsUpgraded
-                ? "Поток недоступен и по https — у провайдера, похоже, нет TLS, и на https-странице браузер этот канал не пропустит"
-                : "Поток не отвечает — попробуйте повтор или другой канал",
+                ? this.tr("player.noTls")
+                : this.tr("player.unavailable"),
             );
             this.onFatalError?.();
             return;
@@ -232,17 +237,17 @@ export class Player {
           // сеть/манифест: пробуем перезапустить загрузку
           console.debug(`[iptv-hub] hls network error: ${data.details}, restarting load`);
           this.hls?.startLoad();
-          this.toast(`Сбой сети — переподключаемся (${this.networkRetries}/${MAX_NETWORK_RETRIES})…`);
+          this.toast(this.tr("player.reconnecting", { attempt: this.networkRetries, max: MAX_NETWORK_RETRIES }));
           return;
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           console.debug(`[iptv-hub] hls media error: ${data.details}, recovering`);
           this.hls?.recoverMediaError();
-          this.toast("Сбой декодирования — восстанавливаемся…");
+          this.toast(this.tr("player.decoding"));
           return;
         }
         // остальное — фатально: предлагаем ручной retry
-        this.toast(`Ошибка потока: ${data.details ?? "unknown"}`);
+        this.toast(this.tr("player.streamError", { reason: data.details ?? "unknown" }));
         this.onFatalError?.();
       });
       const notify = (): void => this.onHlsState?.();
@@ -291,7 +296,7 @@ export class Player {
     const ts = ext === "ts";
     const hls = ts && Hls.isSupported();
     if (ts && !hls && !this.video.canPlayType("video/mp2t")) {
-      return t("error.recordTsUnsupported");
+      return this.tr("error.recordTsUnsupported");
     }
     const mime = ts ? "video/mp2t" : ext === "mp4" ? "video/mp4" : "video/webm";
     const fileUrl = URL.createObjectURL(new Blob([file], { type: mime }));
@@ -365,7 +370,7 @@ export class Player {
       this.audioGraph.volume(1, this.video.muted, false);
       if (this.boostWarningUrl !== this.currentUrl) {
         this.boostWarningUrl = this.currentUrl;
-        this.toast(t("error.volumeBoost"));
+        this.toast(this.tr("error.volumeBoost"));
       }
     }
   }
@@ -391,7 +396,7 @@ export class Player {
   /** Picture-in-Picture. False — API недоступен или отказано. */
   async togglePip(): Promise<boolean> {
     if (!document.pictureInPictureEnabled) {
-      this.toast("PiP не поддерживается этим браузером");
+      this.toast(this.tr("player.pipUnsupported"));
       return false;
     }
     try {
@@ -402,7 +407,7 @@ export class Player {
       }
       return true;
     } catch {
-      this.toast("Не удалось открыть плавающее окно");
+      this.toast(this.tr("player.pipFailed"));
       return false;
     }
   }

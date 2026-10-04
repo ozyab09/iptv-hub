@@ -1,3 +1,4 @@
+import { type Language } from "./i18n";
 import type { Channel, EpgProgramme, NowNext, PlaylistSnapshot } from "./types";
 import { withSourceTimeout } from "./source-timeout";
 
@@ -176,8 +177,8 @@ export function getNowNext(
 }
 
 /** Форматирование интервала «14:30–15:00». */
-export function formatRange(p: EpgProgramme): string {
-  const fmt = new Intl.DateTimeFormat("ru-RU", {
+export function formatRange(p: EpgProgramme, language: Language = "ru"): string {
+  const fmt = new Intl.DateTimeFormat(language, {
     hour: "2-digit",
     minute: "2-digit",
   });

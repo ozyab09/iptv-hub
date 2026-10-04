@@ -17,6 +17,7 @@ import {
   tierName,
   trackLabel,
 } from "./quality";
+import { t, type Language } from "./i18n";
 import { menuItemClass } from "./ui-classes";
 
 /** Минимальная поверхность hls-инстанса, нужная меню (для тестов — фейк). */
@@ -52,6 +53,7 @@ export interface QualityMenuNodes {
 }
 
 export interface QualityMenuDeps {
+  language?: () => Language;
   player: QualityPlayerAdapter;
   nodes: QualityMenuNodes;
   isRecordingPlayback(): boolean;
@@ -149,7 +151,7 @@ export function createQualityMenu(deps: QualityMenuDeps) {
     if (subTracks.length > 0) {
       const off = deps.createButton();
       off.className = menuItemClass(hls.subtitleTrack === -1);
-      off.textContent = "Выключены";
+      off.textContent = t("player.subtitlesOff", deps.language?.() ?? "ru");
       off.addEventListener("click", () => {
         player.setSubtitleTrack(-1);
         nodes.subtitleMenu.hidden = true;

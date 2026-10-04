@@ -69,7 +69,7 @@ for (const width of [320, 1440]) {
       await navigate(page, "Channels");
       await expect(page.locator("#view-count")).toHaveText("2");
       await expect(page.locator("#categories .chip")).toHaveCount(3);
-      await expect(page.locator("#cat-menu .cat-label")).toHaveText(["Все", "Sports", other]);
+      await expect(page.locator("#cat-menu .cat-label")).toHaveText(["All", "Sports", other]);
       await expect(page.locator("#continue-row")).not.toContainText("Alpha");
       await expect(page.locator("#pl-switch-btn")).toContainText("2 канала");
       await page.locator("#search").fill("bulletin");

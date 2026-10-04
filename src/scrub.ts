@@ -1,3 +1,4 @@
+import { type Language } from "./i18n";
 /**
  * Полоса эфира и локальной записи.
  *
@@ -70,9 +71,9 @@ export function bufferedSeekTarget(
 }
 
 /** Время в 24-часовом формате для краёв полосы. */
-export function clock(ms: number): string {
+export function clock(ms: number, language: Language = "ru"): string {
   if (!Number.isFinite(ms)) return "";
-  return new Intl.DateTimeFormat("ru-RU", {
+  return new Intl.DateTimeFormat(language, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

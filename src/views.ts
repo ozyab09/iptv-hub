@@ -1,3 +1,4 @@
+import { t, type Language } from "./i18n";
 /**
  * Разделы приложения.
  *
@@ -82,14 +83,15 @@ export function channelsForView(
 }
 
 /** Текст пустого состояния — он разный по смыслу в каждом разделе. */
-export function emptyMessage(view: View, hasQuery: boolean): string {
-  if (hasQuery) return "Ничего не найдено";
+export function emptyMessage(view: View, hasQuery: boolean, language: Language = "ru"): string {
+  const tr = (key: "empty.search" | "empty.favorites" | "empty.recents" | "empty.recordings") => t(key, language);
+  if (hasQuery) return tr("empty.search");
   // Пустой раздел подсказывает, как его наполнить, а не только констатирует
-  if (view === "favorites") return "Пока ничего не в избранном. Нажмите звёздочку у канала — он появится здесь.";
-  if (view === "recents") return "Вы ещё ничего не смотрели. Включённые каналы появятся здесь.";
+  if (view === "favorites") return tr("empty.favorites");
+  if (view === "recents") return tr("empty.recents");
   if (view === "recordings")
-    return "Записей пока нет. Кнопка записи в плеере — записи появятся здесь.";
-  return "Ничего не найдено";
+    return tr("empty.recordings");
+  return tr("empty.search");
 }
 
 /**

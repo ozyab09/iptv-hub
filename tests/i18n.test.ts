@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { en, resolveLanguage, ru, t, translateMessage, type TranslationKey } from "../src/i18n";
 
 describe("i18n", () => {
+  it("all static HTML translation keys exist in the dictionaries", () => {
+    const html = readFileSync("index.html", "utf8");
+    for (const match of html.matchAll(/data-i18n(?:-[\w-]+)?="([^"]+)"/g)) {
+      expect(Object.hasOwn(ru, match[1]!), match[1]).toBe(true);
+    }
+  });
   it("синхронизирует ключи и параметры ru/en", () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(ru).sort());
     for (const key of Object.keys(ru) as TranslationKey[]) {
