@@ -109,6 +109,7 @@ import {
   type WakeLockState,
 } from "./wake-lock";
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
+import { canHotkey } from "./hotkey-guard";
 import { getNetworkConnection, neighborIndex, Player } from "./player";
 import {
   applyTheme,
@@ -481,13 +482,22 @@ function canNumericZap(): boolean {
     (!isCompact() || playerBar.classList.contains("open")) &&
     !focused?.closest("input, textarea, select, [contenteditable]:not([contenteditable=false])") && !dialogOpen;
 }
-let visibleResults: (Channel | ProgrammeMatch)[] = [];
+
+/**
+ * Можно ли обрабатывать горячие клавиши (S — скриншот, ←/→ — перемотка,
+ * остальные ниже) в текущем интерфейсе: не в поле ввода, не в модальном
+ * диалоге/меню, не на настройках/записях (там свои контролы), не на
+ * мини-плеере и не когда панель скрыта.
+ */
+export let visibleResults: (Channel | ProgrammeMatch)[] = [];
+
 /**
  * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
  * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
  * прокрутку. Тест сверяет оба значения.
  */
 const CHANNEL_ROW_HEIGHT = 72;
+
 /** Список каналов — одна колонка строк, как требует дизайн-система. */
 const CHANNEL_COLUMNS = 1;
 
@@ -1793,6 +1803,36 @@ window.addEventListener("keydown", (e) => {
     searchInput.focus();
     searchInput.select();
     return;
+  }
+
+  // Горячие клавиши S (скриншот) и ←/→ (перемотка ±15 с) охраняются
+  // чистым canHotkey(): не срабатывают в полях ввода, в диалогах/меню,
+  // на настройках, при записи и на мини-плеере со скрытой панелью.
+  // Остальные горячие клавиши (G, C, M, J, L, F) обрабатываются ниже.
+  if (
+    canHotkey({
+      playerBar,
+      activeView,
+      isCompact,
+      showsChannelList,
+    })
+  ) {
+    if (e.key === "s" || e.key === "ы") {
+      if (playerBar.hidden) return;
+      try {
+        takeScreenshot();
+      } catch {
+        showToast(describeShotFailure("tainted"));
+      }
+      return;
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      // Стрелки: перемотка ±15 сек. На эфире цель ищется в buffered
+      // (можно перематывать в пределах буфера), в записи и VOD — по длине.
+      e.preventDefault();
+      player.seekBy(e.key === "ArrowLeft" ? -15 : 15);
+      return;
+    }
   }
 
   if (typing) return;
