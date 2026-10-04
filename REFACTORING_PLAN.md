@@ -102,6 +102,10 @@
    цикл), диагностика фатальных ошибок (retry/CORS/mixed-content), зеркала,
    timeshift-буфер. Публичный API `Player` заморозить до окончания (контракт
    для main/multi-view/scheduled-recorder/programme-downloader).
+   **Сделано в #376:** `Player` (89 строк) наследует `PlayerCore` (243);
+   рядом `player-hls`, `player-diagnostics`, `player-recovery`,
+   `player-timeshift`, `player-volume`, `player-subtitles`, `player-media`
+   — все < 250 строк. Публичный API и реэкспорты `player.ts` прежние.
 4. **Общий «движок записи».** `programme-downloader.ts` и `scheduled-recorder.ts`
    повторяют «muted Player + createSegmentSession + sink + сохранение в
    библиотеку» — вынести общий конструктор сессии; ошибки и GC-пути

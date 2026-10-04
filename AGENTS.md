@@ -401,7 +401,15 @@ iptv-hub/
 │   ├── m3u.ts              # парсер M3U: Channel, категории, normalizeName
 │   ├── epg.ts              # загрузка (стрим+gzip) и разбор XMLTV, now/next
 │   ├── catchup.ts          # архив: tvg-rec/catchup-source, {utc}/{lutc}, окна дней
-│   ├── player.ts           # Player: hls.js / нативный, quality, retry, https-апгрейд
+│   ├── player.ts           # Player (API для UI): управление, громкость, дорожки, геттеры
+│   ├── player-core.ts      # PlayerCore: источники, https-апгрейд, зеркала, записи (#376)
+│   ├── player-hls.ts       # hls.js-инстанс, подписки, игнор старого инстанса (#376)
+│   ├── player-diagnostics.ts # разбор фатальных ошибок hls.js и <video> (#376)
+│   ├── player-recovery.ts  # чистые правила ретраев, декодера, http→https (#376)
+│   ├── player-timeshift.ts # timeshift-буфер, край эфира, перемотка, соседний канал (#376)
+│   ├── player-volume.ts    # громкость и усиление через audio-graph (#376)
+│   ├── player-subtitles.ts # внешние субтитры на <video> (#376)
+│   ├── player-media.ts     # сеть/мобильный потолок качества, PiP (#376)
 │   ├── playlist-ui.ts      # UI менеджера плейлистов: setup-список + переключатель
 │   ├── playlist-transport.ts # транспорт плейлистов: OPFS-адаптер, loadPlaylist, диагностика сбоев
 │   ├── guide-ui.ts         # DOM программы: шторка, блок под плеером, programmeRow, карточка (#368)
