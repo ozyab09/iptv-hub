@@ -8,6 +8,7 @@
  */
 
 import { LEGACY_FAVORITES_KEY } from "./favorites";
+import { parseEpgSources } from "./epg-sources";
 
 export interface Playlist {
   /** Стабильный id (timestamp при создании). */
@@ -19,6 +20,8 @@ export interface Playlist {
   epgUrl: string | null;
   /** Каталог Xtream запрашивается только при явном включении. */
   xtreamVod?: boolean;
+  /** До трёх дополнительных XMLTV; основной epgUrl имеет приоритет. */
+  additionalEpgUrls?: string[];
 }
 
 /** Легаси-ключ глобального избранного (до мультиплейлистов). */
@@ -108,6 +111,7 @@ function sanitize(raw: unknown): Playlist[] {
     const local = typeof p.playlistUrl === "string" && /^local:[a-zA-Z0-9_-]+$/.test(p.playlistUrl)
       && /^[a-zA-Z0-9_-]+$/.test(p.id);
     if (!local && !isHttpUrl(p.playlistUrl)) continue;
+    const additionalEpgUrls = parseEpgSources(p.additionalEpgUrls);
     out.push({
       id: p.id,
       name: p.name,
@@ -115,6 +119,7 @@ function sanitize(raw: unknown): Playlist[] {
       playlistUrl: local ? `local:${p.id}` : p.playlistUrl as string,
       epgUrl: isHttpUrl(p.epgUrl) ? p.epgUrl : null,
       ...(p.xtreamVod === true ? { xtreamVod: true } : {}),
+      ...(additionalEpgUrls.length ? { additionalEpgUrls } : {}),
     });
   }
   return out;
@@ -176,7 +181,7 @@ export function addLocalPlaylist(state: PlaylistsState, name: string): Playlists
 export function updatePlaylist(
   state: PlaylistsState,
   id: string,
-  patch: Partial<Pick<Playlist, "name" | "playlistUrl" | "epgUrl" | "xtreamVod">>,
+  patch: Partial<Pick<Playlist, "name" | "playlistUrl" | "epgUrl" | "xtreamVod" | "additionalEpgUrls">>,
 ): PlaylistsState {
   return {
     ...state,

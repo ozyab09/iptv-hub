@@ -124,7 +124,8 @@ export function parseBackup(raw: string): ParseResult {
   }
   if (b.version === 2 && (playlists.length !== b.playlists.length || playlists.some((p, i) => {
     const raw = b.playlists as Record<string, unknown>[];
-    return raw[i]?.playlistUrl !== p.playlistUrl || (raw[i]?.epgUrl !== undefined && raw[i]?.epgUrl !== p.epgUrl);
+    return raw[i]?.playlistUrl !== p.playlistUrl || (raw[i]?.epgUrl !== undefined && raw[i]?.epgUrl !== p.epgUrl) ||
+      (raw[i]?.additionalEpgUrls !== undefined && JSON.stringify(raw[i]?.additionalEpgUrls) !== JSON.stringify(p.additionalEpgUrls ?? []));
   }))) extra.warnings.unshift("playlists");
   Object.assign(data, extra.sections);
   return { ok: true, data, warnings: extra.warnings };

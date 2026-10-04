@@ -23,6 +23,7 @@ import { readXtreamUrl, validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtr
 import { channelHealthKey } from "./channel-health";
 import { favoritesOrderKey } from "./favorites-order";
 import { remindersKey } from "./reminder";
+import { epgSourcesInput } from "./epg-sources";
 import { recentsKey } from "./backup";
 import { groupPreferencesKey } from "./group-preferences";
 import { channelOverridesKey } from "./channel-overrides";
@@ -208,6 +209,7 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
           form.append(label);
         }
         const epgIn = mk("playlist.epgOptional", source && p.epgUrl === xtreamEpgUrl(source) ? "" : p.epgUrl ?? "", "url");
+        const additionalEpgIn = mk("playlist.additionalEpg", (p.additionalEpgUrls ?? []).join(" "));
         const btns = document.createElement("div");
         btns.className = "pl-edit-actions";
         const save = deps.createButton();
@@ -231,6 +233,8 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
           const newName = nameIn.value.trim();
           let newUrl = urlIn?.value.trim() ?? "";
           let newEpg = epgIn.value.trim();
+          const additionalEpgUrls = epgSourcesInput(additionalEpgIn.value);
+          if (!additionalEpgUrls) { deps.showSetupError(t("error.epgSources", lang())); return; }
           if (source) {
             const updated = validateXtream({ host: hostIn!.value, username: userIn!.value, password: passwordIn!.value });
             if (!updated || (newEpg && !newEpg.startsWith("https://"))) {
@@ -248,6 +252,7 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
             name: newName || p.name,
             playlistUrl: newUrl,
             epgUrl: newEpg || null,
+            ...(additionalEpgUrls.length || p.additionalEpgUrls ? { additionalEpgUrls } : {}),
             ...(source ? { xtreamVod: vodInput?.checked === true } : {}),
           });
           savePlaylists(storage, state);
@@ -255,7 +260,7 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
           deps.showSetupError("");
           renderManager();
           renderSwitcher();
-          if (source && active) deps.activatePlaylist(p.id);
+          if (active && (source || newEpg !== (p.epgUrl ?? "") || JSON.stringify(additionalEpgUrls) !== JSON.stringify(p.additionalEpgUrls ?? []))) deps.activatePlaylist(p.id);
         });
       });
 

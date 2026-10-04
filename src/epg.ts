@@ -2,6 +2,7 @@ import { type Language } from "./i18n";
 import type { Channel, EpgProgramme, NowNext, PlaylistSnapshot } from "./types";
 import { withSourceTimeout } from "./source-timeout";
 import { normalizeName } from "./m3u";
+import { mergeEpgSources } from "./epg-sources";
 
 /** Идентификатор канала для матчинга с EPG (tvg-id, иначе нормализованное имя). */
 function channelKey(c: Channel): string {
@@ -57,6 +58,22 @@ export async function loadEpg(
 
     return parseEpg(xml);
   });
+}
+
+/** Независимые загрузки идут параллельно; ошибка одного источника не теряет другие. */
+export async function loadEpgSources(
+  urls: readonly string[],
+  onProgress?: (completed: number, total: number) => void,
+): Promise<Map<string, EpgProgramme[]>> {
+  let completed = 0;
+  onProgress?.(0, urls.length);
+  const results = await Promise.allSettled(urls.map(async (url) => {
+    try { return await loadEpg(url); }
+    finally { onProgress?.(++completed, urls.length); }
+  }));
+  const sources = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  if (urls.length && !sources.length) throw new Error("EPG sources unavailable");
+  return mergeEpgSources(sources);
 }
 
 /**

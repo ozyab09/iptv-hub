@@ -289,12 +289,12 @@ describe("createPlaylistUi: редактирование", () => {
     return { row, form, inputs };
   }
 
-  it("клик по карандашу превращает строку в форму с тремя полями", () => {
+  it("клик по карандашу открывает имя, URL и поля источников телепрограммы", () => {
     const { ui, nodes } = makeDeps(stateAB);
     ui.renderManager();
     const { row, inputs } = openEdit(nodes);
     expect(row.classList.contains("editing")).toBe(true);
-    expect(inputs).toHaveLength(3);
+    expect(inputs).toHaveLength(4);
     expect(inputs[0]!.value).toBe("Первый");
     expect(inputs[1]!.value).toBe("https://storage.yandexcloud.net/a.m3u");
     expect(inputs[2]!.value).toBe("https://storage.yandexcloud.net/epg.xml");
@@ -363,6 +363,21 @@ describe("createPlaylistUi: редактирование", () => {
       expect(JSON.parse(storage.getItem(PLAYLISTS_KEY)!)[0]!.xtreamVod).toBe(enabled);
     }
     expect(calls.activated).toEqual(["a", "a"]);
+  });
+
+  it("дополнительные XMLTV проверяются, сохраняются и перезагружают активный плейлист", () => {
+    const { ui, nodes, calls, storage } = makeDeps(stateAB);
+    ui.renderManager();
+    const { form, inputs } = openEdit(nodes);
+    inputs[3]!.value = "javascript:x";
+    form.submit();
+    expect(calls.errors).toEqual([t("error.epgSources", "ru")]);
+    expect(ui.getState()).toEqual(stateAB);
+    inputs[3]!.value = "https://fixture.test/extra.xml";
+    form.submit();
+    expect(ui.getState().items[0]!.additionalEpgUrls).toEqual(["https://fixture.test/extra.xml"]);
+    expect(JSON.parse(storage.getItem(PLAYLISTS_KEY)!)[0].additionalEpgUrls).toEqual(["https://fixture.test/extra.xml"]);
+    expect(calls.activated).toEqual(["a"]);
   });
 
   it("Xtream: HTTP-сервер и HTTP-EPG отклоняются без сохранения", () => {
