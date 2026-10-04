@@ -22,6 +22,16 @@ describe("PWA manifest", () => {
     icons: { src: string; sizes: string; type: string; purpose?: string }[];
   };
 
+  it("принимает ссылки и файлы плейлистов извне относительными путями (#373)", () => {
+    const extra = manifest as unknown as {
+      share_target: { action: string; method: string; params: Record<string, string> };
+      file_handlers: { action: string; accept: Record<string, string[]> }[];
+    };
+    expect(extra.share_target).toEqual({ action: "./", method: "GET", params: { title: "title", text: "text", url: "url" } });
+    expect(extra.file_handlers.map((h) => h.action)).toEqual(["./"]);
+    expect(Object.values(extra.file_handlers[0]!.accept).flat()).toContain(".m3u");
+  });
+
   it("has required fields", () => {
     expect(manifest.name).toBe("IPTV Hub");
     expect(manifest.start_url).toBe("./"); // относительный путь — обязателен для Pages-поддомена

@@ -42,7 +42,7 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`, `external-player.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`, `external-player.ts`, `incoming-playlist.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
@@ -112,6 +112,14 @@ push в main CI вычисляет следующий патч, штампует
   `playlistScopedKeys(id)` из `playlist-ui.ts` (#355) — новое per-плейлистное
   хранилище обязано попасть в этот список. Другие схемы
   отклоняются (защита от `javascript:`-инъекций). EPG необязателен.
+- Плейлист извне (#373, `incoming-playlist.ts`, чистый): манифест PWA —
+  `share_target` (GET title/text/url, action `./`) и `file_handlers`
+  (.m3u/.m3u8); на boot `shareTargetSearch()` переписывает поделённую ссылку
+  в `?p=` до обычного upsert. launchQueue, drop файла (с prompt имени) и мост
+  `window.iptvHubImportPlaylist(name, text)` идут в `importLocalPlaylistText()`
+  (тот же путь, что выбор файла). Android: VIEW (content/http/https + M3U mime)
+  и SEND text/plain; ссылка → `START_URL?p=`, файл читается ContentResolver
+  (до 20 МБ) и передаётся после onPageFinished один раз; launchMode не ставим.
 - Алиасы и скрытие: `channel-overrides.ts`, ключ
   `iptv-hub.channel-overrides.v1:<playlist-id>`, записи по URL потока.
   Применение создаёт копии каналов и меняет отображаемое `name`, а при ручном

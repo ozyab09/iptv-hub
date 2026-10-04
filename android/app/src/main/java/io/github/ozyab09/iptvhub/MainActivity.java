@@ -2,6 +2,8 @@ package io.github.ozyab09.iptvhub;
 
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
 import android.net.Uri;
 import android.os.Bundle;
 import android.content.res.Configuration;
@@ -32,6 +34,14 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * IPTV Hub как самостоятельное приложение: web-сборка зашита в APK
@@ -55,8 +65,15 @@ public class MainActivity extends AppCompatActivity {
     private static final Set<String> PLAYER_SCHEMES = new HashSet<>(
             Arrays.asList("http", "https", "rtmp", "rtmps", "rtsp", "rtp", "udp", "mms"));
 
+    /** Плейлист из интента больше этого не читаем: это уже не M3U, а ошибка. */
+    private static final int MAX_PLAYLIST_BYTES = 20 * 1024 * 1024;
+    private static final Pattern URL_IN_TEXT = Pattern.compile("https?://[^\\s<>\"']+");
+
     private WebView webView;
     private boolean television;
+    /** Файл из интента ждёт загрузки страницы: {имя, содержимое}. */
+    @Nullable private String[] pendingImport;
+    private boolean pageReady;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -103,6 +120,12 @@ public class MainActivity extends AppCompatActivity {
                     @NonNull WebView view, @NonNull WebResourceRequest request) {
                 return openExternally(request.getUrl());
             }
+
+            @Override
+            public void onPageFinished(@NonNull WebView view, @NonNull String url) {
+                pageReady = true;
+                deliverPendingImport();
+            }
         });
 
         FrameLayout root = new FrameLayout(this);
@@ -141,7 +164,79 @@ public class MainActivity extends AppCompatActivity {
                         if (isMainFrame) openInExternalPlayer(message.getData());
                     });
         }
-        webView.loadUrl(START_URL);
+        String startUrl = startUrlFor(getIntent());
+        // Интент обработан: пересоздание активности не импортирует файл повторно.
+        setIntent(new Intent(Intent.ACTION_MAIN));
+        webView.loadUrl(startUrl);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String url = startUrlFor(intent);
+        // Ссылка на плейлист — перезагрузка с ?p=; файл — импорт в открытую страницу.
+        if (!START_URL.equals(url)) {
+            pageReady = false;
+            webView.loadUrl(url);
+        } else {
+            deliverPendingImport();
+        }
+    }
+
+    /**
+     * Плейлист «извне» (#373): ссылка из «Поделиться» или VIEW становится
+     * ?p= (тот же upsert, что и у ссылки-конфига), файл content:// читается
+     * и ждёт загрузки страницы в pendingImport.
+     */
+    @NonNull
+    private String startUrlFor(@Nullable Intent intent) {
+        if (intent == null) return START_URL;
+        String link = null;
+        if (Intent.ACTION_SEND.equals(intent.getAction())) {
+            String text = intent.getStringExtra(Intent.EXTRA_TEXT);
+            Matcher match = text == null ? null : URL_IN_TEXT.matcher(text);
+            if (match != null && match.find()) link = match.group();
+        } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
+            Uri data = intent.getData();
+            String scheme = data.getScheme();
+            if ("http".equals(scheme) || "https".equals(scheme)) link = data.toString();
+            else if ("content".equals(scheme)) pendingImport = readPlaylist(data);
+        }
+        return link == null ? START_URL : START_URL + "?p=" + Uri.encode(link);
+    }
+
+    /** {имя, текст} файла из ContentResolver или null (нет доступа, слишком большой). */
+    @Nullable
+    private String[] readPlaylist(@NonNull Uri uri) {
+        String name = uri.getLastPathSegment();
+        try (Cursor cursor = getContentResolver().query(uri, new String[] {OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst() && !cursor.isNull(0)) name = cursor.getString(0);
+        } catch (RuntimeException ignored) {
+            // Имя не обязательно: веб-слой подставит своё.
+        }
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) return null;
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+                if (out.size() > MAX_PLAYLIST_BYTES) return null;
+            }
+            return new String[] {name == null ? "playlist.m3u" : name, out.toString(StandardCharsets.UTF_8.name())};
+        } catch (IOException | SecurityException e) {
+            return null;
+        }
+    }
+
+    /** Передать файл веб-слою: window.iptvHubImportPlaylist(имя, текст), один раз. */
+    private void deliverPendingImport() {
+        if (!pageReady || pendingImport == null || webView == null) return;
+        String[] file = pendingImport;
+        pendingImport = null;
+        webView.evaluateJavascript("window.iptvHubImportPlaylist && window.iptvHubImportPlaylist("
+                + JSONObject.quote(file[0]) + "," + JSONObject.quote(file[1]) + ")", null);
     }
 
     /** Отдать поток видеоплееру: только сетевые медиа-схемы, тип video/*. */

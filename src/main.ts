@@ -1,5 +1,6 @@
 import "./style.css";
 import { createCatalogueCard } from "./catalogue-card";
+import { isPlaylistFileName, shareTargetSearch } from "./incoming-playlist";
 import { createChannelListUi } from "./channel-list-ui";
 import { copyText, externalPlayerBridge, isExternalPlayable, openExternally, selectionCopy, streamLink } from "./external-player";
 import { resumeEpisode } from "./xtream-catalogue";
@@ -3360,21 +3361,62 @@ btnLocalFile.addEventListener("click", () => {
 localFile.addEventListener("change", async () => {
   const file = localFile.files?.[0];
   localFile.value = "";
+  if (!file) return;
+  await importLocalPlaylistText(defaultLocalName(file.name), await file.text());
+});
+
+/**
+ * Импорт локального плейлиста: файл из настроек, «Открыть с помощью»,
+ * перетаскивание и Android-интент (#373) — содержимое уходит в OPFS.
+ */
+async function importLocalPlaylistText(name: string, content: string): Promise<void> {
   const fs = getLocalFs();
-  if (!file || !fs) return;
-  const content = await file.text();
+  if (!fs) {
+    showSetup(tr("error.opfs"));
+    return;
+  }
   if (!looksLikeM3U(content)) {
     showSetup(tr("error.m3u"));
     return;
   }
-  const pl = addLocalPlaylist(plState, defaultLocalName(file.name));
+  const pl = addLocalPlaylist(plState, name);
   plState = pl;
   const id = pl.items[pl.items.length - 1]!.id;
   await saveLocalPlaylist(await fs, id, content, null);
   savePlaylists(localStorage, plState);
   renderPlaylistManager();
   activatePlaylist(id);
+}
+
+// «Открыть с помощью» установленного PWA (file_handlers): launchQueue отдаёт
+// файлы один раз на запуск.
+(window as Window & { launchQueue?: { setConsumer(cb: (params: { files?: readonly FileSystemFileHandle[] }) => void): void } })
+  .launchQueue?.setConsumer((params) => {
+    void (async () => {
+      for (const handle of params.files ?? []) {
+        if (!isPlaylistFileName(handle.name)) continue;
+        const file = await handle.getFile();
+        await importLocalPlaylistText(defaultLocalName(file.name), await file.text());
+      }
+    })();
+  });
+
+// Перетаскивание .m3u в окно — тот же импорт, с подтверждением имени.
+window.addEventListener("dragover", (event) => {
+  if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
 });
+window.addEventListener("drop", (event) => {
+  const file = [...(event.dataTransfer?.files ?? [])].find((item) => isPlaylistFileName(item.name));
+  if (!file) return;
+  event.preventDefault();
+  const name = window.prompt(tr("incoming.dropName"), defaultLocalName(file.name));
+  if (name === null) return;
+  void file.text().then((content) => importLocalPlaylistText(name.trim() || defaultLocalName(file.name), content));
+});
+
+// Android-приложение передаёт файл из интента «Открыть с помощью» (#373).
+(window as Window & { iptvHubImportPlaylist?: (name: string, content: string) => void }).iptvHubImportPlaylist =
+  (name, content) => void importLocalPlaylistText(defaultLocalName(name), content);
 
 /** Загрузить плейлист через транспорт (OPFS для local:, fetch для http). */
 function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
@@ -3495,6 +3537,10 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
 async function bootstrap(): Promise<void> {
   renderPlaylistManager();
   renderPlaylistSwitcher();
+
+  // «Поделиться → IPTV Hub» (share_target, #373): ссылка становится ?p=.
+  const shared = shareTargetSearch(window.location.search);
+  if (shared !== null) history.replaceState(null, "", `${window.location.pathname}${shared}${window.location.hash}`);
 
   // GET-параметры приоритетны: upsert в список и активация
   const params = new URLSearchParams(window.location.search);
