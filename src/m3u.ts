@@ -157,7 +157,7 @@ export function parseM3U(content: string): PlaylistSnapshot {
         ...(urls.length > 1 ? { mirrors: urls.slice(1) } : {}),
         tvgId,
         logo: extractAttr(pending.attrs, "tvg-logo"),
-        group: extractAttr(pending.attrs, "group-title") ?? "Основные",
+        group: extractAttr(pending.attrs, "group-title") || "Основные",
         quality: detectQuality(name),
         catchupDays: catchupInfo.days,
         catchupSource: catchupInfo.source,

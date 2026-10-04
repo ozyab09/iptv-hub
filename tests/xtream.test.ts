@@ -10,6 +10,14 @@ const categories = [{ category_id: "5", category_name: "News" }];
 const streams = [{ stream_id: 42, name: "News HD", stream_type: "live", category_id: "5", epg_channel_id: "news.epg", stream_icon: "https://provider.test/logo.png", tv_archive: 1, tv_archive_duration: "7" }];
 
 describe("Xtream", () => {
+  it.each(["99", undefined])("uses the default group for unknown category_id=%s", (category_id) => {
+    const snapshot = parseXtream(source, [{ ...streams[0], category_id }], categories);
+    expect(snapshot.channels[0]!.group).toBe("Основные");
+    expect(snapshot.categories).toEqual(["Основные"]);
+  });
+  it("uses the default group for an empty category name", () => {
+    expect(parseXtream(source, streams, [{ category_id: "5", category_name: "" }]).categories).toEqual(["Основные"]);
+  });
   it.each([1, 2, 99, 0, "live", undefined])("accepts live API stream_type=%s", (stream_type) => {
     const snapshot = parseXtream(source, [{ ...streams[0], stream_type }], categories);
     expect(snapshot.channels).toHaveLength(1);
