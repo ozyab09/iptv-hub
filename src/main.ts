@@ -1643,6 +1643,13 @@ const saveCurrentPosition = (): void => {
 };
 videoEl.addEventListener("pause", saveCurrentPosition);
 window.addEventListener("pagehide", saveCurrentPosition);
+// Закрытие/перезагрузка вкладки во время записи: финализируем частичную
+// запись в библиотеку, чтобы уже полученные сегменты не остались лежать
+// как rec-*.part (и перекодирующая запись не потерялась целиком).
+// OPFS-записи при выгрузке браузер не гарантирует — это best effort.
+window.addEventListener("pagehide", () => {
+  if (isRecordingNow()) stopRecordingNow();
+});
 
 btnPrev.addEventListener("click", () => playNeighbor(-1));
 btnNext.addEventListener("click", () => playNeighbor(1));
