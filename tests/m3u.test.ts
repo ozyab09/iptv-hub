@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { buildFavoritesM3U } from "../src/favorites";
 import {
   parseM3U,
   normalizeName,
@@ -34,6 +35,24 @@ describe("extractAttr", () => {
     );
     expect(extractAttr('tvg-id=""', "tvg-id")).toBe("");
     expect(extractAttr('group-title="Кино"', "tvg-name")).toBeNull();
+  });
+});
+
+describe("quoted EXTINF commas", () => {
+  it("keeps commas inside attributes and attributes after them", () => {
+    const result = parseM3U('#EXTM3U\n#EXTINF:-1 group-title="News, Talk" tvg-id="x" tvg-logo="https://fixture.test/logo,a.png" catchup-days="2",My Channel\nhttps://fixture.test/live.m3u8\n');
+    expect(result.channels[0]).toMatchObject({ name: "My Channel", group: "News, Talk", tvgId: "x", logo: "https://fixture.test/logo,a.png", catchupDays: 2 });
+    expect(result.categories).toEqual(["News, Talk"]);
+  });
+  it("preserves every comma in the channel name after the attribute separator", () => {
+    const result = parseM3U('#EXTINF:-1 tvg-id="x" group-title="News, Talk",My Channel, Talk, HD\nhttps://fixture.test/live.m3u8\n');
+    expect(result.channels[0]!.name).toBe("My Channel, Talk, HD");
+    expect(result.channels[0]!.group).toBe("News, Talk");
+  });
+  it("round trips comma-containing attributes and names through favorites export", () => {
+    const channel = parseM3U('#EXTINF:-1 tvg-id="x" tvg-logo="https://fixture.test/logo,a.png" group-title="News, Talk",My Channel, Talk\nhttps://fixture.test/live.m3u8\n').channels[0]!;
+    const exported = buildFavoritesM3U([channel], new Set([channel.url]));
+    expect(parseM3U(exported).channels).toEqual([channel]);
   });
 });
 
