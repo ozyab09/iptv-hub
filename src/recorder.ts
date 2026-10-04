@@ -1,3 +1,4 @@
+import { t, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 /**
  * Запись эфира в локальный файл.
  *
@@ -61,10 +62,11 @@ export function canRecord(): boolean {
 export function validateRecOp(
   state: RecState,
   op: "start" | "stop",
+  language: Language = "ru",
 ): string | null {
-  if (state === "stopping") return "Запись сохраняется, подождите";
-  if (op === "start" && state === "recording") return "Запись уже идёт";
-  if (op === "stop" && state !== "recording") return "Запись не запущена";
+  if (state === "stopping") return t("record.saving", language);
+  if (op === "start" && state === "recording") return t("record.already", language);
+  if (op === "stop" && state !== "recording") return t("record.notStarted", language);
   return null;
 }
 
@@ -94,6 +96,7 @@ export interface RecordingDeps {
   /** Готовый файл; blob.size === 0 означает, что записать не удалось. */
   onSave: (blob: Blob, chunkCount: number, mimeType: string) => void;
   onNotify: (message: string) => void;
+  language?: () => Language;
   onState: (state: RecState) => void;
   /**
    * Источник оборвался сам, стоп никто не нажимал. Накопленный огрызок
@@ -112,10 +115,6 @@ export interface RecordingSession {
   isRecording(): boolean;
 }
 
-function reason(e: unknown): string {
-  return e instanceof Error ? e.message : "ошибка";
-}
-
 /**
  * Сессия записи с корректным порядком остановки.
  *
@@ -126,6 +125,7 @@ function reason(e: unknown): string {
  * вызывается только из onstop/onerror/watchdog.
  */
 export function createRecordingSession(deps: RecordingDeps): RecordingSession {
+  const tr = (key: TranslationKey, params: TranslationParams = {}) => t(key, deps.language?.() ?? "ru", params);
   const pickMime = deps.pickMime ?? pickRecorderMime;
   const stopTimeoutMs = deps.stopTimeoutMs ?? STOP_TIMEOUT_MS;
 
@@ -197,7 +197,7 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
     isRecording: () => state === "recording",
 
     start(): void {
-      const err = validateRecOp(state, "start");
+      const err = validateRecOp(state, "start", deps.language?.());
       if (err) {
         deps.onNotify(err);
         return;
@@ -206,7 +206,7 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
       try {
         created = deps.createSource();
       } catch (e) {
-        deps.onNotify(`Не удалось начать запись: ${reason(e)}`);
+        deps.onNotify(tr("record.startFailed", { reason: e instanceof Error ? e.message : tr("error.unknown") }));
         return;
       }
       // mime выбирается ПОСЛЕ создания стрима — по его фактическим дорожкам.
@@ -221,7 +221,7 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
         started = deps.createRecorder(created.stream, picked);
       } catch (e) {
         releaseSource(created);
-        deps.onNotify(`Не удалось начать запись: ${reason(e)}`);
+        deps.onNotify(tr("record.startFailed", { reason: e instanceof Error ? e.message : tr("error.unknown") }));
         return;
       }
       started.ondataavailable = (e) => {
@@ -245,7 +245,7 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
         started.start(TIMESLICE_MS);
       } catch (e) {
         releaseSource(created);
-        deps.onNotify(`Не удалось начать запись: ${reason(e)}`);
+        deps.onNotify(tr("record.startFailed", { reason: e instanceof Error ? e.message : tr("error.unknown") }));
         return;
       }
       recorder = started;
@@ -258,7 +258,7 @@ export function createRecordingSession(deps: RecordingDeps): RecordingSession {
     },
 
     stop(save: boolean): void {
-      const err = validateRecOp(state, "stop");
+      const err = validateRecOp(state, "stop", deps.language?.());
       if (err) {
         deps.onNotify(err);
         return;

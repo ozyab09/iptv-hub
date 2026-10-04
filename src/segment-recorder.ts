@@ -1,3 +1,4 @@
+import { t, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 /**
  * Запись эфира готовыми сегментами HLS.
  *
@@ -62,6 +63,7 @@ export interface SegmentRecorderDeps {
   createSink: () => Promise<RecordingSink>;
   onSave: (blob: Blob, result: SegmentResult) => void;
   onNotify: (message: string) => void;
+  language?: () => Language;
   onState: (state: SegmentRecState) => void;
   /** Потолок размера; по достижении запись останавливается сама. */
   maxBytes?: number;
@@ -83,6 +85,7 @@ export interface SegmentSession {
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024;
 
 export function createSegmentSession(deps: SegmentRecorderDeps): SegmentSession {
+  const tr = (key: TranslationKey, params: TranslationParams = {}) => t(key, deps.language?.() ?? "ru", params);
   const maxBytes = deps.maxBytes ?? DEFAULT_MAX_BYTES;
 
   let state: SegmentRecState = "idle";
@@ -124,26 +127,26 @@ export function createSegmentSession(deps: SegmentRecorderDeps): SegmentSession 
       segments++;
       const failure = sink.error();
       if (failure) {
-        deps.onNotify(`Запись прервана: ${failure.message}`);
+        deps.onNotify(tr("record.interrupted", { reason: failure.message }));
         void this.stop(true);
         return;
       }
       if (sink.size() >= maxBytes) {
-        deps.onNotify("Достигнут предел размера — сохраняю записанное");
+        deps.onNotify(tr("record.limit"));
         void this.stop(true);
       }
     },
 
     async start(): Promise<void> {
       if (state !== "idle") {
-        deps.onNotify(state === "recording" ? "Запись уже идёт" : "Запись сохраняется, подождите");
+        deps.onNotify(state === "recording" ? tr("record.already") : tr("record.saving"));
         return;
       }
       try {
         sink = await deps.createSink();
       } catch (e) {
         deps.onNotify(
-          `Не удалось начать запись: ${e instanceof Error ? e.message : "ошибка"}`,
+          tr("record.startFailed", { reason: e instanceof Error ? e.message : tr("error.unknown") }),
         );
         return;
       }
@@ -157,7 +160,7 @@ export function createSegmentSession(deps: SegmentRecorderDeps): SegmentSession 
 
     async stop(save: boolean): Promise<void> {
       if (state !== "recording" || !sink) {
-        if (state === "idle") deps.onNotify("Запись не запущена");
+        if (state === "idle") deps.onNotify(tr("record.notStarted"));
         return;
       }
       const active = sink;
@@ -173,7 +176,7 @@ export function createSegmentSession(deps: SegmentRecorderDeps): SegmentSession 
         sink = null;
         setState("idle");
         if (blob.size === 0 || segments === 0) {
-          deps.onNotify("Записать не успели ни одного сегмента");
+          deps.onNotify(tr("record.noSegments"));
           return;
         }
         deps.onSave(blob, {
@@ -186,7 +189,7 @@ export function createSegmentSession(deps: SegmentRecorderDeps): SegmentSession 
         sink = null;
         setState("idle");
         deps.onNotify(
-          `Не удалось сохранить запись: ${e instanceof Error ? e.message : "ошибка"}`,
+          tr("record.saveFailed", { reason: e instanceof Error ? e.message : tr("error.unknown") }),
         );
       }
     },

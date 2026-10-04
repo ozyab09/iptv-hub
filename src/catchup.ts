@@ -1,3 +1,4 @@
+import { t, type Language } from "./i18n";
 import type { EpgProgramme } from "./types";
 
 /**
@@ -135,7 +136,7 @@ function localMidnight(d: Date): number {
  * Окна дней для гайда: сегодня + MAX_CATCHUP_DAYS назад.
  * index 0 = сегодня, 1 = вчера, …
  */
-export function dayWindows(now: Date = new Date()): DayWindow[] {
+export function dayWindows(now: Date = new Date(), language: Language = "ru"): DayWindow[] {
   const today = localMidnight(now);
   const out: DayWindow[] = [];
   for (let i = 0; i <= MAX_CATCHUP_DAYS; i++) {
@@ -145,10 +146,10 @@ export function dayWindows(now: Date = new Date()): DayWindow[] {
       endMs: start + DAY,
       label:
         i === 0
-          ? "Сегодня"
+          ? t("guide.today", language)
           : i === 1
-            ? "Вчера"
-            : new Date(start).toLocaleDateString("ru-RU", {
+            ? t("guide.yesterday", language)
+            : new Date(start).toLocaleDateString(language, {
                 weekday: "short",
                 day: "2-digit",
                 month: "2-digit",
