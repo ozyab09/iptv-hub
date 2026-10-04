@@ -6,18 +6,18 @@ async function checkContrast(tile: Locator): Promise<void> {
   const img = tile.locator("img");
   await expect(img).toBeVisible();
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(36);
-  const luminance = await tile.evaluate((el) => {
+  await expect.poll(() => tile.evaluate((el) => {
     const rgb = getComputedStyle(el).backgroundColor;
+    if (!rgb) return false; // Перерисовка могла отсоединить строку после разрешения locator.
     const values = rgb.startsWith("color(srgb")
       ? rgb.match(/[\d.]+/g)!.map(Number)
       : rgb.match(/[\d.]+/g)!.slice(0, 3).map((v) => Number(v) / 255);
     const linear = values.map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-    return linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722;
-  });
-  // Контраст к белым и чёрным деталям одного прозрачного изображения.
-  expect(1.05 / (luminance + 0.05)).toBeGreaterThanOrEqual(3);
-  expect((luminance + 0.05) / 0.05).toBeGreaterThanOrEqual(3);
-  expect(await img.evaluate((el) => getComputedStyle(el).filter)).toBe("none");
+    const luminance = linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722;
+    // Контраст к белым и чёрным деталям одного прозрачного изображения.
+    return 1.05 / (luminance + 0.05) >= 3 && (luminance + 0.05) / 0.05 >= 3;
+  })).toBe(true);
+  await expect(img).toHaveCSS("filter", "none");
 }
 
 for (const theme of ["light", "dark"]) {
@@ -57,10 +57,10 @@ for (const theme of ["light", "dark"]) {
         await expect(rows.nth(4).locator(".logo")).toHaveText("NO");
         for (let i = 3; i < 5; i++) {
           await expect(rows.nth(i).locator(".logo img")).toHaveCount(0);
-          expect(await rows.nth(i).locator(".logo").evaluate((el) => getComputedStyle(el).backgroundColor))
-            .toBe(theme === "light" ? "rgb(227, 227, 232)" : "rgb(39, 40, 46)");
+          await expect(rows.nth(i).locator(".logo"))
+            .toHaveCSS("background-color", theme === "light" ? "rgb(227, 227, 232)" : "rgb(39, 40, 46)");
         }
-        expect((await rows.first().boundingBox())!.height).toBe(72);
+        await expect(rows.first()).toHaveCSS("height", "72px");
       };
       await checkRows();
       const frames = page.locator(".continue-frame");
