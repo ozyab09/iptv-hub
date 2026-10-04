@@ -363,6 +363,12 @@ const subtitleMenu = $("subtitle-menu");
 const playerStatus = $("player-status");
 const btnGuide = $<HTMLButtonElement>("btn-guide");
 const guideOverlay = $("guide-overlay");
+const programmeOverlay = $("programme-overlay");
+const programmeCardTitle = $("programme-card-title");
+const programmeCardMeta = $("programme-card-meta");
+const programmeCardDesc = $("programme-card-desc");
+const programmeCardActions = $("programme-card-actions");
+const programmeCardClose = $<HTMLButtonElement>("programme-card-close");
 const guideTitle = $("guide-title");
 const guideDays = $("guide-days");
 const guideList = $("guide-list");
@@ -2622,6 +2628,7 @@ let historyGuard = false; // не зеркалить собственные hist
 /** Показать/скрыть DOM-узел оверлея по имени. */
 function applyOverlay(name: OverlayName, on: boolean): void {
   if (name === "guide") guideOverlay.hidden = !on;
+  else if (name === "programme") programmeOverlay.hidden = !on;
   else if (name === "notifications") {
     notifPanel.hidden = !on;
     notifBell.setAttribute("aria-expanded", String(on));
@@ -3136,40 +3143,103 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
 
   if (watchable) {
     row.title = isLive ? tr("guide.watchNow") : tr("guide.archiveTitle");
-    row.addEventListener("click", async () => {
-      if (isLive) {
-        if (await playChannel(c)) onPlayed();
-        return;
-      }
-      const url = buildCatchupUrl(cu, p, now);
-      if (!url) {
-        showToast(tr("error.noArchive"));
-        return;
-      }
-      if (await playChannel(c, url, p)) onPlayed();
-    });
+    row.addEventListener("click", () => void watchProgramme(c, p, now, onPlayed));
   } else if (state === "past") {
     row.title =
       cu.days > 0
         ? tr("guide.outsideArchive")
         : tr("guide.noArchive");
   }
+  // Описание из EPG — подсказкой на строке, полностью — в карточке (#363).
+  if (p.desc) row.title = row.title ? `${row.title}. ${p.desc}` : p.desc;
   const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
+  wrapper.append(row, programmeInfoButton(c, p, onPlayed));
   if (stop <= now.getTime()) {
     // Скачивание доступной из архива передачи (#315, #359). Раньше блок стоял
     // после раннего return для прошедших передач и не рисовался вовсе.
-    if (!(watchable && cu.source)) return row;
-    wrapper.append(row, programmeDownloadButton(c, p, cu));
+    if (watchable && cu.source) wrapper.append(programmeDownloadButton(c, p, cu));
     return wrapper;
   }
+  wrapper.append(...programmeFutureActions(c, p));
+  return wrapper;
+}
+
+/** «Записать» и «Напомнить» для идущей и будущей передачи. */
+function programmeFutureActions(c: Channel, p: EpgProgramme): HTMLElement[] {
   const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
   record.textContent = tr("schedule.title");
   const playlistId = plState.activeId;
   record.addEventListener("click", () => { if (playlistId) scheduleUi?.plan(c, p, playlistId); });
-  wrapper.append(row, record);
   const reminder = playlistId && reminderUi?.button(c, p, playlistId);
-  if (reminder) wrapper.append(reminder);
-  return wrapper;
+  return reminder ? [record, reminder] : [record];
+}
+
+/** Включить эфир или архив передачи: те же проверки, что у строки программы. */
+async function watchProgramme(c: Channel, p: EpgProgramme, now: Date, onPlayed: () => void): Promise<boolean> {
+  const start = Date.parse(p.start);
+  const stop = Date.parse(p.stop);
+  if (start <= now.getTime() && now.getTime() < stop) {
+    if (!await playChannel(c)) return false;
+    onPlayed();
+    return true;
+  }
+  const url = buildCatchupUrl({ days: c.catchupDays, source: c.catchupSource }, p, now);
+  if (!url) {
+    showToast(tr("error.noArchive"));
+    return false;
+  }
+  if (!await playChannel(c, url, p)) return false;
+  onPlayed();
+  return true;
+}
+
+function programmeInfoButton(c: Channel, p: EpgProgramme, onPlayed: () => void): HTMLButtonElement {
+  const info = document.createElement("button");
+  info.type = "button";
+  info.className = "icon-btn programme-info";
+  info.title = tr("programme.details");
+  info.setAttribute("aria-label", `${tr("programme.details")}: ${p.title}`);
+  setIcon(info, "info");
+  info.addEventListener("click", () => openProgrammeCard(c, p, onPlayed));
+  return info;
+}
+
+/**
+ * Карточка передачи (#363): название, время и статус, описание из EPG и
+ * действия строки программы. Текст EPG вставляется только через textContent.
+ */
+function openProgrammeCard(c: Channel, p: EpgProgramme, onPlayed: () => void): void {
+  const now = new Date();
+  const start = Date.parse(p.start);
+  const stop = Date.parse(p.stop);
+  const cu = { days: c.catchupDays, source: c.catchupSource };
+  const isLive = start <= now.getTime() && now.getTime() < stop;
+  const past = stop <= now.getTime();
+  const watchable = isLive || canWatchPast(cu, p, now);
+  programmeCardTitle.textContent = p.title;
+  const status = isLive ? tr("programme.statusNow") : past ? tr("programme.statusPast") : tr("programme.statusNext");
+  programmeCardMeta.textContent = `${c.name} · ${formatRange(p, currentLanguage)} · ${status}`;
+  programmeCardDesc.textContent = p.desc ?? "";
+  programmeCardDesc.hidden = !p.desc;
+  programmeCardActions.textContent = "";
+  if (watchable) {
+    const watch = document.createElement("button");
+    watch.type = "button";
+    watch.className = "btn btn-sm btn-primary programme-watch";
+    watch.textContent = isLive ? tr("guide.watchNow") : tr("guide.archive");
+    watch.addEventListener("click", async () => {
+      if (await watchProgramme(c, p, new Date(), onPlayed)) closeOverlay("programme");
+    });
+    programmeCardActions.append(watch);
+  }
+  if (past) {
+    if (watchable && cu.source) programmeCardActions.append(programmeDownloadButton(c, p, cu));
+  } else {
+    programmeCardActions.append(...programmeFutureActions(c, p));
+  }
+  programmeCardActions.hidden = programmeCardActions.childElementCount === 0;
+  openOverlay("programme");
+  programmeCardClose.focus();
 }
 
 /**
@@ -3279,6 +3349,18 @@ function renderSchedule(): void {
 btnGuide.addEventListener("click", openGuide);
 btnFullGuide.addEventListener("click", openGuide);
 guideClose.addEventListener("click", () => closeOverlay("guide"));
+programmeCardClose.addEventListener("click", () => closeOverlay("programme"));
+programmeOverlay.addEventListener("click", (e) => {
+  if (e.target === programmeOverlay) closeOverlay("programme");
+});
+// Escape закрывает карточку раньше гайда под ней: ловим в capture-фазе,
+// до обработчиков гайда и горячих клавиш плеера (#363).
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || programmeOverlay.hidden) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  closeOverlay("programme");
+}, true);
 guideOverlay.addEventListener("click", (e) => {
   if (e.target === guideOverlay) closeOverlay("guide");
 });
