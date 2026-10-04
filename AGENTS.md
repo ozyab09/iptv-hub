@@ -46,7 +46,7 @@ push в main CI вычисляет следующий патч, штампует
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
-   `screenshot-ui.ts` (#364) —
+   `screenshot-ui.ts` (#364), `recordings-ui.ts` (#365), `recording-capture.ts` (#366) —
    узлы и зависимости приходят через create, логика тестируется на фейках.
    Осторожно с топ-левельным кодом `main.ts`: он исполняется по порядку, и
    вызов функции, трогающей `const X = createX(...)` до строки её объявления,
@@ -390,8 +390,10 @@ iptv-hub/
 │   ├── quality.ts          # лейблы уровней/дорожек, формат статуса
 │   ├── screenshot-ui.ts    # DOM скриншота кадра: canvas → PNG, кнопка (#364)
 │   ├── recorder.ts         # запись перекодированием: mime, имя файла, жизненный цикл
+│   ├── recording-capture.ts # захват для перекодирования: element/канвас, MediaRecorder (#366)
 │   ├── segment-recorder.ts # запись HLS сегментами: контейнер, потолок, init-сегмент
 │   ├── recording-sink.ts   # куда писать: OPFS на диск, откат — память
+│   ├── recordings-ui.ts    # DOM библиотеки записей: карточки, сохранение, скачивание (#365)
 │   ├── debug-log.ts        # экранный лог по ?debug=1 (на телефоне консоли нет)
 │   ├── theme.ts            # тёмная/светлая тема (system default, без FOUC)
 │   ├── virtual-list.ts     # математика окна виртуализации (строки × колонки)
