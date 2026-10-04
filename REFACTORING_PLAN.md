@@ -91,6 +91,7 @@
    `group-preferences.ts`, `parental-pin.ts`, `favorites.ts`,
    `favorites-order.ts`, `channel-overrides.ts` и т.д. → общий хелпер
    `playlist-scoped-key.ts` (+ тест на соглашение имён).
+   **Сделано в #374:** все девять потребителей на `playlistScopedKey()`.
 2. **`i18n.ts` (746 строк).** Разделить словари: `i18n-ru.ts` / `i18n-en.ts`,
    `i18n.ts` оставляет API `t()/tr()/translateMessage()`. Проверить, что
    бандл не теряет tree-shaking (словари сейчас в одном объекте).
