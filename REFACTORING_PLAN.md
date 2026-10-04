@@ -55,6 +55,10 @@
    `renderSchedule`, `channelProgrammes`) → дорасширение существующего
    `timeline-guide-ui.ts` (или соседний `guide-ui.ts`); `programmeRow()` —
    один строитель для шторки и блока под плеером, это контракт — сохранить.
+   **Сделано в #368:** соседний `guide-ui.ts` — шторка-список по дням,
+   блок под плеером, `programmeRow()`, карточка передачи (#363) и UI
+   скачивания (#359); сетка осталась в `timeline-guide-ui.ts`,
+   `channelProgrammes()` — в main.ts (ею пользуются таймлайн и запись).
 6. **Полоса прогресса/скраб** (~3106–3236: `refreshScrub`, `scrubPointerTime`,
    `recordingScrubDuration`) → DOM-прослойка над чистым `scrub.ts`.
 7. **Экспорт/импорт бэкапа** (~3793–3906) → `backup-ui.ts` над чистым

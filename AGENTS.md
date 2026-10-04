@@ -46,7 +46,8 @@ push в main CI вычисляет следующий патч, штампует
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
-   `screenshot-ui.ts` (#364), `recordings-ui.ts` (#365), `recording-capture.ts` (#366) —
+   `screenshot-ui.ts` (#364), `recordings-ui.ts` (#365), `recording-capture.ts` (#366),
+   `guide-ui.ts` (#368) —
    узлы и зависимости приходят через create, логика тестируется на фейках.
    Осторожно с топ-левельным кодом `main.ts`: он исполняется по порядку, и
    вызов функции, трогающей `const X = createX(...)` до строки её объявления,
@@ -265,7 +266,7 @@ push в main CI вычисляет следующий патч, штампует
 
 ### Карточка передачи (#363)
 
-`programmeRow()` всегда возвращает `.programme-recordable` со строкой и кнопкой
+`programmeRow()` (в `guide-ui.ts`, #368) всегда возвращает `.programme-recordable` со строкой и кнопкой
 `.programme-info`; `openProgrammeCard()` открывает оверлей `programme` (общий
 стек, history, popstate). Escape ловится в capture-фазе window и закрывает
 карточку раньше гайда. Текст EPG — только `textContent`, `desc` с переносами
@@ -387,6 +388,7 @@ iptv-hub/
 │   ├── player.ts           # Player: hls.js / нативный, quality, retry, https-апгрейд
 │   ├── playlist-ui.ts      # UI менеджера плейлистов: setup-список + переключатель
 │   ├── playlist-transport.ts # транспорт плейлистов: OPFS-адаптер, loadPlaylist, диагностика сбоев
+│   ├── guide-ui.ts         # DOM программы: шторка, блок под плеером, programmeRow, карточка (#368)
 │   ├── quality.ts          # лейблы уровней/дорожек, формат статуса
 │   ├── screenshot-ui.ts    # DOM скриншота кадра: canvas → PNG, кнопка (#364)
 │   ├── recorder.ts         # запись перекодированием: mime, имя файла, жизненный цикл
