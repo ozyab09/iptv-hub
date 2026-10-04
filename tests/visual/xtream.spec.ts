@@ -28,7 +28,7 @@ for (const width of [390, 1440]) {
       await page.goto("/");
       await page.getByRole("radio", { name: "Xtream Codes", exact: true }).click();
       await expect(page.locator("#m3u-fields")).toBeHidden();
-      await expect(page.locator("#xtream-fields .set-note")).toBeVisible();
+      await expect(page.locator('#xtream-fields [data-i18n="playlist.xtreamNote"]')).toBeVisible();
       await page.locator("#xtream-host").fill("http://provider.test");
       await page.locator("#xtream-user").fill("user");
       await page.locator("#xtream-password").fill("secret");

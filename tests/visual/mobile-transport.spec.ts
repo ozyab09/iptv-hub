@@ -39,7 +39,8 @@ for (const width of [320, 390, 480]) {
       expect(transport.y + transport.height).toBeLessThanOrEqual(bottom.y);
       const scrub = (await page.locator(".scrub-row").boundingBox())!;
       expect(transport.y + transport.height).toBeLessThanOrEqual(scrub.y);
-      const buttons = page.locator(".transport button");
+      await expect(page.locator("#btn-next-episode")).toBeHidden();
+      const buttons = page.locator(".transport button:visible");
       await expect(buttons).toHaveCount(7);
       const order = ["btn-prev", "btn-seek-back", "btn-pause", "btn-seek-fwd", "btn-next"];
       expect(await buttons.evaluateAll((els) => els.slice(0, 5).map((el) => el.id))).toEqual(order);

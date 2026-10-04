@@ -108,6 +108,7 @@
                   </div>
                   </div>
                   <div id="xtream-fields" hidden>
+                    <label class="set-note"><input id="xtream-vod" type="checkbox" /> <span data-i18n="playlist.xtreamVod">Включить фильмы и сериалы</span></label>
                     <div class="field">
                       <label for="xtream-host" data-i18n="playlist.xtreamHost">Сервер (HTTPS)</label>
                       <div class="input"><input id="xtream-host" type="url" inputmode="url" placeholder="https://provider.example:443" autocomplete="off" /></div>
@@ -424,6 +425,7 @@
                   <button id="btn-pause" class="vbtn big" title="Пауза / продолжить (Space)" aria-label="Пауза или продолжить" data-i18n-title="player.pauseTitle" data-i18n-aria-label="player.pauseTitle"><svg class="i i-lg i-fill" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg></button>
                   <button id="btn-seek-fwd" class="vbtn ghost" title="Вперёд 15 сек (L)" aria-label="Вперёд 15 секунд" data-i18n-title="player.forwardTitle" data-i18n-aria-label="player.forwardTitle"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-seek-fwd"></use></svg></button>
                   <button id="btn-next" class="vbtn ghost" title="Следующий канал" aria-label="Следующий канал" data-i18n-title="player.next" data-i18n-aria-label="player.next"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-next-track"></use></svg></button>
+                  <button id="btn-next-episode" class="vbtn ghost" data-i18n-title="catalogue.nextEpisode" data-i18n-aria-label="catalogue.nextEpisode" hidden><svg class="i" aria-hidden="true"><use href="#i-next-track"></use></svg></button>
                   <button id="btn-rec" class="vbtn ghost rec-btn" title="Записать эфир в файл" aria-label="Запись эфира"><svg class="i i-fill" aria-hidden="true" focusable="false"><use href="#i-record"></use></svg></button>
                   <button id="btn-sleep" class="vbtn ghost" title="Sleep-таймер: выключить позже" aria-label="Sleep-таймер" aria-haspopup="listbox" aria-controls="sleep-menu" aria-expanded="false" data-i18n-title="player.sleepTitle" data-i18n-aria-label="player.sleepTitle"><span id="sleep-badge" class="sleep-badge" hidden></span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-clock"></use></svg></button>
                 </div>

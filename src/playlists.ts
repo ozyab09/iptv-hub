@@ -17,6 +17,8 @@ export interface Playlist {
   playlistUrl: string;
   /** EPG необязателен. */
   epgUrl: string | null;
+  /** Каталог Xtream запрашивается только при явном включении. */
+  xtreamVod?: boolean;
 }
 
 /** Легаси-ключ глобального избранного (до мультиплейлистов). */
@@ -112,6 +114,7 @@ function sanitize(raw: unknown): Playlist[] {
       // Старый импорт сохранял файл по id, но в URL писал отдельный timestamp.
       playlistUrl: local ? `local:${p.id}` : p.playlistUrl as string,
       epgUrl: isHttpUrl(p.epgUrl) ? p.epgUrl : null,
+      ...(p.xtreamVod === true ? { xtreamVod: true } : {}),
     });
   }
   return out;
@@ -173,7 +176,7 @@ export function addLocalPlaylist(state: PlaylistsState, name: string): Playlists
 export function updatePlaylist(
   state: PlaylistsState,
   id: string,
-  patch: Partial<Pick<Playlist, "name" | "playlistUrl" | "epgUrl">>,
+  patch: Partial<Pick<Playlist, "name" | "playlistUrl" | "epgUrl" | "xtreamVod">>,
 ): PlaylistsState {
   return {
     ...state,

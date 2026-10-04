@@ -14,6 +14,8 @@ import type { Channel } from "./types";
 
 export type View =
   | "channels"
+  | "movies"
+  | "series"
   | "favorites"
   | "recents"
   | "recordings"
@@ -30,6 +32,8 @@ export interface ViewMeta {
 /** Порядок разделов — он же порядок вкладок. */
 export const VIEWS: readonly ViewMeta[] = [
   { id: "channels", label: "Каналы", icon: "tv" },
+  { id: "movies", label: "Фильмы", icon: "play" },
+  { id: "series", label: "Сериалы", icon: "tv" },
   { id: "favorites", label: "Избранное", icon: "star" },
   { id: "recents", label: "Недавние", icon: "clock" },
   { id: "recordings", label: "Записи", icon: "record" },
@@ -50,7 +54,7 @@ export function showsChannelList(view: View): boolean {
 
 /** Есть ли в разделе фильтр по категориям. */
 export function showsCategories(view: View): boolean {
-  return view === "channels";
+  return view === "channels" || view === "movies" || view === "series";
 }
 
 /** Единый отбор до разделов, поиска передач, now/next и счётчиков. */
@@ -71,6 +75,8 @@ export function channelsForView(
   recents: readonly string[],
 ): Channel[] {
   if (view === "settings" || view === "recordings") return [];
+  if (view === "movies") return channels.filter((channel) => channel.mediaKind === "movie");
+  if (view === "series") return channels.filter((channel) => channel.mediaKind === "series");
   if (view === "favorites") return channels.filter((c) => favorites.has(c.url));
   if (view === "recents") {
     const byUrl = new Map(channels.map((c) => [c.url, c]));
@@ -79,7 +85,7 @@ export function channelsForView(
       return c ? [c] : []; // канал мог исчезнуть из плейлиста
     });
   }
-  return [...channels];
+  return channels.filter((channel) => !channel.mediaKind);
 }
 
 /** Текст пустого состояния — он разный по смыслу в каждом разделе. */

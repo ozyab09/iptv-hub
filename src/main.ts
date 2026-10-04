@@ -1,4 +1,6 @@
 import "./style.css";
+import { createCatalogueCard } from "./catalogue-card";
+import { resumeEpisode } from "./xtream-catalogue";
 import { parseExternalSubtitles, parseSubtitlePreference, subtitlePreferenceKey, type SubtitleCue } from "./external-subtitles";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
 import { channelHealthKey, parseChannelHealth, serializeChannelHealth, markChannelFailure, clearChannelFailure, isChannelRecovered, type ChannelHealth, type ChannelFailure } from "./channel-health";
@@ -57,6 +59,7 @@ import { searchProgrammes, programmeArchiveUrl, type ProgrammeMatch } from "./pr
 import { DEFAULT_PLAYER_SETTINGS, PLAYER_SETTINGS_KEY, parsePlayerSettings, sanitizePlayerSettings } from "./player-settings";
 import {
   computeWindow,
+  columnsForWidth,
   spacerHeight,
 } from "./virtual-list";
 import { clock, isBehindLive, mediaScrub, programmeProgress, scrubSeekTarget } from "./scrub";
@@ -239,6 +242,7 @@ const addForm = $<HTMLFormElement>("add-form");
 const xtreamHost = $<HTMLInputElement>("xtream-host");
 const xtreamUser = $<HTMLInputElement>("xtream-user");
 const xtreamPassword = $<HTMLInputElement>("xtream-password");
+const xtreamVod = $<HTMLInputElement>("xtream-vod");
 let xtreamMode = false;
 $("source-type").addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-source]");
@@ -472,6 +476,9 @@ let activeView: View = parseView(
 );
 /** Плоский список каналов в текущем рендере — для prev/next в плеере. */
 let visibleChannels: Channel[] = [];
+let seriesEpisodes: Channel[] | null = null;
+let episodeQueue: Channel[] = [];
+let seriesRequest = 0;
 let numericZap: NumericZap | null = null;
 let zapTimer: ReturnType<typeof setTimeout> | null = null;
 const zapOverlay = $("numeric-zap");
@@ -971,6 +978,7 @@ function renderNav(): void {
   tabbar.textContent = "";
   sideNav.textContent = "";
   for (const v of VIEWS) {
+    if ((v.id === "movies" || v.id === "series") && !activePlaylist(plState)?.xtreamVod) continue;
     tabbar.append(navButton(v, "tab"));
     sideNav.append(navButton(v, "side-item"));
   }
@@ -985,6 +993,8 @@ function renderNav(): void {
  * пользователь выбрал сам, иначе выбор теряется при каждом пустом старте.
  */
 function setView(view: View, persist = true): void {
+  if (view !== "series") { seriesEpisodes = null; ++seriesRequest; }
+  if ((view === "movies" || view === "series") && !activePlaylist(plState)?.xtreamVod) view = "channels";
   cancelNumericZap();
   activeView = view;
   // Разделы со списком используют раскладку канала рядом с плеером.
@@ -1153,7 +1163,7 @@ $("channel-overrides-reset").addEventListener("click", () => {
 
 function renderCategories(): void {
   if (!snapshot) return;
-  const channels = displayChannels();
+  const channels = seriesEpisodes && activeView === "series" ? filterVisibleGroups(applyChannelOverrides(seriesEpisodes, channelOverrides), groupPreferences.hidden) : channelsForView(activeView, displayChannels(), favorites, recents);
   categoriesNav.textContent = "";
   const mk = (label: string, value: string | null, count: number) => {
     const b = document.createElement("button");
@@ -1169,7 +1179,7 @@ function renderCategories(): void {
   };
   const entries: Array<[string, string | null, number]> = [
     [tr("categories.all"), null, channels.length],
-    ...orderedGroups(snapshot.categories, groupPreferences.order).filter((g) => !groupPreferences.hidden.has(g)).map(
+    ...orderedGroups([...new Set(channels.map((channel) => channel.group))], groupPreferences.order).filter((g) => !groupPreferences.hidden.has(g)).map(
       (g) =>
         [g, g, channels.filter((c) => c.group === g).length] as [
           string,
@@ -1179,6 +1189,13 @@ function renderCategories(): void {
     ),
   ];
   categoriesNav.append(...entries.map(([l, v, n]) => mk(l, v, n)));
+  if (seriesEpisodes && activeView === "series") {
+    const back = document.createElement("button");
+    back.className = "chip";
+    back.textContent = tr("catalogue.backSeries");
+    back.addEventListener("click", () => { seriesEpisodes = null; activeCategory = null; ++seriesRequest; renderCategories(); renderChannels(); });
+    categoriesNav.prepend(back);
+  }
 
   // Тот же список пунктами меню — для режима просмотра, где чипов нет.
   catMenu.textContent = "";
@@ -1236,26 +1253,32 @@ function ensureVirtualShell(): void {
 function renderVirtualWindow(): void {
   if (!virtualInner || !virtualSpacer) return;
   const vh = channelList.clientHeight || 600;
+  const catalogue = (activeView === "movies" || activeView === "series") && !seriesEpisodes;
+  const columns = catalogue ? columnsForWidth(channelList.clientWidth, 160) : CHANNEL_COLUMNS;
+  const rowHeight = catalogue ? 260 : CHANNEL_ROW_HEIGHT;
+  virtualInner.dataset.catalogue = String(catalogue);
+  virtualInner.style.gridTemplateColumns = catalogue ? `repeat(${columns}, minmax(0, 1fr))` : "";
   const win = computeWindow(
     channelList.scrollTop,
     vh,
     visibleResults.length,
-    CHANNEL_ROW_HEIGHT,
+    rowHeight,
     undefined,
-    CHANNEL_COLUMNS,
+    columns,
   );
-  virtualSpacer.style.height = `${spacerHeight(visibleResults.length, CHANNEL_ROW_HEIGHT, CHANNEL_COLUMNS)}px`;
+  virtualSpacer.style.height = `${spacerHeight(visibleResults.length, rowHeight, columns)}px`;
   virtualInner.style.transform = `translateY(${win.offset}px)`;
   virtualInner.textContent = "";
-  const first = win.start * CHANNEL_COLUMNS;
+  const first = win.start * columns;
   const last = Math.min(
     visibleResults.length,
-    first + win.count * CHANNEL_COLUMNS,
+    first + win.count * columns,
   );
   for (let i = first; i < last; i++) {
     const c = visibleResults[i];
     if (c) {
-      const row = "programme" in c ? renderProgrammeMatch(c) : renderChannelCard(c);
+      const row = "programme" in c ? renderProgrammeMatch(c) :
+        catalogue ? createCatalogueCard(document, c, () => { void playChannel(c); }) : renderChannelCard(c);
       row.dataset.resultIndex = String(i);
       virtualInner.append(row);
     }
@@ -1274,7 +1297,10 @@ function renderChannels(resetScroll = true): void {
   if (resetScroll) cancelNumericZap();
   if (!snapshot) return;
   const q = searchInput.value.trim().toLowerCase();
-  const inView = channelsForView(activeView, displayChannels(), favorites, recents);
+  const channels = displayChannels();
+  const inView = activeView === "series" && seriesEpisodes ? filterVisibleGroups(applyChannelOverrides(seriesEpisodes, channelOverrides), groupPreferences.hidden) :
+    activeView === "channels" && q && activePlaylist(plState)?.xtreamVod ? channels.filter((channel) => channel.mediaKind !== "episode") :
+    channelsForView(activeView, channels, favorites, recents);
   const list = inView.filter((c) => {
     if (activeCategory && c.group !== activeCategory) return false;
     if (!q) return true;
@@ -1288,7 +1314,7 @@ function renderChannels(resetScroll = true): void {
   // бессмысленным; в остальных избранное поднимается наверх.
   const sorted =
     activeView === "recents" ? list : applyFavorites(list, favorites, false);
-  const programmes = searchProgrammes(inView.filter((c) => !activeCategory || c.group === activeCategory), epg, q);
+  const programmes = searchProgrammes(inView.filter((c) => !c.mediaKind && (!activeCategory || c.group === activeCategory)), epg, q);
   visibleResults = [...(activeView === "favorites" ? applyFavoritesOrder(sorted, favorites, favoritesOrder) : sorted), ...programmes];
   visibleChannels = [...new Map([...sorted, ...programmes.map((m) => m.channel)].map((c) => [c.url, c])).values()];
   viewCount.textContent = groupDigits(visibleResults.length);
@@ -1535,13 +1561,33 @@ function renderChannelCard(c: Channel): HTMLElement {
 
 // ---------- Плеер ----------
 async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: EpgProgramme, fromStart = false): Promise<boolean> {
+  if (c.mediaKind === "series") {
+    const request = ++seriesRequest;
+    const playlist = activePlaylist(plState);
+    if (!playlist?.xtreamVod || groupPreferences.hidden.has(c.group)) return false;
+    showToast(tr("catalogue.episodes"));
+    try {
+      const episodes = await playlistTransport.loadSeries(playlist.playlistUrl, c);
+      if (request !== seriesRequest || plState.activeId !== playlist.id) return false;
+      seriesEpisodes = episodes;
+      episodeQueue = episodes;
+      snapshot = snapshot ? { ...snapshot, channels: [...snapshot.channels.filter((item) => item.mediaKind !== "episode" || item.seriesId !== c.seriesId), ...episodes] } : null;
+      searchInput.value = "";
+      activeCategory = null;
+      setView("series");
+      const resume = resumeEpisode(episodes, recents);
+      return resume ? playChannel(resume) : false;
+    } catch (error) { if (request === seriesRequest) showToast(error instanceof Error ? error.message : tr("error.xtreamResponse")); return false; }
+  }
   cancelNumericZap();
   const request = ++playRequest;
+  ++seriesRequest;
+  if (c.mediaKind !== "episode") episodeQueue = [];
   const id = plState.activeId;
   c = applyChannelOverrides([snapshot?.channels.find((original) => original.url === c.url) ?? c], channelOverrides, true)[0]!;
   if (groupPreferences.hidden.has(c.group)) { showToast(tr("groups.hidden")); return false; }
   if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
-  if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
+  if (multiViewUi.isOpen && (archiveUrl !== undefined || c.mediaKind)) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
   // lastPlayed может быть null (плеер закрыли сразу после старта записи —
   // осиротевший асинхронный старт): такую запись тоже останавливаем, иначе
@@ -1575,7 +1621,7 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
   playerStatus.textContent = "";
   btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
-  healthAttempt = archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
+  healthAttempt = !c.mediaKind && archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
   diagnosticsFor = null;
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
   currentRecordingId = null;
@@ -1602,6 +1648,7 @@ function playNeighbor(step: 1 | -1): void {
 let lastPlayed: Channel | null = null;
 
 btnClosePlayer.addEventListener("click", () => {
+  ++seriesRequest;
   healthAttempt = null;
   cancelNumericZap();
   playRequest++;
@@ -1612,6 +1659,7 @@ btnClosePlayer.addEventListener("click", () => {
     showToast(tr("record.closedStopped"));
   }
   if (document.fullscreenElement) void document.exitFullscreen();
+  saveCurrentPosition();
   player.stop();
   playerBar.hidden = true;
   setWatching(false);
@@ -1798,7 +1846,9 @@ function focusedChannelIndex(): number {
 
 function focusChannelAt(index: number): void {
   if (!visibleResults[index]) return;
-  channelList.scrollTop = Math.floor(index / CHANNEL_COLUMNS) * CHANNEL_ROW_HEIGHT;
+  const catalogue = (activeView === "movies" || activeView === "series") && !seriesEpisodes;
+  const columns = catalogue ? columnsForWidth(channelList.clientWidth, 160) : CHANNEL_COLUMNS;
+  channelList.scrollTop = Math.floor(index / columns) * (catalogue ? 260 : CHANNEL_ROW_HEIGHT);
   renderVirtualWindow();
   channelList.querySelector<HTMLElement>(`[data-result-index="${index}"]`)?.focus();
 }
@@ -2597,6 +2647,14 @@ qualityBtn.addEventListener("click", (event) => {
   if (qualityMenu.hidden) openOverlay("quality");
   else closeOverlay("quality");
 });
+$<HTMLButtonElement>("btn-next-episode").addEventListener("click", () => {
+  const index = episodeQueue.findIndex((episode) => episode.url === lastPlayed?.url);
+  const next = index >= 0 ? episodeQueue[index + 1] : undefined;
+  if (next) void playChannel(next);
+});
+videoEl.addEventListener("ended", () => {
+  if (lastPlayed?.mediaKind === "episode") $<HTMLButtonElement>("btn-next-episode").click();
+});
 subtitleBtn.addEventListener("click", (event) => {
   event.stopPropagation();
   subtitleMenu.hidden = !subtitleMenu.hidden;
@@ -3168,15 +3226,19 @@ let sleepState: SleepState = initialSleepState;
 function refreshPlaybackControls(): void {
   refreshPlayerVolume();
   const recording = player.isRecordingPlayback;
+  const vod = !!lastPlayed?.mediaKind;
+  const nextEpisode = $<HTMLButtonElement>("btn-next-episode");
+  const index = episodeQueue.findIndex((episode) => episode.url === lastPlayed?.url);
+  nextEpisode.hidden = lastPlayed?.mediaKind !== "episode" || index < 0 || index + 1 >= episodeQueue.length;
   btnPrev.hidden = recording;
   btnNext.hidden = recording;
   btnPrev.disabled = recording;
   btnNext.disabled = recording;
   btnRec.hidden = recording;
   btnSleep.hidden = recording;
-  btnLive.disabled = recording;
-  btnLive.setAttribute("aria-disabled", String(recording));
-  btnLive.hidden = recording || (!archivePlayback && !isBehindLive(videoEl.currentTime, liveEdge()));
+  btnLive.disabled = recording || vod;
+  btnLive.setAttribute("aria-disabled", String(recording || vod));
+  btnLive.hidden = recording || vod || (!archivePlayback && !isBehindLive(videoEl.currentTime, liveEdge()));
   btnProgrammeStart.hidden = currentProgrammeStart() === null;
   if (recording) {
     if (overlayStack.includes("quality")) closeOverlay("quality");
@@ -4120,11 +4182,13 @@ addForm.addEventListener("submit", (e) => {
     );
   }
   plState = addPlaylist(plState, name || tr("playlist.default"), pUrl, eUrl || null);
+  if (xtreamMode && xtreamVod.checked) plState = updatePlaylist(plState, plState.items[plState.items.length - 1]!.id, { xtreamVod: true });
   savePlaylists(localStorage, plState);
   setupPlaylist.value = "";
   setupEpg.value = "";
   setupName.value = "";
   xtreamHost.value = xtreamUser.value = xtreamPassword.value = "";
+  xtreamVod.checked = false;
   renderPlaylistManager();
   activatePlaylist(plState.items[plState.items.length - 1]!.id);
 });
@@ -4169,7 +4233,7 @@ localFile.addEventListener("change", async () => {
 
 /** Загрузить плейлист через транспорт (OPFS для local:, fetch для http). */
 function loadPlaylist(url: string): Promise<PlaylistSnapshot> {
-  return playlistTransport.loadPlaylist(url);
+  return playlistTransport.loadPlaylist(url, plState.items.find((playlist) => playlist.playlistUrl === url)?.xtreamVod);
 }
 
 /** Подсказка по причине сетевого сбоя (смешанный контент или CORS). */
@@ -4179,6 +4243,9 @@ function describeFetchFailure(url: string, reason?: string): string {
 
 /** Открыть плейлист: загрузка + рендер + EPG. Общая для boot/переключения. */
 async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
+  seriesEpisodes = null;
+  episodeQueue = [];
+  ++seriesRequest;
   if (!guideOverlay.hidden) closeOverlay("guide");
   favoritesOrder = plState.activeId ? loadFavoritesOrderFor(plState.activeId) : [];
   healthAttempt = null;
@@ -4214,10 +4281,11 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   epg = null;
   showPlayer();
   epgNow.hidden = false;
-  setSystemText(epgNow, t("loading.playlist"));
+  setSystemText(epgNow, tr(activePlaylist(plState)?.xtreamVod ? "catalogue.loading" : "loading.playlist"));
 
   try {
     snapshot = await loadPlaylist(url);
+    renderNav();
   } catch (e) {
     showSetup(
       tr("error.loadPlaylist", { reason: translateMessage(e instanceof Error ? e.message : t("error.unknown"), currentLanguage), hint: describeFetchFailure(url) }),

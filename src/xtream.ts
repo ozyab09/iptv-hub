@@ -17,9 +17,12 @@ export function validateXtream(source: XtreamSource): XtreamSource | null {
   } catch { return null; }
 }
 
-export function xtreamApiUrl(source: XtreamSource, action: "get_live_streams" | "get_live_categories"): string {
+export type XtreamAction = "get_live_streams" | "get_live_categories" | "get_vod_streams" | "get_vod_categories" | "get_series" | "get_series_categories" | "get_series_info";
+
+export function xtreamApiUrl(source: XtreamSource, action: XtreamAction, seriesId?: string): string {
   const url = new URL(`${source.host}/player_api.php`);
   url.search = new URLSearchParams({ username: source.username, password: source.password, action }).toString();
+  if (seriesId !== undefined) url.searchParams.set("series_id", seriesId);
   return url.href;
 }
 

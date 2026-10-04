@@ -2,6 +2,13 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "playlist.xtreamVod": "Включить фильмы и сериалы",
+  "catalogue.movies": "Фильмы",
+  "catalogue.series": "Сериалы",
+  "catalogue.nextEpisode": "Следующая серия",
+  "catalogue.backSeries": "Назад к сериалам",
+  "catalogue.loading": "Загрузка фильмов и сериалов…",
+  "catalogue.episodes": "Загрузка эпизодов…",
   "player.subtitlesFile": "Субтитры из файла",
   "player.subtitlesInvalid": "Не удалось прочитать субтитры SRT/VTT",
   "player.subtitlesLastFile": "Субтитры из файла (выберите снова: {name})",
@@ -263,7 +270,7 @@ export const ru = {
   "playlist.xtreamHost": "Сервер (HTTPS)",
   "playlist.xtreamUser": "Логин",
   "playlist.xtreamPassword": "Пароль",
-  "playlist.xtreamNote": "Только live-каналы. Сервер должен поддерживать HTTPS и CORS. Данные доступа сохраняются на этом устройстве и входят в резервную копию.",
+  "playlist.xtreamNote": "По умолчанию только live-каналы. Сервер должен поддерживать HTTPS и CORS. Данные доступа сохраняются на этом устройстве и входят в резервную копию.",
   "error.xtreamInput": "Введите HTTPS-адрес сервера без параметров и логин с паролем. Логин и пароль не могут быть точкой или двумя точками.",
   "error.xtreamResponse": "Xtream: неверный ответ API. Проверьте логин, пароль и доступность live-каналов.",
   "playlist.chooseFile": "Выбрать .m3u файл",
@@ -356,6 +363,13 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "playlist.xtreamVod": "Include movies and series",
+  "catalogue.movies": "Movies",
+  "catalogue.series": "Series",
+  "catalogue.nextEpisode": "Next episode",
+  "catalogue.backSeries": "Back to series",
+  "catalogue.loading": "Loading movies and series…",
+  "catalogue.episodes": "Loading episodes…",
   "player.subtitlesFile": "Subtitles from file",
   "player.subtitlesInvalid": "Could not read SRT/VTT subtitles",
   "player.subtitlesLastFile": "Subtitles from file (select again: {name})",
@@ -617,7 +631,7 @@ export const en: Record<TranslationKey, string> = {
   "playlist.xtreamHost": "Server (HTTPS)",
   "playlist.xtreamUser": "Username",
   "playlist.xtreamPassword": "Password",
-  "playlist.xtreamNote": "Live channels only. The server must support HTTPS and CORS. Credentials stay on this device and are included in backups.",
+  "playlist.xtreamNote": "Live channels only by default. The server must support HTTPS and CORS. Credentials stay on this device and are included in backups.",
   "error.xtreamInput": "Enter an HTTPS server address without query parameters, a username and a password. Username and password cannot be a dot or two dots.",
   "error.xtreamResponse": "Xtream: invalid API response. Check your credentials and live channel access.",
   "playlist.chooseFile": "Choose .m3u file",

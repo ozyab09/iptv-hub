@@ -24,6 +24,7 @@ interface FakeNode {
   title: string;
   value: string;
   type: string;
+  checked: boolean;
   className: string;
   children: FakeNode[];
   attrs: Record<string, string>;
@@ -78,6 +79,7 @@ function fakeEl(tag = "div"): FakeNode {
     value: "",
     textContent: "",
     type: "",
+    checked: false,
     className: "",
     children: [] as FakeNode[],
     attrs: {} as Record<string, string>,
@@ -281,7 +283,7 @@ describe("createPlaylistUi: редактирование", () => {
     const row = kid(nodes.plList, 0);
     kid(row, 1).click(); // карандаш
     const form = kid(row, 0); // строка очищена, форма — её ребёнок
-    const fields = form.children.filter((f) => f.tagName === "LABEL");
+    const fields = form.children.filter((f) => f.tagName === "LABEL" && f.className === "field");
     const inputs = fields.map((f) => kid(kid(f, 1), 0));
     return { row, form, inputs };
   }
@@ -344,6 +346,22 @@ describe("createPlaylistUi: редактирование", () => {
     expect(ui.getState().items[0]!.epgUrl).toBe(xtreamEpgUrl({ ...source, password: "updated" }));
     expect(calls.activated).toEqual(["a"]);
     expect(calls.changes).toEqual([ui.getState()]);
+  });
+
+  it("Xtream: включение и выключение каталога сохраняется и перезагружает источник", () => {
+    const source = { host: "https://provider.test", username: "user", password: "secret" };
+    const { ui, nodes, storage, calls } = makeDeps({ items: [{ ...plA, playlistUrl: xtreamApiUrl(source, "get_live_streams") }], activeId: "a" });
+    for (const enabled of [true, false]) {
+      ui.renderManager();
+      const { form } = openEdit(nodes);
+      const checkbox = form.children.find((node) => node.className === "set-note")!.children[0]!;
+      expect(checkbox.checked).toBe(!enabled);
+      checkbox.checked = enabled;
+      form.submit();
+      expect(ui.getState().items[0]!.xtreamVod).toBe(enabled);
+      expect(JSON.parse(storage.getItem(PLAYLISTS_KEY)!)[0]!.xtreamVod).toBe(enabled);
+    }
+    expect(calls.activated).toEqual(["a", "a"]);
   });
 
   it("Xtream: HTTP-сервер и HTTP-EPG отклоняются без сохранения", () => {
