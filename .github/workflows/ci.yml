@@ -1,5 +1,9 @@
 name: CI + Pages
 
+# #318: setup-node@v5 and download-artifact@v8 still emit upstream Node
+# DEP0040/DEP0169/DEP0005 warnings (including setup-node post-steps).
+# See AGENTS.md, CI/CD, for the verified run and recheck procedure.
+
 on:
   push:
     branches: [main]

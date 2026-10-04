@@ -536,6 +536,18 @@ npm run preview    # предпросмотр dist/
 
 ## 🔄 CI/CD
 
+**Известные предупреждения сторонних actions (#318).** После обновления
+actions (#316) прогон PR #334 от 2026-10-04 всё ещё содержит `DEP0040`
+(`punycode`) и `DEP0169` (`url.parse()`) в `actions/setup-node@v5`, включая
+post-step, и `DEP0005` (`Buffer()`) в `actions/download-artifact@v8`.
+Источник проверен по шагам build/android/visual в
+https://github.com/ozyab09/iptv-hub/actions/runs/37180547211.
+Это сообщения зависимостей этих actions, отдельно от вывода npm/build/test
+проекта. Они не означают успешность проверок: учитывайте их реальные статусы.
+Глобальный `NODE_OPTIONS=--no-deprecation` не устанавливается, чтобы новые
+предупреждения собственного кода оставались видны. При обновлении actions
+снова проверяйте указанные коды в логах и удаляйте заметку после их устранения.
+
 Workflow `ci.yml` (Node 22, actions v5): PR — `npm test` + `npm run build`;
 push в `main` — то же + деплой `dist/` в GitHub Pages (artifact +
 `actions/deploy-pages@v5`). Required check — `build`. Pages включить руками:
