@@ -2,6 +2,8 @@ export type Language = "ru" | "en";
 export const LANGUAGE_KEY = "iptv-hub.language.v1";
 
 export const ru = {
+  "tv.now": "Сейчас: {title}",
+  "tv.next": "Далее: {title}",
   "settings.updates": "Обновления приложения",
   "settings.checkUpdates": "Проверять обновления APK",
   "updates.note": "Проверка при запуске и раз в сутки. Установка — через GitHub Releases.",
@@ -380,6 +382,8 @@ export const ru = {
 
 export type TranslationKey = keyof typeof ru;
 export const en: Record<TranslationKey, string> = {
+  "tv.now": "Now: {title}",
+  "tv.next": "Next: {title}",
   "settings.updates": "App updates",
   "settings.checkUpdates": "Check for APK updates",
   "updates.note": "Checked at startup and daily. Install from GitHub Releases.",

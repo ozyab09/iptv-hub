@@ -762,6 +762,21 @@ Playwright: CI-матрица `chromium`/`firefox-media` с `fail-fast: false`:
 
 ## Android: локальное приложение (#160, #246)
 
+**Android TV (#385):** манифест заявляет optional leanback/touchscreen и
+LEANBACK_LAUNCHER; `scripts/gen-icons.mjs` создаёт `drawable-xhdpi/banner.png`
+320×180 с существующим знаком. `MainActivity` определяет UI_MODE_TYPE_TELEVISION,
+на локальной странице задаёт `data-tv=true` и событие `iptv-tv`. Фиксированные
+D-pad keydown передаются в WebView; необработанные события возвращаются штатному
+WebView для ввода/select/IME. Back отправляет Escape, выход из приложения —
+только когда web-UI не обработал событие. Телефоны сохраняют обычные события.
+`tv-navigation.ts` выбирает цель по геометрии, `tv-ui.ts` ограничивает фокус
+открытым оверлеем, возвращает его к открывшей кнопке или строке виртуального
+списка, показывает информацию на паузе. Up/down в каналах используют прежнюю
+виртуализацию, поля ввода сохраняют редактирование. Web-режим включается `?tv=1`.
+Цифровой ZAP и autoplay используют прежние правила, PIN не обходится.
+CI `android-tv` запускает connectedDebugAndroidTest на Android TV 36 и сохраняет
+скриншот/дерево Installed Apps с IPTV Hub и отчёты тестов; выпуск APK ждёт этот job.
+
 **Обновления APK (#386):** `apk-updates.ts` читает только статический Pages
 `version.json` с дедлайном 8 секунд, сравнивает строгую трёхчастную semver и
 монотонный versionCode с `__APP_VERSION__` / `__APP_VERSION_CODE__` сборки.

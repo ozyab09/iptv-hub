@@ -2,10 +2,14 @@ package io.github.ozyab09.iptvhub;
 
 import android.view.ViewGroup;
 import android.webkit.WebView;
+import android.content.Intent;
+import android.content.res.Configuration;
+import android.view.KeyEvent;
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.core.view.WindowCompat;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -16,6 +20,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 /** Real WebView: bundled HTML, JS and CSS must resolve without network loads. */
 @RunWith(AndroidJUnit4.class)
@@ -92,5 +98,35 @@ public class LocalLaunchTest {
         evaluate("location.reload()");
         expectInterface("/www/index.html");
         expectStatusBar(true);
+    }
+
+    @Test public void televisionLauncherAndDpad() throws InterruptedException {
+        AtomicReference<Boolean> television = new AtomicReference<>();
+        activity.getScenario().onActivity(main -> television.set(
+                (main.getResources().getConfiguration().uiMode & Configuration.UI_MODE_TYPE_MASK)
+                        == Configuration.UI_MODE_TYPE_TELEVISION));
+        assumeTrue(television.get());
+        activity.getScenario().onActivity(main -> {
+            Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+                    .setPackage(main.getPackageName());
+            assertTrue(!main.getPackageManager().queryIntentActivities(launcher, 0).isEmpty());
+            assertTrue(main.getApplicationInfo().banner != 0);
+        });
+        expectInterface("/www/index.html");
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!"true".equals(evaluate("document.documentElement.dataset.tv === 'true'")) && System.nanoTime() < deadline) Thread.sleep(100);
+        assertEquals("true", evaluate("document.documentElement.dataset.tv === 'true'"));
+        evaluate("document.querySelector('#btn-theme').focus()");
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_LEFT);
+        assertEquals("\"notif-bell\"", evaluate("document.activeElement.id"));
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
+        deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!"true".equals(evaluate("!document.querySelector('#notif-panel').hidden")) && System.nanoTime() < deadline) Thread.sleep(100);
+        assertEquals("true", evaluate("!document.querySelector('#notif-panel').hidden"));
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+        deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!"true".equals(evaluate("document.querySelector('#notif-panel').hidden")) && System.nanoTime() < deadline) Thread.sleep(100);
+        assertEquals("true", evaluate("document.querySelector('#notif-panel').hidden"));
+        assertEquals("\"notif-bell\"", evaluate("document.activeElement.id"));
     }
 }

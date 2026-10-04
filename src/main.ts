@@ -142,9 +142,11 @@ import {
 } from "./http-notice";
 import { createNotificationBell } from "./notification-bell";
 import { APP_SETTINGS_KEY, parseAppSettings, createApkUpdateChecker } from "./apk-updates";
+import { createTvUi } from "./tv-ui";
 
 declare const __APP_VERSION__: string;
 declare const __APP_VERSION_CODE__: number;
+let tvUi: ReturnType<typeof createTvUi> | null = null;
 import {
   checkSummary,
   countProgrammes,
@@ -1993,6 +1995,7 @@ function saveRecording(blob: Blob, chunkCount: number, mimeType: string): void {
 function setWatching(on: boolean): void {
   appEl.classList.toggle("watch", on);
   syncStatusBarAppearance();
+  tvUi?.refresh();
 }
 
 // ---------- Кнопка «назад» и стек оверлеев (FR-6) ----------
@@ -2597,9 +2600,7 @@ const scrubUi = createScrubUi({
  * до конца передачи».
  */
 function refreshScrub(): void {
-  // Отставание от эфира считается ВСЕГДА: оно свойство буфера, а не
-  // телепрограммы. Без этого кнопка молчала бы на каналах без EPG —
-  // а отстать от эфира на них можно ровно так же.
+  tvUi?.refresh();
   refreshPlaybackControls();
   scrubUi.render();
   syncMediaSession();
@@ -3536,6 +3537,31 @@ window.addEventListener("storage", event => {
   void apkUpdateChecker.check();
 });
 apkUpdateChecker.start();
+tvUi = createTvUi({
+  doc: document, video: videoEl, player: playerBar,
+  enabled: new URLSearchParams(location.search).get("tv") === "1",
+  moveChannel: delta => {
+    const index = focusedChannelIndex();
+    const next = index + delta;
+    if (index < 0 || next < 0 || next >= visibleResults.length) return false;
+    focusChannelAt(next); return true;
+  },
+  back: () => {
+    if (numericZap) { cancelNumericZap(); return true; }
+    if (!catMenu.hidden) { catMenu.hidden = true; return true; }
+    if (!playlistUiNodes.plSwitchMenu.hidden) { playlistUiNodes.plSwitchMenu.hidden = true; return true; }
+    const overlay = topOverlay(overlayStack);
+    if (overlay) { closeOverlay(overlay); return true; }
+    if (!playerBar.hidden) { btnClosePlayer.click(); return true; }
+    return false;
+  },
+  info: () => {
+    const programme = epg && lastPlayed && snapshot ? getNowNext(epg, lastPlayed, snapshot) : null;
+    return { channel: nowTitle.textContent ?? "",
+      now: programme?.now ? tr("tv.now", { title: programme.now.title }) : "",
+      next: programme?.next ? tr("tv.next", { title: programme.next.title }) : "" };
+  },
+});
 if ("serviceWorker" in navigator && import.meta.env.PROD && !localOrigin) {
   // Была ли страница уже под старым SW: при первой установке смена
   // контроллера — не обновление, и перезагружать нечего.

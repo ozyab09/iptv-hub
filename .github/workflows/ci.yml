@@ -245,6 +245,63 @@ jobs:
           path: android/app/build/outputs/apk/release/*-unsigned.apk
           if-no-files-found: error
 
+  android-tv:
+    if: always() && needs.build.result == 'success'
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        with:
+          name: pages-build
+          path: dist
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: '8.7'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - run: node android/scripts/bundle-web.mjs
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: android-tv
+          arch: x86_64
+          profile: tv_1080p
+          script: |
+            gradle -p android/app connectedDebugAndroidTest --no-daemon
+            adb install -r android/app/build/outputs/apk/debug/*-debug.apk
+            adb shell input keyevent KEYCODE_HOME
+            mkdir -p test-results
+            adb shell am start -a android.intent.action.ALL_APPS
+            adb shell uiautomator dump /sdcard/iptv-hub-tv-launcher.xml
+            adb pull /sdcard/iptv-hub-tv-launcher.xml test-results/android-tv-launcher.xml
+            grep -q 'content-desc="IPTV Hub"' test-results/android-tv-launcher.xml
+            adb exec-out screencap -p > test-results/android-tv-launcher.png
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-tv-tests
+          path: |
+            test-results/android-tv-launcher.png
+            test-results/android-tv-launcher.xml
+            android/app/build/reports/androidTests/connected/
+            android/app/build/outputs/androidTest-results/connected/
+
   release:
     # Новая версия выходит на каждый push в main (release-check уже
     # поставил тег), а также на тег v* и ручной запуск.
@@ -257,7 +314,8 @@ jobs:
       && needs.build.result == 'success'
       && needs.visual.result == 'success'
       && needs.android.result == 'success'
-    needs: [release-check, build, visual, android]
+      && needs.android-tv.result == 'success'
+    needs: [release-check, build, visual, android, android-tv]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

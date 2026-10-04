@@ -55,13 +55,13 @@ function chunk(type, data) {
  * Собирает RGBA-растр из функции цвета. `pixel(x, y)` получает координаты в
  * диапазоне [0, 1) и возвращает [r, g, b, a] либо TRANSPARENT.
  */
-function raster(size, pixel) {
-  const raw = Buffer.alloc(size * (1 + size * 4));
+function raster(size, pixel, height = size) {
+  const raw = Buffer.alloc(height * (1 + size * 4));
   let off = 0;
-  for (let y = 0; y < size; y++) {
+  for (let y = 0; y < height; y++) {
     raw[off++] = 0; // filter: none
     for (let x = 0; x < size; x++) {
-      const c = pixel((x + 0.5) / size, (y + 0.5) / size);
+      const c = pixel((x + 0.5) / size, (y + 0.5) / height);
       if (!c) {
         raw[off++] = 0;
         raw[off++] = 0;
@@ -77,7 +77,7 @@ function raster(size, pixel) {
   }
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
+  ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 6; // color type: truecolor + alpha
   ihdr[10] = 0;
@@ -92,7 +92,7 @@ function raster(size, pixel) {
 }
 
 /** Растеризация со сглаживанием: 4×4 отсчёта на пиксель. */
-function render(size, pixel, samples = 4) {
+function render(size, pixel, samples = 4, height = size) {
   return raster(size, (u, v) => {
     let r = 0;
     let g = 0;
@@ -100,7 +100,7 @@ function render(size, pixel, samples = 4) {
     let a = 0;
     for (let sy = 0; sy < samples; sy++) {
       for (let sx = 0; sx < samples; sx++) {
-        const c = pixel(u + (sx + 0.5) / (samples * size), v + (sy + 0.5) / (samples * size));
+        const c = pixel(u + (sx + 0.5) / (samples * size), v + (sy + 0.5) / (samples * height));
         if (c) {
           r += c[0];
           g += c[1];
@@ -113,7 +113,7 @@ function render(size, pixel, samples = 4) {
     if (a === 0) return null;
     const cover = a / (total * 255);
     return [Math.round(r / total / cover), Math.round(g / total / cover), Math.round(b / total / cover), Math.round(a / total)];
-  });
+  }, height);
 }
 
 // ---------- Геометрия знака ----------
@@ -239,3 +239,29 @@ writeFileSync(
 `,
 );
 console.log(`✅ Android: adaptive icon (${densities.length} плотностей) + monochrome + legacy ic_launcher`);
+
+// Leanback-баннер: тот же вектор ТВ и название, 320×180 px (xhdpi).
+const bannerMark = appMark({ scale: 0.78 });
+const letters = {
+  I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+  B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+};
+const banner = render(320, (u, v) => {
+  const x = u * 320;
+  const y = v * 180;
+  if (x >= 20 && x < 132 && y >= 34 && y < 146) return bannerMark((x - 20) / 112, (y - 34) / 112);
+  for (const [text, top] of [["IPTV", 58], ["HUB", 102]]) {
+    const column = Math.floor((x - 154) / 6);
+    const row = Math.floor((y - top) / 5);
+    const letter = text[Math.floor(column / 6)];
+    if (column >= 0 && row >= 0 && row < 7 && letter && letters[letter][row][column % 6] === "1") return WHITE;
+  }
+  return [12, 13, 16];
+}, 4, 180);
+mkdirSync(join(resDir, "drawable-xhdpi"), { recursive: true });
+writeFileSync(join(resDir, "drawable-xhdpi", "banner.png"), banner);
