@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.content.res.Configuration;
+import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -13,6 +15,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -46,10 +49,13 @@ public class MainActivity extends AppCompatActivity {
     private static final String START_URL = "https://" + LOCAL_HOST + "/www/index.html";
 
     private WebView webView;
+    private boolean television;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        television = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_TYPE_MASK)
+                == Configuration.UI_MODE_TYPE_TELEVISION;
 
         webView = new WebView(this);
         WebSettings settings = webView.getSettings();
@@ -72,6 +78,14 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebViewClient(new WebViewClientCompat() {
             @Override
+            public void onPageFinished(@NonNull WebView view, @NonNull String url) {
+                if (television && LOCAL_HOST.equals(Uri.parse(url).getHost())) {
+                    view.evaluateJavascript("document.documentElement.dataset.tv='true';" +
+                            "document.dispatchEvent(new Event('iptv-tv'))", null);
+                }
+            }
+
+            @Override
             public WebResourceResponse shouldInterceptRequest(
                     @NonNull WebView view, @NonNull WebResourceRequest request) {
                 return assetLoader.shouldInterceptRequest(request.getUrl());
@@ -91,6 +105,15 @@ public class MainActivity extends AppCompatActivity {
 
         applyEdgeToEdge();
         reserveNavigationInset(root);
+        if (television) {
+            getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+                @Override public void handleOnBackPressed() {
+                    webView.evaluateJavascript(keyScript("Escape"), handled -> {
+                        if ("true".equals(handled)) finish();
+                    });
+                }
+            });
+        }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(webView, "IPTVHubStatusBar",
                     Collections.singleton("https://" + LOCAL_HOST),
@@ -129,6 +152,37 @@ public class MainActivity extends AppCompatActivity {
         controller.setAppearanceLightStatusBars(false);
         controller.setAppearanceLightNavigationBars(false);
         controller.show(WindowInsetsCompat.Type.systemBars());
+    }
+
+    private String keyScript(String key) {
+        return "(document.activeElement||document.documentElement).dispatchEvent(" +
+                "new KeyboardEvent('keydown',{key:'" + key + "',code:'" + key +
+                "',bubbles:true,cancelable:true}))";
+    }
+
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (!television || webView == null) return super.dispatchKeyEvent(event);
+        String key;
+        switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_LEFT: key = "ArrowLeft"; break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT: key = "ArrowRight"; break;
+            case KeyEvent.KEYCODE_DPAD_UP: key = "ArrowUp"; break;
+            case KeyEvent.KEYCODE_DPAD_DOWN: key = "ArrowDown"; break;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER: key = "Enter"; break;
+            default: return super.dispatchKeyEvent(event);
+        }
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            final KeyEvent copy = new KeyEvent(event);
+            webView.evaluateJavascript(keyScript(key), handled -> {
+                // Необработанные клавиши отдаём WebView: ввод, select и штатная клавиатура.
+                if ("true".equals(handled)) {
+                    MainActivity.super.dispatchKeyEvent(copy);
+                    MainActivity.super.dispatchKeyEvent(KeyEvent.changeAction(copy, KeyEvent.ACTION_UP));
+                }
+            });
+        }
+        return true;
     }
 
     /** Сайт уже резервирует место под статус-бар; снизу паддим под навигацию. */
