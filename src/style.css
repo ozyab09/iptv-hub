@@ -1189,6 +1189,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 @container player-frame (max-width: 739px) {
   /* Меню ниже прогресса: в компактной раскладке верхний ряд занят декой. */
   .video .quality-menu { bottom: auto; top: calc(100% + 32px); }
+  .video #quality-menu { right: -44px; }
 }
 /* Sleep-таймер: бейдж с остатком на кнопке, меню — белым по чёрному
    (контролы на видео всегда светлые на тёмном, в любой теме). */

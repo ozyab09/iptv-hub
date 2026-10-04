@@ -135,6 +135,47 @@ describe("createSegmentSession", () => {
     expect(h.saves[0]?.result.ext).toBe("mp4");
   });
 
+  it("init прошлого fMP4-потока не попадает в TS-запись после смены потока (#347)", async () => {
+    const chunks: Uint8Array[] = [];
+    const h = harness();
+    const s = createSegmentSession({
+      ...h.deps,
+      createSink: async () => ({
+        kind: "capture",
+        write: (chunk) => void chunks.push(new Uint8Array(chunk)),
+        size: () => chunks.reduce((n, c) => n + c.byteLength, 0),
+        error: () => null,
+        finish: async () => new Blob(chunks as BlobPart[]),
+        abort: async () => undefined,
+      }),
+    });
+    // канал A — fMP4 с init; затем канал B — обычный TS
+    s.feed(mp4Segment("ftyp", 40), true);
+    s.resetStream();
+    await s.start();
+    s.feed(tsSegment(100), false);
+    await s.stop(true);
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.[0]).toBe(0x47);
+    expect(h.saves[0]?.result.ext).toBe("ts");
+    expect(h.saves[0]?.size).toBe(100);
+  });
+
+  it("init нового fMP4-потока после сброса ложится вместо старого", async () => {
+    const h = harness();
+    const s = createSegmentSession(h.deps);
+    s.feed(mp4Segment("ftyp", 40), true);
+    s.resetStream();
+    s.feed(mp4Segment("ftyp", 24), true);
+    await s.start();
+    s.feed(mp4Segment("moof", 100), false);
+    await s.stop(true);
+
+    expect(h.written()).toBe(124);
+    expect(h.saves[0]?.result.ext).toBe("mp4");
+  });
+
   it("останавливается сам на потолке размера", async () => {
     const h = harness({ maxBytes: 150 });
     const s = createSegmentSession(h.deps);

@@ -120,7 +120,8 @@ test("unavailable audio capture warns and restores 100% without restarting HLS",
 });
 
 test("canvas recording keeps real audio through the shared graph", async ({ page }) => {
-  await page.route("https://fixture.test/playlist.m3u", (route) => route.fulfill({ body: "#EXTM3U\n#EXTINF:-1,Native\nhttp://localhost:4173/record-source.mp4\n" }));
+  const mediaUrl = new URL("/record-source.mp4", page.url()).href;
+  await page.route("https://fixture.test/playlist.m3u", (route) => route.fulfill({ body: `#EXTM3U\n#EXTINF:-1,Native\n${mediaUrl}\n` }));
   await page.route("**/record-source.mp4", (route) => route.fulfill({ contentType: "video/mp4", body: readFileSync("tests/fixtures/recording.mp4") }));
   await page.reload();
   await page.evaluate(() => {

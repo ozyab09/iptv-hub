@@ -23,6 +23,15 @@ export function getNetworkConnection(): NetworkConnection | null {
 const MAX_NETWORK_RETRIES = 3;
 
 /**
+ * Восстановлений декодера (recoverMediaError) подряд, прежде чем сдаться:
+ * hls.js советует не больше пары на поток — нечинящаяся ошибка иначе крутит
+ * «ошибка → recover → ошибка» вечно (#350). Ошибки дальше окна друг от друга
+ * считаются новыми: редкие сбои долгого эфира не копятся.
+ */
+export const MAX_MEDIA_RECOVERIES = 2;
+export const MEDIA_RECOVERY_WINDOW_MS = 60_000;
+
+/**
  * Плеер поверх <video>: hls.js для .m3u8, нативные механизмы для остальных.
  * Управление воспроизведением/громкостью/PiP — через нативный media API
  * (юнит-тесты покрывают чистую логику: neighborIndex, see tests/player-logic).
@@ -49,8 +58,11 @@ export class Player {
    * нужно копию.
    */
   private onFragment: ((payload: ArrayBuffer, isInit: boolean) => void) | null = null;
+  private onStreamChange: (() => void) | null = null;
   /** Сетевые сбои подряд; сбрасывается, как только пошли данные. */
   private networkRetries = 0;
+  /** Подряд идущие media-ошибки текущего запуска (#350). */
+  private mediaRecovery: MediaRecoveryState | null = null;
   /** https-апгрейд для текущего URL уже пробовали — второй раз не ждём. */
   private httpsFallbackTried = false;
   /** Текущий URL — результат https-апгрейда (для сообщений об ошибке). */
@@ -107,14 +119,29 @@ export class Player {
    * Подписаться на загружаемые сегменты. Подписка переживает смену канала:
    * обработчик вешается на каждый новый hls-инстанс.
    */
-  setFragmentListener(cb: (payload: ArrayBuffer, isInit: boolean) => void): void {
+  setFragmentListener(
+    cb: (payload: ArrayBuffer, isInit: boolean) => void,
+    onStreamChange?: () => void,
+  ): void {
     this.onFragment = cb;
+    this.onStreamChange = onStreamChange ?? null;
   }
 
   /** Повесить обработчик сегментов на текущий hls-инстанс. */
   private attachFragmentListener(): void {
+    // Новый hls-инстанс — новый поток: init прошлого не годится (#347).
+    this.onStreamChange?.();
+    // hls.js не шлёт FRAG_LOADED для init-сегмента fMP4: его байты лежат в
+    // frag.initSegment.data медиафрагмента. Отдаём init перед фрагментом,
+    // когда он сменился (старт потока, смена уровня).
+    let lastInit: Uint8Array | null = null;
     this.hls?.on(Hls.Events.FRAG_LOADED, (_e, data) => {
       this.networkRetries = 0; // данные пошли — прошлые сбои не в счёт
+      const init = data.frag.initSegment?.data;
+      if (init && init !== lastInit) {
+        lastInit = init;
+        this.onFragment?.(init.slice().buffer, true);
+      }
       this.onFragment?.(data.payload, data.frag.sn === "initSegment");
     });
   }
@@ -207,6 +234,7 @@ export class Player {
     this.stopMedia();
     this.forceHls = forceHls;
     this.networkRetries = 0;
+    this.mediaRecovery = null;
     this.httpsFallbackTried = false;
 
     if (isHls && Hls.isSupported()) {
@@ -244,6 +272,13 @@ export class Player {
           return;
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          this.mediaRecovery = nextMediaRecovery(this.mediaRecovery, Date.now());
+          if (!shouldRecoverMedia(this.mediaRecovery.count)) {
+            console.debug(`[iptv-hub] hls media error: ${data.details}, сдаёмся`);
+            this.toast(this.tr("player.streamError", { reason: data.details ?? "media error" }));
+            this.onFatalError?.();
+            return;
+          }
           console.debug(`[iptv-hub] hls media error: ${data.details}, recovering`);
           this.hls?.recoverMediaError();
           this.toast(this.tr("player.decoding"));
@@ -531,6 +566,23 @@ export class Player {
  */
 export function shouldRetryNetwork(consecutiveFailures: number): boolean {
   return consecutiveFailures <= MAX_NETWORK_RETRIES;
+}
+
+/** Счётчик подряд идущих media-ошибок и время последней. */
+export interface MediaRecoveryState {
+  count: number;
+  at: number;
+}
+
+/** Учесть новую media-ошибку: в пределах окна — следующая подряд, иначе первая. */
+export function nextMediaRecovery(prev: MediaRecoveryState | null, now: number): MediaRecoveryState {
+  const count = prev && now - prev.at < MEDIA_RECOVERY_WINDOW_MS ? prev.count + 1 : 1;
+  return { count, at: now };
+}
+
+/** Стоит ли ещё раз вызывать recoverMediaError() (#350). */
+export function shouldRecoverMedia(consecutiveErrors: number): boolean {
+  return consecutiveErrors <= MAX_MEDIA_RECOVERIES;
 }
 
 /**

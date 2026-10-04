@@ -120,7 +120,7 @@ async function downloadSegments(
     opts.notify("Хранилище записей недоступно");
     return false;
   }
-  player.setFragmentListener((payload, init) => session.feed(payload, init));
+  player.setFragmentListener((payload, init) => session.feed(payload, init), () => session.resetStream());
   const refused = player.play({ url: opts.url }, true);
   if (refused) {
     player.stop();

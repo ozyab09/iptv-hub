@@ -77,6 +77,11 @@ export interface SegmentSession {
    * его в воркер трансфером, после чего исходный ArrayBuffer отсоединяется.
    */
   feed(payload: ArrayBuffer, isInit: boolean): void;
+  /**
+   * Начался новый поток (канал/зеркало/перезапуск): init прошлого потока
+   * больше не годится — у TS init нет вовсе, у fMP4 другие дорожки (#347).
+   */
+  resetStream(): void;
   state(): SegmentRecState;
   isRecording(): boolean;
 }
@@ -93,9 +98,10 @@ export function createSegmentSession(deps: SegmentRecorderDeps): SegmentSession 
   let segments = 0;
   let container: Container = "unknown";
   /**
-   * Последний init-сегмент потока. Для fMP4 без него файл нечитаем, а грузится
-   * он один раз в начале воспроизведения — задолго до старта записи, поэтому
-   * держим его всегда, независимо от состояния.
+   * Последний init-сегмент текущего потока. Для fMP4 без него файл нечитаем,
+   * а грузится он один раз в начале воспроизведения — задолго до старта
+   * записи, поэтому держим его независимо от состояния; смена потока
+   * сбрасывает его через resetStream().
    */
   let lastInit: ArrayBuffer | null = null;
 
@@ -135,6 +141,10 @@ export function createSegmentSession(deps: SegmentRecorderDeps): SegmentSession 
         deps.onNotify(tr("record.limit"));
         void this.stop(true);
       }
+    },
+
+    resetStream(): void {
+      lastInit = null;
     },
 
     async start(): Promise<void> {

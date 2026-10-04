@@ -78,9 +78,15 @@ import {
 } from "./recordings";
 import {
   createRecordingsFs,
+  listOpfsNames,
   recordingFileName as storedRecordingName,
   type RecordingsFs,
 } from "./recordings-store";
+import {
+  clearRecordingPending,
+  markRecordingPending,
+  recoverPendingRecording,
+} from "./recording-recovery";
 import { firstFocus, lastFocus, moveFocus } from "./kbd-nav";
 import {
   defaultLocalName,
@@ -281,7 +287,7 @@ const wakeLockHooks = {
         }
         lock = l;
       },
-      () => undefined,
+      () => segSession.resetStream(),
     );
     return {
       release: () => {
@@ -1498,7 +1504,7 @@ function renderChannelCard(c: Channel): HTMLElement {
     if (plState.activeId) saveFavoritesFor(plState.activeId);
     refreshNowFav();
     renderCategories();
-    renderChannels();
+    renderChannels(false); // звезда не сбрасывает прокрутку (#349)
   });
   const actions = document.createElement("span");
   actions.className = "channel-actions";
@@ -1583,7 +1589,10 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
   if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
-  if (isRecordingNow() && lastPlayed && (lastPlayed.url !== c.url || archiveUrl !== undefined || archivePlayback !== null)) {
+  // lastPlayed может быть null (плеер закрыли сразу после старта записи —
+  // осиротевший асинхронный старт): такую запись тоже останавливаем, иначе
+  // индикатор записи загорится для нового канала, куда она не относится (#342).
+  if (isRecordingNow() && (lastPlayed === null || lastPlayed.url !== c.url || archiveUrl !== undefined || archivePlayback !== null)) {
     stopRecordingNow();
     showToast(tr("record.channelStopped"));
   }
@@ -1821,7 +1830,7 @@ nowFav.addEventListener("click", () => {
   favorites = toggleFavorite(favorites, lastPlayed);
   if (plState.activeId) saveFavoritesFor(plState.activeId);
   refreshNowFav();
-  renderChannels();
+  renderChannels(false);
 });
 
 // ---------- Клавиатурная навигация по списку каналов (FR-8) ----------
@@ -1944,7 +1953,7 @@ window.addEventListener("keydown", (e) => {
       showsChannelList,
     })
   ) {
-    if (e.key === "s" || e.key === "ы") {
+    if (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "ы") {
       if (playerBar.hidden) return;
       try {
         takeScreenshot();
@@ -2317,6 +2326,24 @@ try {
   recordingsFs = null;
 }
 
+// Запись, брошенная закрытием вкладки до сохранения, переносится из
+// рабочего rec-*.part в библиотеку на следующем запуске (#309).
+if (recordingsFs) {
+  void recoverPendingRecording({
+    kv: typeof localStorage !== "undefined" ? localStorage : null,
+    fs: recordingsFs,
+    listWork: () => listOpfsNames("rec-"),
+    now: Date.now,
+    makeId: () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  })
+    .then((meta) => {
+      if (!meta) return;
+      renderRecordings();
+      showToast(tr("record.recovered", { channel: meta.channelName }));
+    })
+    .catch((e: unknown) => console.debug("[iptv-hub] записи: восстановление не удалось", e));
+}
+
 /** Момент старта текущей записи (мс эпохи) — выставляется в startRecording. */
 let recordingStartedAt = 0;
 let recordingChannel: Channel | null = null;
@@ -2352,6 +2379,7 @@ async function saveToLibrary(blob: Blob, ext: string, _mime: string): Promise<vo
   try {
     await recordingsFs.write(storedRecordingName(id, ext), blob);
     addRecording(typeof localStorage !== "undefined" ? localStorage : null, meta);
+    clearRecordingPending(typeof localStorage !== "undefined" ? localStorage : null);
     renderRecordings();
     // Файл и в библиотеке, и в загрузках: сырой .ts браузерный <video>
     // играть не умеет (только через MSE), поэтому прежнее скачивание —
@@ -2431,7 +2459,6 @@ function renderRecordings(): void {
     subtitles.setAttribute("aria-label", tr("player.subtitlesFile"));
     subtitles.textContent = "CC";
     subtitles.addEventListener("click", () => chooseExternalSubtitles(r));
-    actions.append(subtitles);
     const download = document.createElement("button");
     download.type = "button";
     download.className = "recording-act";
@@ -2467,7 +2494,7 @@ function renderRecordings(): void {
         renderRecordings();
       });
     });
-    actions.append(del);
+    actions.append(del, subtitles);
     card.append(actions);
 
     row.append(card);
@@ -2794,8 +2821,12 @@ const segSession = createSegmentSession({
 });
 
 // Подписка переживает смену канала: Player вешает обработчик на каждый новый
-// hls-инстанс. init-сегменты копятся всегда — для fMP4 без них файл нечитаем.
-player.setFragmentListener((payload, isInit) => segSession.feed(payload, isInit));
+// hls-инстанс. init-сегмент держится всегда — для fMP4 без него файл нечитаем;
+// новый поток сбрасывает init прошлого (#347).
+player.setFragmentListener(
+  (payload, isInit) => segSession.feed(payload, isInit),
+  () => segSession.resetStream(),
+);
 
 /**
  * Уровень качества, в который надо вернуться после записи (-1 = Auto).
@@ -2846,9 +2877,30 @@ function startRecording(): void {
   // (нативное воспроизведение, прямые mp4).
   if (player.getHls()) {
     pinLevelForRecording();
+    // Канал, на который стартует запись: если пока создавалось хранилище
+    // (start асинхронен) плеер закрыли или ушли на другой канал — осиротевший
+    // старт отменяется без сохранения, чтобы индикатор записи не загорелся
+    // для чужого канала (#342).
+    const recordingUrl = lastPlayed?.url ?? null;
     void segSession.start().then(() => {
+      const movedOn = playerBar.hidden || lastPlayed?.url !== recordingUrl;
+      if (segSession.isRecording() && movedOn) {
+        void segSession.stop(false);
+        restoreLevelAfterRecording();
+        return;
+      }
       // старт мог не состояться (не создалось хранилище) — не держим качество
-      if (!segSession.isRecording()) restoreLevelAfterRecording();
+      if (!segSession.isRecording()) {
+        restoreLevelAfterRecording();
+        return;
+      }
+      // Метка для восстановления после внезапной выгрузки вкладки (#309).
+      markRecordingPending(typeof localStorage !== "undefined" ? localStorage : null, {
+        channelName: recordingChannel?.name ?? tr("record.defaultName"),
+        channelUrl: recordingChannel?.url ?? "",
+        programmeTitle: recordingProgrammeTitle,
+        startedAt: recordingStartedAt,
+      });
     });
     return;
   }
@@ -2910,18 +2962,6 @@ try {
 } catch {
   showToast(describeShotFailure("tainted"));
 }
-
-window.addEventListener("keydown", (e) => {
-  if (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "ы") {
-    if (playerBar.hidden) return;
-    e.preventDefault();
-    try {
-      takeScreenshot();
-    } catch {
-      showToast(describeShotFailure("tainted"));
-    }
-  }
-});
 
 // Единый toggle: старт из idle, стоп+сохранение из recording.
 // (Раньше здесь жили два обработчика — addEventListener + onclick — и оба
@@ -3974,7 +4014,7 @@ window.addEventListener("storage", (e) => {
       favorites = loadFavoritesFor(activeId);
       favoritesOrder = loadFavoritesOrderFor(activeId);
       refreshNowFav();
-      if (showsChannelList(activeView)) renderChannels();
+      if (showsChannelList(activeView)) renderChannels(false);
     }
   }
   if (d.theme) {
@@ -4292,7 +4332,8 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
       .then((parsed) => {
         if (!epgLoad.isCurrent()) return;
         epg = parsed;
-        renderChannels();
+        // EPG догружается позже списка — пролистанная позиция сохраняется (#349).
+        renderChannels(false);
         refreshNowFav();
         epgNow.hidden = true;
       })
