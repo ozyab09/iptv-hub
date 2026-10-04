@@ -1,4 +1,5 @@
 /** Programme reminders run only while an application tab is open. */
+import { playlistScopedKey } from "./playlist-scoped-key";
 export interface ProgrammeReminder {
   channelUrl: string;
   channelName: string;
@@ -17,7 +18,7 @@ export function parseReminderSettings(raw: string | null): { minutes: number; de
     return { minutes: Number.isInteger(data?.minutes) && data.minutes >= 1 && data.minutes <= 60 ? data.minutes : DEFAULT_REMINDER_MINUTES, desktop: data?.desktop === true };
   } catch { return { minutes: DEFAULT_REMINDER_MINUTES, desktop: false }; }
 }
-export const remindersKey = (playlistId: string): string => `iptv-hub.reminders.v1:${playlistId}`;
+export const remindersKey = (playlistId: string): string => playlistScopedKey("reminders", playlistId);
 export const reminderId = (reminder: Pick<ProgrammeReminder, "channelUrl" | "start">): string => JSON.stringify([reminder.channelUrl, reminder.start]);
 
 export function parseReminders(raw: string | null): ProgrammeReminder[] {

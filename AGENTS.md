@@ -42,7 +42,7 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`, `external-player.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`, `external-player.ts`, `playlist-scoped-key.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
@@ -645,6 +645,11 @@ Http-URL публичных хостов отбрасываются с подс�
 `id:...`), при отсутствии — по нормализованному имени (ключ `name:...`,
 дисплей-неймы из `<channel><display-name>` индексируются lowercase как есть
 и через `normalizeName`). Даты — `YYYYMMDDHHMMSS ±HHMM`.
+
+**Ключи плейлиста (#374):** все `iptv-hub.<name>.v1:<playlist-id>` строятся
+через `playlistScopedKey()` (`playlist-scoped-key.ts`); тест сверяет строки
+каждого потребителя и запрещает собирать шаблон вручную. Очистка при удалении
+плейлиста — `playlistScopedKeys()` в `playlist-ui.ts` (#355).
 
 **Плейлисты (localStorage):**
 

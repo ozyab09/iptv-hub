@@ -1,7 +1,8 @@
+import { playlistScopedKey } from "./playlist-scoped-key";
 export type FailureKind = "unknown" | "http" | "blocked" | "mixed-content";
 export interface ChannelFailure { failedAt: number; kind: FailureKind; status?: number }
 export type ChannelHealth = ReadonlyMap<string, ChannelFailure>;
-export const channelHealthKey = (id: string): string => `iptv-hub.channel-health.v1:${id}`;
+export const channelHealthKey = (id: string): string => playlistScopedKey("channel-health", id);
 
 /** Audio needs actual playback; a known video track still needs decoded frames. */
 export function isChannelRecovered(media: { readyState: number; videoWidth: number; error: unknown }, event: string, hasVideo: boolean): boolean {

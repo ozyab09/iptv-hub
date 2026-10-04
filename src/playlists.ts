@@ -7,6 +7,7 @@
  * Избранное живёт по ключу `iptv-hub.favorites.v1:<id>` (см. favorites).
  */
 
+import { playlistScopedKey } from "./playlist-scoped-key";
 import { LEGACY_FAVORITES_KEY } from "./favorites";
 import { parseEpgSources } from "./epg-sources";
 
@@ -36,7 +37,7 @@ export const PLAYLISTS_KEY = "iptv-hub.playlists.v1";
 export const ACTIVE_KEY = "iptv-hub.active-playlist.v1";
 /** Ключ избранного конкретного плейлиста. */
 export function favoritesKey(id: string): string {
-  return `iptv-hub.favorites.v1:${id}`;
+  return playlistScopedKey("favorites", id);
 }
 /** Легаси-ключ одиночного конфига (для миграции). */
 export const LEGACY_CONFIG_KEY = "iptv-hub.config.v1";
