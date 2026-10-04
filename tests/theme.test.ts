@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   applyTheme,
+  syncStatusBarAppearance,
   resolveTheme,
   toggleTheme,
   saveTheme,
@@ -131,5 +132,33 @@ describe("applyTheme → meta theme-color", () => {
     const { doc, metas } = fakeDoc({});
     applyTheme("light", doc);
     expect(metas.map((m) => m.content)).toEqual(["#0c0d10", "#f6f6f8"]);
+  });
+});
+
+describe("Android status-bar bridge", () => {
+  it("follows theme, expanded compact player, closing and screen width", () => {
+    const messages: string[] = [];
+    let watching = false;
+    let open = false;
+    const view = { innerWidth: 390, IPTVHubStatusBar: { postMessage: (value: string) => messages.push(value) } };
+    const doc = {
+      documentElement: { dataset: { theme: "light" } },
+      defaultView: view,
+      getElementById: (id: string) => ({ classList: { contains: () => id === "app" ? watching : open } }),
+    } as unknown as Document;
+    syncStatusBarAppearance(doc);
+    watching = true;
+    syncStatusBarAppearance(doc);
+    open = true;
+    syncStatusBarAppearance(doc);
+    doc.documentElement.dataset.theme = "dark";
+    syncStatusBarAppearance(doc);
+    doc.documentElement.dataset.theme = "light";
+    view.innerWidth = 1440;
+    syncStatusBarAppearance(doc);
+    view.innerWidth = 390;
+    watching = false;
+    syncStatusBarAppearance(doc);
+    expect(messages).toEqual(["light", "light", "dark", "dark", "light", "light"]);
   });
 });

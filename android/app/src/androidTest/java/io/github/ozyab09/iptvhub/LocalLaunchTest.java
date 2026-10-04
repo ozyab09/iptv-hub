@@ -5,6 +5,7 @@ import android.webkit.WebView;
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.core.view.WindowCompat;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -65,5 +66,31 @@ public class LocalLaunchTest {
         activity.getScenario().onActivity(main -> webView(main).evaluateJavascript(
                 "document.querySelector('.brand').click()", null));
         expectInterface("/www/");
+    }
+
+    private void expectStatusBar(boolean lightBackground) throws InterruptedException {
+        AtomicReference<Boolean> actual = new AtomicReference<>();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        do {
+            activity.getScenario().onActivity(main -> actual.set(WindowCompat.getInsetsController(
+                    main.getWindow(), main.getWindow().getDecorView()).isAppearanceLightStatusBars()));
+            if (Boolean.valueOf(lightBackground).equals(actual.get())) return;
+            Thread.sleep(100);
+        } while (System.nanoTime() < deadline);
+        assertEquals("Status-bar appearance", Boolean.valueOf(lightBackground), actual.get());
+    }
+
+    @Test public void statusBarFollowsThemeOffline() throws InterruptedException {
+        expectInterface("/www/index.html");
+        activity.getScenario().onActivity(main -> webView(main).getSettings().setBlockNetworkLoads(true));
+        evaluate("document.querySelector('[data-theme-choice=light]').click()");
+        expectStatusBar(true);
+        evaluate("document.querySelector('[data-theme-choice=dark]').click()");
+        expectStatusBar(false);
+        evaluate("document.querySelector('[data-theme-choice=light]').click()");
+        expectStatusBar(true);
+        evaluate("location.reload()");
+        expectInterface("/www/index.html");
+        expectStatusBar(true);
     }
 }
