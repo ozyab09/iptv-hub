@@ -7,16 +7,18 @@
  * модуль остаётся чистым и тестируемым без DOM-магии.
  */
 
+import type { View } from "./views";
+
 /** Контекст UI, нужный гарду. Передаётся из main.ts при каждом вызове. */
 export interface HotkeyContext {
   /** Элемент панели плеера. */
   playerBar: HTMLElement;
   /** Активный раздел приложения. */
-  activeView: string;
+  activeView: View;
   /** Компактный экран (ниже 1024px). */
   isCompact: () => boolean;
   /** Показывает ли раздел список каналов. */
-  showsChannelList: (view: string) => boolean;
+  showsChannelList: (view: View) => boolean;
 }
 
 /** Можно ли сейчас обрабатывать горячие клавиши в интерфейсе. */
