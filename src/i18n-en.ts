@@ -2,6 +2,8 @@
 import type { TranslationKey } from "./i18n-ru";
 
 export const en: Record<TranslationKey, string> = {
+  "playlist.all": "All playlists",
+  "playlist.partial": "Could not load playlist: {name}",
   "tv.now": "Now: {title}",
   "tv.next": "Next: {title}",
   "settings.updates": "App updates",

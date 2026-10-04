@@ -3,10 +3,12 @@ import type { Channel, EpgProgramme, NowNext, PlaylistSnapshot } from "./types";
 import { withSourceTimeout } from "./source-timeout";
 import { normalizeName } from "./m3u";
 import { mergeEpgSources } from "./epg-sources";
+import { sourceEpgKey } from "./playlist-aggregate";
 
 /** Идентификатор канала для матчинга с EPG (tvg-id, иначе нормализованное имя). */
-function channelKey(c: Channel): string {
-  return c.tvgId ? `id:${c.tvgId.toLowerCase()}` : `name:${c.normalizedName}`;
+export function channelEpgKey(c: Channel, byName = false): string {
+  const key = !byName && c.tvgId ? `id:${c.tvgId.toLowerCase()}` : `name:${c.normalizedName}`;
+  return c.source ? sourceEpgKey(c.source.id, key) : key;
 }
 
 /** Загрузка и стриминговый разбор XMLTV (обычный или .gz). */
@@ -187,7 +189,7 @@ export function getNowNext(
   at: Date = new Date(),
 ): NowNext {
   void snapshot;
-  const key = channelKey(channel);
+  const key = channelEpgKey(channel);
   const list = epg.get(key);
   if (!list || list.length === 0) return { now: null, next: null };
 

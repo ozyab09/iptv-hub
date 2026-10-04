@@ -1,5 +1,6 @@
 import type { Channel, EpgProgramme } from "./types";
 import { buildCatchupUrl, canWatchPast } from "./catchup";
+import { channelEpgKey } from "./epg";
 
 export interface ProgrammeMatch {
   channel: Channel;
@@ -35,8 +36,8 @@ export function searchProgrammes(
   if (!q || !epg) return [];
   const matches: ProgrammeMatch[] = [];
   for (const channel of channels) {
-    const list = (channel.tvgId ? epg.get(`id:${channel.tvgId.toLowerCase()}`) : undefined)
-      ?? epg.get(`name:${channel.normalizedName}`) ?? [];
+    const list = (channel.tvgId ? epg.get(channelEpgKey(channel)) : undefined)
+      ?? epg.get(channelEpgKey(channel, true)) ?? [];
     const seen = new Set<string>();
     for (const programme of list) {
       if (!normalizedTitle(programme).includes(q)) continue;

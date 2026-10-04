@@ -69,6 +69,8 @@ export interface PlaylistUiNodes {
 }
 
 export interface PlaylistUiDeps {
+  allPlaylists?: () => boolean;
+  activateAll?: () => void;
   nodes: PlaylistUiNodes;
   /** Локальное хранилище или null (приватный режим). */
   storage: KV;
@@ -300,20 +302,32 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
     const active = activePlaylist(state);
     nodes.plSwitch.hidden = !active;
     if (!active) return;
-    nodes.plSwitchName.textContent = active.name;
+    const all = deps.allPlaylists?.() ?? false;
+    nodes.plSwitchName.textContent = all ? t("playlist.all", lang()) : active.name;
     // Видимый текст — название, а имя кнопки для скринридера — её действие
-    nodes.plSwitchBtn.setAttribute("aria-label", t("playlist.switchNamed", lang(), { name: active.name }));
+    nodes.plSwitchBtn.setAttribute("aria-label", t("playlist.switchNamed", lang(), { name: nodes.plSwitchName.textContent }));
     const count = deps.channelCount();
     nodes.plSwitchCount.textContent = count !== null ? channelsWord(count) : "";
     nodes.plSwitchMenu.textContent = "";
+    if (state.items.length > 1 && deps.activateAll) {
+      const b = deps.createButton();
+      b.className = menuItemClass(all);
+      b.textContent = t("playlist.all", lang());
+      b.addEventListener("click", () => {
+        nodes.plSwitchMenu.hidden = true;
+        nodes.plSwitchBtn.setAttribute("aria-expanded", "false");
+        deps.activateAll!();
+      });
+      nodes.plSwitchMenu.append(b);
+    }
     for (const p of state.items) {
       const b = deps.createButton();
-      b.className = menuItemClass(p.id === state.activeId);
+      b.className = menuItemClass(!all && p.id === state.activeId);
       b.textContent = p.name;
       b.addEventListener("click", () => {
         nodes.plSwitchMenu.hidden = true;
         nodes.plSwitchBtn.setAttribute("aria-expanded", "false");
-        if (p.id !== state.activeId) deps.activatePlaylist(p.id);
+        if (all || p.id !== state.activeId) deps.activatePlaylist(p.id);
       });
       nodes.plSwitchMenu.append(b);
     }
