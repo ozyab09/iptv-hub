@@ -1,5 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
+const previewPort = Number(process.env.PLAYWRIGHT_PORT ?? 4173);
+const previewUrl = `http://localhost:${previewPort}`;
+
 /**
  * Playwright прогоняет структурные smoke-проверки вёрстки (без пиксельных
  * снепшотов). Сервер Playwright поднимает сам: vite preview прода-сборки
@@ -14,17 +17,18 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 4 : 1,
   use: {
-    baseURL: process.env.VISUAL_BASE_URL ?? "http://localhost:4173",
+    baseURL: process.env.VISUAL_BASE_URL ?? previewUrl,
     locale: "ru-RU",
     screenshot: "only-on-failure",
     video: "off",
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npx vite preview --port 4173 --strictPort",
-    url: "http://localhost:4173",
+    command: `npx vite preview --port ${previewPort} --strictPort`,
+    url: previewUrl,
     timeout: 30_000,
-    reuseExistingServer: !process.env.CI,
+    // Чужой preview может отдавать другую сборку или меняться во время теста.
+    reuseExistingServer: false,
   },
   projects: [
     { name: "chromium", workers: process.env.CI ? 3 : 1, use: { browserName: "chromium" } },
