@@ -841,6 +841,11 @@ CORS только для Pages и `-origin`, ответ на preflight Private N
 Linux XDG autostart; включается при первом запуске (кроме `-headless`).
 Трей: статус, «Открыть IPTV Hub» (`?companion=1`), «Запускать при входе»,
 «Выход»; второй запуск открывает сайт и выходит. Тесты: `go test ./...`.
+CI (#464): job `companion` (матрица ubuntu-24.04 + macos-15) — `go vet`,
+`go test`, сборка Windows amd64/arm64 (`-H windowsgui`), Linux amd64/arm64,
+macOS amd64/arm64 (cgo); `release` ждёт `companion` и прикладывает к релизу
+`iptv-hub-companion-{windows-*.exe,linux-*.tar.gz,macos-*.tar.gz}` — имена
+стабильны для ссылок `releases/latest/download/<имя>` на сайте. Без подписи.
 
 ## Android: локальное приложение (#160, #246)
 
