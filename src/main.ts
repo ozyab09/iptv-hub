@@ -1609,20 +1609,9 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   saveCurrentPosition();
   archivePlayback = archiveUrl === undefined ? null : { url: archiveUrl, programme: archiveProgramme ?? null, fromStart };
   lastPlayed = c;
-  // recents: дедап по url, максимум RECENTS_MAX, хранение per-плейлист
-  recents = pushRecent(recents, c.url);
-  if (plState.activeId) {
-    try {
-      localStorage.setItem(
-        recentsKey(plState.activeId),
-        JSON.stringify(recents),
-      );
-    } catch { /* приватный режим */ }
-    // Раздел «Недавние» показывает этот список — обновляем, если он открыт.
-    if (activeView === "recents") renderChannels(false);
-  }
   if (multiViewUi.isOpen) {
     multiViewUi.play(c);
+    rememberRecent(c);
     return true;
   }
   refreshNowHeader(c, archiveUrl); // единая точка обновления заголовка (#253)
@@ -1640,10 +1629,24 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
     showToast(refused);
     return false;
   }
+  // В «Недавние» — только реально запущенное: отказ плеера (DASH и т.п.)
+  // просмотром не считается (#356).
+  rememberRecent(c);
   // уровни/дорожки приходят асинхронно после парсинга манифеста
   qualityMenuUi.refreshQualityUi();
   renderChannels(false); // подсветка активного без сброса позиции
   return true;
+}
+
+/** recents: дедап по url, максимум RECENTS_MAX, хранение per-плейлист. */
+function rememberRecent(c: Channel): void {
+  recents = pushRecent(recents, c.url);
+  if (!plState.activeId) return;
+  try {
+    localStorage.setItem(recentsKey(plState.activeId), JSON.stringify(recents));
+  } catch { /* приватный режим */ }
+  // Раздел «Недавние» показывает этот список — обновляем, если он открыт.
+  if (activeView === "recents") renderChannels(false);
 }
 
 /** Переключить на соседний канал в текущем видимом списке (с зацикливанием). */
