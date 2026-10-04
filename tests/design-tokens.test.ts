@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readAppStyles } from "./style-source";
 
 /**
  * Токены — контракт с дизайн-системой IPTV Hub v2, а не просто цвета в CSS.
@@ -10,7 +11,8 @@ import { fileURLToPath } from "node:url";
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const root = (...p: string[]): string => join(here, "..", ...p);
-const css = readFileSync(root("src", "style.css"), "utf-8");
+// Токены — в src/styles/tokens.css, подключённой из style.css (#380).
+const css = readAppStyles(root("src", "style.css"));
 
 /** Вытащить тело блока: `:root {` или `:root[data-theme="light"] {`. */
 function block(selector: string): string {
@@ -113,7 +115,8 @@ describe("шрифт", () => {
   });
 
   it("файлы, на которые ссылается @font-face, существуют", () => {
-    const refs = [...css.matchAll(/url\("\.\/(fonts\/[^"]+)"\)/g)].map((m) => m[1]);
+    // @font-face живёт в src/styles/tokens.css (#380): путь — от src/styles.
+    const refs = [...css.matchAll(/url\("\.\.\/(fonts\/[^"]+)"\)/g)].map((m) => m[1]);
     expect(refs.length, "должны быть latin и cyrillic").toBe(2);
     for (const ref of refs) {
       expect(existsSync(root("src", ref!)), `нет файла ${ref}`).toBe(true);
