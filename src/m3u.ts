@@ -65,12 +65,22 @@ export function extractAttr(attrs: string, key: string): string | null {
  * Локальные и приватные хосты (localhost, *.local, RFC1918) остаются:
  * mixed content на них не действует, домашние IPTV-серверы играют.
  */
+/**
+ * Android-приложение загружает http публичных хостов через свой прокси
+ * (app-proxy.ts, #452) — там такие каналы не скрываются. Включает main.ts
+ * при запуске на локальном origin приложения; в веб-версии всегда false.
+ */
+let publicHttpAllowed = false;
+export function setPublicHttpAllowed(allowed: boolean): void {
+  publicHttpAllowed = allowed;
+}
+
 export function isPlayableStreamUrl(url: string): boolean {
   try {
     const u = new URL(url);
     if (u.protocol === "https:") return true;
     if (u.protocol !== "http:") return true; // rtmp/udp/… не трогаем
-    return isPrivateHost(u.hostname);
+    return publicHttpAllowed || isPrivateHost(u.hostname);
   } catch {
     return false;
   }

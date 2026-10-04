@@ -10,6 +10,7 @@
       не участвует, Digital Asset Links не нужны, панели браузера нет.
     -->
     <application
+        android:networkSecurityConfig="@xml/network_security_config"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/banner"

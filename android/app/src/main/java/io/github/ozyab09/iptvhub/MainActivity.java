@@ -116,6 +116,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public WebResourceResponse shouldInterceptRequest(
                     @NonNull WebView view, @NonNull WebResourceRequest request) {
+                // Прокси приложения для http(s)-источников (#452); фоновый поток WebView.
+                if (AppProxy.handles(request.getUrl(), LOCAL_HOST)) {
+                    return AppProxy.handle(request, "https://" + LOCAL_HOST);
+                }
                 return assetLoader.shouldInterceptRequest(request.getUrl());
             }
 
