@@ -46,3 +46,38 @@ export function classifyStorageChange(key: string | null): SettingsKeyDiff {
   // перечитывать не нужно: они не портят открытый UI другого таба.
   return { playlists: false, favorites: false, theme: false, ignore: true };
 }
+
+/** Что перечитать в этой вкладке после внешнего изменения хранилища (#371). */
+export type StorageReaction = "groups" | "pins" | "playlists" | "favorites" | "theme";
+
+/** Ключи групп и PIN активного плейлиста — передаются, чтобы модуль не знал их формат. */
+export interface ActivePlaylistKeys {
+  groups: string;
+  pins: string;
+  favorites: string;
+  favoritesOrder: string;
+}
+
+/**
+ * Применить реакции на storage-событие по порядку: настройки групп и PIN
+ * активного плейлиста, затем список плейлистов, избранное и тема.
+ * key === null (clear() в другой вкладке) задевает всё. Ключи активного
+ * плейлиста спрашиваются на каждом шаге: реакция «playlists» может сменить
+ * активный плейлист, и избранное проверяется уже для нового.
+ */
+export function applyStorageChange(
+  key: string | null,
+  activeKeys: () => ActivePlaylistKeys | null,
+  react: (reaction: StorageReaction) => void,
+): void {
+  let active = activeKeys();
+  if (active && (key === null || key === active.groups)) react("groups");
+  active = activeKeys();
+  if (active && (key === null || key === active.pins)) react("pins");
+  const d = classifyStorageChange(key);
+  if (d.ignore) return;
+  if (d.playlists) react("playlists");
+  active = activeKeys();
+  if (d.favorites && active && (key === null || key === active.favorites || key === active.favoritesOrder)) react("favorites");
+  if (d.theme) react("theme");
+}

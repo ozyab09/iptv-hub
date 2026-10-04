@@ -97,7 +97,7 @@ import {
   sleepTick,
   type SleepState,
 } from "./sleep-timer";
-import { classifyStorageChange } from "./cross-tab";
+import { applyStorageChange, type StorageReaction } from "./cross-tab";
 import { resolveChannelDeepLink } from "./deeplink";
 import {
   initialWakeLockState,
@@ -3555,24 +3555,24 @@ function activatePlaylist(id: string): void {
 // ---------- Кросс-таб синхронизация (FR-15) ----------
 // storage-событие приходит ТОЛЬКО в табы, которые не писали ключ сами —
 // эха нет. Политика last-write-wins: состояние просто перечитывается.
-window.addEventListener("storage", (e) => {
-  if (plState.activeId && (e.key === null || e.key === groupPreferencesKey(plState.activeId))) {
+// Решение «что перечитать» — applyStorageChange в cross-tab.ts (#371),
+// здесь только реакции над состоянием main.ts.
+const storageReactions: Record<StorageReaction, () => void> = {
+  groups: () => {
     const previousHidden = groupPreferences.hidden;
-    groupPreferences = parseGroupPreferences(localStorage.getItem(groupPreferencesKey(plState.activeId)));
+    groupPreferences = parseGroupPreferences(localStorage.getItem(groupPreferencesKey(plState.activeId!)));
     refreshGroupPreferences(previousHidden);
-  }
-  if (plState.activeId && (e.key === null || e.key === parentalPinsKey(plState.activeId))) {
-    parentalPins = parseParentalPins(localStorage.getItem(parentalPinsKey(plState.activeId)));
+  },
+  pins: () => {
+    parentalPins = parseParentalPins(localStorage.getItem(parentalPinsKey(plState.activeId!)));
     // Изменение защиты в другой вкладке отменяет ранее разрешённый просмотр.
     btnClosePlayer.click();
     activeCategory = null;
     renderPinSettings();
     renderCategories();
     renderChannels();
-  }
-  const d = classifyStorageChange(e.key);
-  if (d.ignore) return;
-  if (d.playlists) {
+  },
+  playlists: () => {
     const prevActive = plState.activeId;
     plState = loadPlaylists(localStorage);
     renderPlaylistManager();
@@ -3582,24 +3582,33 @@ window.addEventListener("storage", (e) => {
       if (pl) activatePlaylist(pl.id);
       else showSetup();
     }
-  }
-  if (d.favorites) {
-    const activeId = plState.activeId;
-    if (activeId && (e.key === null || e.key === favoritesKey(activeId) || e.key === favoritesOrderKey(activeId))) {
-      favorites = loadFavoritesFor(activeId);
-      favoritesOrder = loadFavoritesOrderFor(activeId);
-      refreshNowFav();
-      if (showsChannelList(activeView)) renderChannels(false);
-    }
-  }
-  if (d.theme) {
+  },
+  favorites: () => {
+    favorites = loadFavoritesFor(plState.activeId!);
+    favoritesOrder = loadFavoritesOrderFor(plState.activeId!);
+    refreshNowFav();
+    if (showsChannelList(activeView)) renderChannels(false);
+  },
+  theme: () => {
     currentTheme = themeChoice(localStorage) === "system"
       ? resolveTheme(null, systemPrefersDark())
       : (themeChoice(localStorage) as Theme);
     applyTheme(currentTheme);
     setIcon(btnTheme, themeButtonLabel(currentTheme));
     renderThemeSeg();
-  }
+  },
+};
+window.addEventListener("storage", (e) => {
+  applyStorageChange(
+    e.key,
+    () => {
+      const id = plState.activeId;
+      return id
+        ? { groups: groupPreferencesKey(id), pins: parentalPinsKey(id), favorites: favoritesKey(id), favoritesOrder: favoritesOrderKey(id) }
+        : null;
+    },
+    (reaction) => storageReactions[reaction](),
+  );
 });
 
 /** Пересобрать список плейлистов (setup-экран), синхронизировав состояние. */
