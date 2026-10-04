@@ -100,7 +100,7 @@ describe("createTransport: loadPlaylist", () => {
     const doFetch = vi.fn(async () => new Response(M3U, { status: 200 }));
     const transport = createTransport({ fs: () => null, fetch: doFetch, language: () => "ru" });
     const snapshot = await transport.loadPlaylist("https://fixture.test/playlist.m3u");
-    expect(doFetch).toHaveBeenCalledWith("https://fixture.test/playlist.m3u");
+    expect(doFetch).toHaveBeenCalledWith("https://fixture.test/playlist.m3u", { signal: expect.any(AbortSignal) });
     expect(snapshot.channels).toHaveLength(1);
     expect(snapshot.channels[0]!.name).toBe("Канал 1");
   });

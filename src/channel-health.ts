@@ -3,6 +3,12 @@ export interface ChannelFailure { failedAt: number; kind: FailureKind; status?: 
 export type ChannelHealth = ReadonlyMap<string, ChannelFailure>;
 export const channelHealthKey = (id: string): string => `iptv-hub.channel-health.v1:${id}`;
 
+/** Audio needs actual playback; a known video track still needs decoded frames. */
+export function isChannelRecovered(media: { readyState: number; videoWidth: number; error: unknown }, event: string, hasVideo: boolean): boolean {
+  if (media.readyState < 2 || media.error) return false;
+  return media.videoWidth > 0 || (!hasVideo && event === "playing");
+}
+
 export function parseChannelHealth(raw: string | null): ChannelHealth {
   const result = new Map<string, ChannelFailure>();
   try {

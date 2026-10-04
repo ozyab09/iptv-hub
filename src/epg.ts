@@ -1,4 +1,5 @@
 import type { Channel, EpgProgramme, NowNext, PlaylistSnapshot } from "./types";
+import { withSourceTimeout } from "./source-timeout";
 
 /** Идентификатор канала для матчинга с EPG (tvg-id, иначе нормализованное имя). */
 function channelKey(c: Channel): string {
@@ -20,48 +21,50 @@ export async function loadEpg(
   url: string,
   onProgress?: (pct: number) => void,
 ): Promise<Map<string, EpgProgramme[]>> {
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    throw new Error(`EPG HTTP ${resp.status}`);
-  }
-  const total = Number(resp.headers.get("content-length") ?? 0);
-
-  let buffer: ArrayBuffer;
-  if (resp.body && total > 0) {
-    const reader = resp.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let received = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      received += value.byteLength;
-      onProgress?.(Math.min(99, Math.round((received / total) * 100)));
+  return withSourceTimeout(async (signal) => {
+    const resp = await fetch(url, { signal });
+    if (!resp.ok) {
+      throw new Error(`EPG HTTP ${resp.status}`);
     }
-    const merged = new Uint8Array(received);
-    let off = 0;
-    for (const ch of chunks) {
-      merged.set(ch, off);
-      off += ch.byteLength;
+    const total = Number(resp.headers.get("content-length") ?? 0);
+
+    let buffer: ArrayBuffer;
+    if (resp.body && total > 0) {
+      const reader = resp.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        onProgress?.(Math.min(99, Math.round((received / total) * 100)));
+      }
+      const merged = new Uint8Array(received);
+      let off = 0;
+      for (const ch of chunks) {
+        merged.set(ch, off);
+        off += ch.byteLength;
+      }
+      buffer = merged.buffer;
+      onProgress?.(100);
+    } else {
+      buffer = await resp.arrayBuffer();
+      onProgress?.(100);
     }
-    buffer = merged.buffer;
-    onProgress?.(100);
-  } else {
-    buffer = await resp.arrayBuffer();
-    onProgress?.(100);
-  }
 
-  let xml: string;
-  const magic = new Uint8Array(buffer.slice(0, 2));
-  if (magic[0] === 0x1f && magic[1] === 0x8b) {
-    const ds = new DecompressionStream("gzip");
-    const stream = new Blob([buffer]).stream().pipeThrough(ds);
-    xml = await new Response(stream).text();
-  } else {
-    xml = new TextDecoder("utf-8").decode(buffer);
-  }
+    let xml: string;
+    const magic = new Uint8Array(buffer.slice(0, 2));
+    if (magic[0] === 0x1f && magic[1] === 0x8b) {
+      const ds = new DecompressionStream("gzip");
+      const stream = new Blob([buffer]).stream().pipeThrough(ds);
+      xml = await new Response(stream).text();
+    } else {
+      xml = new TextDecoder("utf-8").decode(buffer);
+    }
 
-  return parseEpg(xml);
+    return parseEpg(xml);
+  });
 }
 
 /**

@@ -370,6 +370,8 @@ describe("createPlaylistUi: удаление", () => {
     const { ui, nodes, storage, calls } = makeDeps(stateAB);
     storage.setItem("iptv-hub.favorites-order.v1:a", '["a"]');
     storage.setItem("iptv-hub.favorites-order.v1:b", '["b"]');
+    storage.setItem("iptv-hub.reminders.v1:a", '["reminder-a"]');
+    storage.setItem("iptv-hub.reminders.v1:b", '["reminder-b"]');
     ui.renderManager();
     const row = kid(nodes.plList, 0);
     kid(row, 2).click(); // корзина
@@ -378,6 +380,8 @@ describe("createPlaylistUi: удаление", () => {
     expect(storage.getItem("iptv-hub.favorites.v1:a")).toBeNull();
     expect(storage.getItem("iptv-hub.favorites-order.v1:a")).toBeNull();
     expect(storage.getItem("iptv-hub.favorites-order.v1:b")).toBe('["b"]');
+    expect(storage.getItem("iptv-hub.reminders.v1:a")).toBeNull();
+    expect(storage.getItem("iptv-hub.reminders.v1:b")).toBe('["reminder-b"]');
     expect(calls.settingsRenders).toBe(1);
   });
 

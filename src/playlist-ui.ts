@@ -22,6 +22,7 @@ import { t, type Language, type TranslationKey } from "./i18n";
 import { readXtreamUrl, validateXtream, xtreamApiUrl, xtreamEpgUrl } from "./xtream";
 import { channelHealthKey } from "./channel-health";
 import { favoritesOrderKey } from "./favorites-order";
+import { remindersKey } from "./reminder";
 
 type KV = import("./playlists").KV;
 /** Откуда взять OPFS для удаления содержимого локального плейлиста. */
@@ -231,6 +232,7 @@ export function createPlaylistUi(deps: PlaylistUiDeps) {
         if (storage) {
           storage.removeItem(favoritesKey(p.id));
           storage.removeItem(favoritesOrderKey(p.id));
+          storage.removeItem(remindersKey(p.id));
           storage.removeItem(channelHealthKey(p.id));
         }
         // Локальный плейлист: чистим и содержимое в OPFS (FR-10)
