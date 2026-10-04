@@ -35,6 +35,9 @@
    `playRecording`, `saveRecording`, `offerDownload`, `saveToLibrary`)
    → `recordings-ui.ts`. Контракт воспроизведения (`Player.playRecording`)
    не менять.
+   **Сделано в #365:** список, карточки, удаление, `saveToLibrary` и
+   `offerDownload` — в модуле; вход в просмотр (`playRecording`) и выбор
+   субтитров трогают состояние плеера и остались в main.ts колбэками.
 3. **Захват видео/аудио для перекодирующей записи** (~1987–2160:
    `createRecordSource`, `captureFromVideo`, `captureAudioTrack`,
    `canvasHasFrames`, `captureFromCanvas`, `createRecorderAdapter`)
