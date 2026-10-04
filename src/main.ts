@@ -283,7 +283,7 @@ const wakeLockHooks = {
         }
         lock = l;
       },
-      () => undefined,
+      () => segSession.resetStream(),
     );
     return {
       release: () => {
@@ -2764,8 +2764,12 @@ const segSession = createSegmentSession({
 });
 
 // Подписка переживает смену канала: Player вешает обработчик на каждый новый
-// hls-инстанс. init-сегменты копятся всегда — для fMP4 без них файл нечитаем.
-player.setFragmentListener((payload, isInit) => segSession.feed(payload, isInit));
+// hls-инстанс. init-сегмент держится всегда — для fMP4 без него файл нечитаем;
+// новый поток сбрасывает init прошлого (#347).
+player.setFragmentListener(
+  (payload, isInit) => segSession.feed(payload, isInit),
+  () => segSession.resetStream(),
+);
 
 /**
  * Уровень качества, в который надо вернуться после записи (-1 = Auto).

@@ -49,6 +49,7 @@ export class Player {
    * нужно копию.
    */
   private onFragment: ((payload: ArrayBuffer, isInit: boolean) => void) | null = null;
+  private onStreamChange: (() => void) | null = null;
   /** Сетевые сбои подряд; сбрасывается, как только пошли данные. */
   private networkRetries = 0;
   /** https-апгрейд для текущего URL уже пробовали — второй раз не ждём. */
@@ -107,14 +108,29 @@ export class Player {
    * Подписаться на загружаемые сегменты. Подписка переживает смену канала:
    * обработчик вешается на каждый новый hls-инстанс.
    */
-  setFragmentListener(cb: (payload: ArrayBuffer, isInit: boolean) => void): void {
+  setFragmentListener(
+    cb: (payload: ArrayBuffer, isInit: boolean) => void,
+    onStreamChange?: () => void,
+  ): void {
     this.onFragment = cb;
+    this.onStreamChange = onStreamChange ?? null;
   }
 
   /** Повесить обработчик сегментов на текущий hls-инстанс. */
   private attachFragmentListener(): void {
+    // Новый hls-инстанс — новый поток: init прошлого не годится (#347).
+    this.onStreamChange?.();
+    // hls.js не шлёт FRAG_LOADED для init-сегмента fMP4: его байты лежат в
+    // frag.initSegment.data медиафрагмента. Отдаём init перед фрагментом,
+    // когда он сменился (старт потока, смена уровня).
+    let lastInit: Uint8Array | null = null;
     this.hls?.on(Hls.Events.FRAG_LOADED, (_e, data) => {
       this.networkRetries = 0; // данные пошли — прошлые сбои не в счёт
+      const init = data.frag.initSegment?.data;
+      if (init && init !== lastInit) {
+        lastInit = init;
+        this.onFragment?.(init.slice().buffer, true);
+      }
       this.onFragment?.(data.payload, data.frag.sn === "initSegment");
     });
   }

@@ -38,7 +38,7 @@ export async function startScheduledRecorder(rule: RecordingRule, occurrence: Oc
   });
   await session.start();
   if (!session.isRecording()) { video.remove(); throw new Error("Recording sink unavailable"); }
-  player.setFragmentListener((payload, init) => session.feed(payload, init));
+  player.setFragmentListener((payload, init) => session.feed(payload, init), () => session.resetStream());
   const refused = player.play({ url: rule.channelUrl }, true);
   if (refused) { await session.stop(false); player.stop(); video.remove(); throw new Error(refused); }
   notify(`Запись по расписанию началась: ${rule.title}`);
