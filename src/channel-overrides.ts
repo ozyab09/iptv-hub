@@ -1,8 +1,9 @@
+import { playlistScopedKey } from "./playlist-scoped-key";
 import type { Channel } from "./types";
 
 export interface ChannelOverride { alias: string; hidden: boolean; epgId?: string }
 export type ChannelOverrides = ReadonlyMap<string, ChannelOverride>;
-export const channelOverridesKey = (id: string): string => `iptv-hub.channel-overrides.v1:${id}`;
+export const channelOverridesKey = (id: string): string => playlistScopedKey("channel-overrides", id);
 
 /** Локальное оформление по URL; исходное имя для EPG остаётся в normalizedName. */
 export function parseChannelOverrides(raw: string | null): ChannelOverrides {

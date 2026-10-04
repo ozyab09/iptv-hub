@@ -1352,6 +1352,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   .player-bar:not(.open) #btn-rec,
   .player-bar:not(.open) #live-badge,
   .player-bar:not(.open) #btn-retry,
+  .player-bar:not(.open) #btn-stream-out,
   .player-bar:not(.open) #now-fav,
   .player-bar:not(.open) .now-show { display: none; }
   /* Строка «превью · что идёт · пауза · закрыть»: обёртки верха кадра
@@ -1629,6 +1630,8 @@ html[data-tv="true"] .numeric-zap { font-size: 96px; padding: 20px 32px; }
 }
 .tv-paused-info[hidden] { display: none; }
 .tv-paused-info p { margin: 0; }
+
+.channel-source { max-width: 100px; flex-shrink: 0; }
 /* Ссылка на поток и внешний плеер в редакторе канала (#372). */
 .channel-stream-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .channel-stream-actions .btn { font: inherit; min-height: 44px; }

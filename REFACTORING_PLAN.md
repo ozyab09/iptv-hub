@@ -91,9 +91,13 @@
    `group-preferences.ts`, `parental-pin.ts`, `favorites.ts`,
    `favorites-order.ts`, `channel-overrides.ts` и т.д. → общий хелпер
    `playlist-scoped-key.ts` (+ тест на соглашение имён).
+   **Сделано в #374:** все девять потребителей на `playlistScopedKey()`.
 2. **`i18n.ts` (746 строк).** Разделить словари: `i18n-ru.ts` / `i18n-en.ts`,
    `i18n.ts` оставляет API `t()/tr()/translateMessage()`. Проверить, что
    бандл не теряет tree-shaking (словари сейчас в одном объекте).
+   **Сделано в #375:** `i18n.ts` — 58 строк, словари в `i18n-ru.ts` /
+   `i18n-en.ts`, реэкспорт `ru`/`en`/`TranslationKey` сохранён; размер
+   бандла не изменился (262 342 байта до и после).
 3. **`player.ts` (564 строки).** Разрезать на: ядро (источники/hls-жизненный
    цикл), диагностика фатальных ошибок (retry/CORS/mixed-content), зеркала,
    timeshift-буфер. Публичный API `Player` заморозить до окончания (контракт
@@ -121,6 +125,25 @@
    вынесенный блок (он же страхует от TDZ).
 5. **`views.ts`/`ui-classes.ts`/`refresh.ts`** — уже чистые; только держать
    синхронными с CSS (тесты уже следят).
+
+### P1: браузерное покрытие после выноса (#382)
+
+Все перечисленные спеки входят в CI. `p1-module-boot.spec.ts` проверяет
+инициализацию из сохранённых экранов, повторную загрузку без pageerror/TDZ
+и настоящие storage-события между двумя вкладками.
+
+| Модуль | Проверка пользовательского действия |
+| --- | --- |
+| `screenshot-ui.ts` | `screenshot-hotkey.spec.ts`: один PNG по S, ввод в поиске |
+| `recordings-ui.ts` | `recording-card.spec.ts`, `recording-playback.spec.ts`: действия и воспроизведение |
+| `recording-capture.ts` | `volume-boost.spec.ts`: канвас-запись реальных кадров/звука и просмотр результата |
+| `channel-list-ui.ts` | `channel-scroll.spec.ts`, `channel-card-a11y.spec.ts`: виртуализация и фокус |
+| `guide-ui.ts` | `programme-card.spec.ts`, `timeline-guide.spec.ts`: карточка, список и сетка |
+| `scrub-ui.ts` | `recording-playback.spec.ts`: синхронные полосы, pointer и клавиши |
+| `backup-ui.ts` | `backup-v2.spec.ts`, `backup-local.spec.ts`: экспорт/импорт и reload |
+| `cross-tab.ts` | `p1-module-boot.spec.ts`, `parental-pin.spec.ts`: тема, избранное и PIN из другой вкладки |
+
+Новый вынесенный блок добавляется в эту таблицу вместе со спекой его действия.
 
 ## Инварианты (не менять в любом PR)
 

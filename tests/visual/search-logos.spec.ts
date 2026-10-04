@@ -51,9 +51,10 @@ for (const theme of ["light", "dark"]) {
       await page.locator("#search").fill("Alpha");
       await expect(page.locator("#channel-list .logo img")).toHaveAttribute("src", "https://fixture.test/logo.svg");
       await page.locator("#search").fill("Logo match");
+      await expect(page.locator("#channel-list .channel-card").first()).toContainText("Logo match:");
       await checkLogos(page);
       const rows = page.locator("#channel-list .channel-card");
-      expect((await rows.first().boundingBox())!.height).toBe(72);
+      await expect(rows.first()).toHaveCSS("height", "72px");
       await page.locator("#search").press("ArrowDown");
       await expect(rows.first()).toBeFocused();
       const request = page.waitForRequest("https://fixture.test/a.mp4");

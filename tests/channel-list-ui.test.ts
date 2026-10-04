@@ -154,10 +154,11 @@ describe("createChannelListUi (#367)", () => {
   });
 
   it("результат поиска передач: строка со временем, Enter и клик включают передачу", () => {
-    const h = harness([{ channel: ch(5), programme }]);
+    const h = harness([{ channel: ch(5, { source: { id: "one", name: "One", group: "G" } }), programme }]);
     h.ui.render(true);
     const row = h.inner().els()[0]!;
-    expect(row.els()[1]!.els()[0]!.textContent).toBe("Channel 5 · Match");
+    expect(row.find("t-strong")!.textContent).toBe("Channel 5 · Match");
+    expect(row.find("channel-source")!.textContent).toBe("One");
     row.fire("keydown", { key: "Enter" });
     expect(h.calls.programmes).toEqual(["Match"]);
   });

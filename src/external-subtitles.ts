@@ -1,6 +1,7 @@
+import { playlistScopedKey } from "./playlist-scoped-key";
 export interface SubtitleCue { start: number; end: number; text: string }
 export interface SubtitlePreference { name: string; enabled: boolean }
-export const subtitlePreferenceKey = (id: string): string => `iptv-hub.recording-subtitles.v1:${id}`;
+export const subtitlePreferenceKey = (id: string): string => playlistScopedKey("recording-subtitles", id);
 
 /** SRT/WebVTT → текстовые cues; DOM и сеть не нужны. */
 export function parseExternalSubtitles(input: string): SubtitleCue[] {
