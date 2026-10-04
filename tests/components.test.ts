@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readAppStyles } from "./style-source";
 import {
   channelRowClass,
   chipClass,
@@ -14,7 +15,8 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const root = (...p: string[]): string => join(here, "..", ...p);
 const components = readFileSync(root("src", "components.css"), "utf-8");
-const style = readFileSync(root("src", "style.css"), "utf-8");
+// style.css подключает секции src/styles/*.css (#380) — читаем их вместе.
+const style = readAppStyles(root("src", "style.css"));
 const mainTs = readFileSync(root("src", "main.ts"), "utf-8");
 // Виртуальный список каналов живёт в channel-list-ui.ts (#367).
 const listTs = readFileSync(root("src", "channel-list-ui.ts"), "utf-8");

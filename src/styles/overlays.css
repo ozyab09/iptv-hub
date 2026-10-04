@@ -1,0 +1,181 @@
+/* Тосты, уведомления, скачивание, карточка передачи, TV-режим и прочие оверлеи. Секция style.css (#380): порядок @import в style.css = порядок каскада. */
+/* ---------- toast ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-6);
+  z-index: 100;
+  transform: translateX(-50%);
+  max-width: min(480px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+}
+/* Центр уведомлений: колокольчик в шапке + выпадающая панель (#98).
+   Как в приложениях: кнопка всегда на виду, бейдж — при непрочитанных,
+   список хранит историю, «Очистить» её стирает. */
+.notif-bell-wrap { position: relative; flex: none; display: flex; }
+.notif-bell-wrap .icon-btn { position: relative; }
+.notif-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 10px/16px var(--font-sans);
+  text-align: center;
+  pointer-events: none;
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  width: min(360px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px 6px 6px;
+}
+.notif-clear {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 13px/18px var(--font-sans);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.notif-clear:hover { background: var(--surface-2); color: var(--text); }
+.notif-list { display: flex; flex-direction: column; gap: 2px; }
+.notif-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.notif-item.unread { background: var(--accent-soft); }
+.notif-item .n-time { font-size: 11px; line-height: 14px; color: var(--muted); }
+.notif-empty { padding: var(--space-3); color: var(--muted); font-size: 14px; line-height: 20px; }
+.toast-action {
+  flex: none;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: 500 13px/1 var(--font-sans);
+  cursor: pointer;
+}
+.toast-action:hover { background: var(--surface-3); }
+@media (max-width: 719px) {
+  /* На телефоне тост во всю ширину с полями и над таб-баром с мини-плеером:
+     transform-центрирование могло вывести его за край (issue #62). */
+  .toast {
+    left: var(--space-4);
+    right: var(--space-4);
+    transform: none;
+    flex-wrap: wrap;
+    bottom: calc(var(--tabbar-h) + 84px + env(safe-area-inset-bottom, 0px));
+  }
+}
+video::cue {
+  color: #fff;
+  background-color: #000c;
+}
+
+.virtual-inner[data-catalogue="true"] { display: grid; gap: 0 12px; }
+.catalogue-card {
+  height: 260px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-1);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.catalogue-card:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.catalogue-poster {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 210px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.catalogue-poster img { width: 100%; height: 100%; object-fit: contain; }
+/* Скачивание передачи из архива (#359): прогресс и отмена в «Записях». */
+.download-status { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); }
+.download-status[hidden] { display: none; }
+.download-status-label { flex: 1 1 auto; min-width: 0; }
+.download-status progress { flex: 0 1 160px; min-width: 80px; accent-color: var(--accent); }
+.download-cancel { flex: none; font: inherit; min-height: 44px; }
+.download-cancel:focus-visible, .programme-download.downloading:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Карточка передачи (#363): поверх гайда, тот же язык оверлеев. */
+.programme-overlay { position: fixed; inset: 0; z-index: 95; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
+.programme-overlay[hidden] { display: none; }
+.programme-card { width: min(520px, 100%); max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); background: var(--surface-1); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); }
+.programme-card-title { margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; overflow-wrap: anywhere; }
+.programme-card-meta { color: var(--muted); font-size: 13px; line-height: 18px; }
+.programme-card-desc { margin: 0; white-space: pre-line; overflow-wrap: anywhere; font-size: 15px; line-height: 22px; }
+.programme-card-desc[hidden] { display: none; }
+.programme-card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.programme-card-actions .btn { margin: 0; font: inherit; min-height: 44px; }
+.programme-card-actions .btn:focus-visible, .programme-info:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.programme-info { flex: none; width: 44px; height: 44px; }
+.programme-watch { flex: none; }
+
+/* Android TV и web ?tv=1: управление пультом и читаемый фокус с расстояния. */
+html[data-tv="true"] :focus {
+  outline: 4px solid var(--accent);
+  outline-offset: 4px;
+}
+html[data-tv="true"] .numeric-zap { font-size: 96px; padding: 20px 32px; }
+.tv-paused-info {
+  position: absolute;
+  inset: 22% 12%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  padding: 32px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, .86);
+  color: white;
+  font-size: clamp(24px, 2.5vw, 42px);
+  pointer-events: none;
+  z-index: 2;
+}
+.tv-paused-info[hidden] { display: none; }
+.tv-paused-info p { margin: 0; }
+
+.channel-source { max-width: 100px; flex-shrink: 0; }
+/* Ссылка на поток и внешний плеер в редакторе канала (#372). */
+.channel-stream-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.channel-stream-actions .btn { font: inherit; min-height: 44px; }
+.channel-stream-actions .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

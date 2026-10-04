@@ -438,7 +438,8 @@ iptv-hub/
 │   ├── gestures.ts         # свайпы и двойной тап на кадре
 │   ├── components.css      # КОПИЯ bundle.css дизайн-системы (править в системе)
 │   ├── types.ts            # Channel, PlaylistSnapshot, EpgProgramme, NowNext
-│   └── style.css           # токены v2 + раскладка, mobile-first, safe-area
+│   ├── styles/*.css        # секции стилей: tokens, layout, settings, player, overlays (#380)
+│   └── style.css           # точка входа: @import components.css и секций (#380)
 ├── tests/                  # vitest: 20 файлов, node env, без DOM и сети
 ├── .github/workflows/ci.yml  # PR: build+test; push main: + deploy Pages
 ├── vite.config.ts          # vitest config (environment: node)
@@ -962,6 +963,11 @@ APK обновляется вручную через GitHub Releases; натив
   проверяет строковые литералы целиком, а не построчно.
 - `@import` компонентов обязан быть **первой строкой** `style.css`: иначе
   браузер молча его отбрасывает и стили не применяются при зелёных тестах.
+- **Секции стилей (#380).** `style.css` — только точка входа: `@import`
+  components.css, затем `src/styles/tokens|layout|settings|player|overlays.css`
+  в порядке каскада. Новые правила — в подходящую секцию; относительные
+  `url()` в секциях пишутся от `src/styles/` (шрифты — `../fonts/`), тест
+  проверяет их существование. Тесты читают стили склейкой `readAppStyles()`.
 
 - **Только токены v2.** Псевдонимов v1 (`--bg2`, `--card`, `--accent2`,
   `--overlay`, `--bar`, `--radius`) больше нет: поверхности — `--surface-1…3`,
