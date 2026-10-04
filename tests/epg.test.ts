@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseEpg, parseXmltvDate } from "../src/epg";
+import { getNowNext, parseEpg, parseXmltvDate } from "../src/epg";
+import { parseM3U } from "../src/m3u";
 import type { Channel } from "../src/types";
 
 const SAMPLE = `<?xml version="1.0" encoding="UTF-8"?>
@@ -65,5 +66,33 @@ describe("channel key matching", () => {
     };
     // channelKey lowercases: id:cnn.ru — тот же ключ, что и в EPG
     expect(c.tvgId!.toLowerCase()).toBe("cnn.ru");
+  });
+});
+
+// #348: канал без tvg-id матчится по normalizedName, а EPG индексирует
+// display-name и через normalizeName — ключи обеих сторон совпадают.
+describe("name fallback through normalizeName (#348)", () => {
+  const xmltv = (name: string): string => `<tv>
+    <channel id="1"><display-name>${name}</display-name></channel>
+    <programme start="20260928120000 +0000" stop="20260928130000 +0000" channel="1"><title>Матч</title></programme>
+  </tv>`;
+  const at = new Date("2026-09-28T12:30:00Z");
+
+  it("«Футбол HD» без tvg-id получает передачу из EPG «Футбол HD»", () => {
+    const snap = parseM3U("#EXTM3U\n#EXTINF:-1,Футбол HD\nhttps://x/f.m3u8\n");
+    const ch = snap.channels[0]!;
+    expect(ch.tvgId).toBeNull();
+    expect(getNowNext(parseEpg(xmltv("Футбол HD")), ch, snap, at).now?.title).toBe("Матч");
+  });
+
+  it("эмодзи в имени канала («⚡ Спорт») матчится на EPG «Спорт»", () => {
+    const snap = parseM3U("#EXTM3U\n#EXTINF:-1,⚡ Спорт\nhttps://x/s.m3u8\n");
+    expect(getNowNext(parseEpg(xmltv("Спорт")), snap.channels[0]!, snap, at).now?.title).toBe("Матч");
+  });
+
+  it("точное имя по-прежнему индексируется как есть", () => {
+    const epg = parseEpg(xmltv("Футбол HD"));
+    expect(epg.get("name:футбол hd")).toHaveLength(1);
+    expect(epg.get("name:футбол")).toHaveLength(1);
   });
 });

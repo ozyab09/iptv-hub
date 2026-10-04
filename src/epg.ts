@@ -1,20 +1,11 @@
 import { type Language } from "./i18n";
 import type { Channel, EpgProgramme, NowNext, PlaylistSnapshot } from "./types";
 import { withSourceTimeout } from "./source-timeout";
+import { normalizeName } from "./m3u";
 
 /** Идентификатор канала для матчинга с EPG (tvg-id, иначе нормализованное имя). */
 function channelKey(c: Channel): string {
   return c.tvgId ? `id:${c.tvgId.toLowerCase()}` : `name:${c.normalizedName}`;
-}
-
-/** Сравнение «tvg-id точное, иначе имя» — та же логика, что в normalizeName. */
-export function matchesEpg(
-  channelName: string,
-  epgDisplayName: string,
-): boolean {
-  return (
-    channelName.trim().toLowerCase() === epgDisplayName.trim().toLowerCase()
-  );
 }
 
 /** Загрузка и стриминговый разбор XMLTV (обычный или .gz). */
@@ -69,8 +60,9 @@ export async function loadEpg(
 }
 
 /**
- * Разбор XMLTV. Ключ — lowercase tvg-id ИЛИ lowercase display-name канала:
- * матчинг делается на обоих уровнях, чтобы работать и с плейлистами без tvg-id.
+ * Разбор XMLTV. Ключ — lowercase tvg-id ИЛИ lowercase display-name канала
+ * (как есть и нормализованный normalizeName): матчинг делается на обоих
+ * уровнях, чтобы работать и с плейлистами без tvg-id.
  */
 export function parseEpg(xml: string): Map<string, EpgProgramme[]> {
   const byKey = new Map<string, EpgProgramme[]>();
@@ -111,8 +103,14 @@ export function parseEpg(xml: string): Map<string, EpgProgramme[]> {
 
     // индексируем и по id, и по всем известным именам канала
     push(byKey, `id:${chId.toLowerCase()}`, prog);
+    // Имя — и как есть, и через normalizeName(): канал без tvg-id ищется
+    // по своему normalizedName («Футбол HD» → «футбол», #348).
     const display = idToName.get(chId.toLowerCase());
-    if (display) push(byKey, `name:${display}`, prog);
+    if (display) {
+      push(byKey, `name:${display}`, prog);
+      const normalized = normalizeName(display);
+      if (normalized && normalized !== display) push(byKey, `name:${normalized}`, prog);
+    }
   }
 
   return byKey;
