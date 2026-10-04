@@ -21,6 +21,10 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+
+import java.util.Collections;
 
 /**
  * IPTV Hub как самостоятельное приложение: web-сборка зашита в APK
@@ -87,6 +91,17 @@ public class MainActivity extends AppCompatActivity {
 
         applyEdgeToEdge();
         reserveNavigationInset(root);
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(webView, "IPTVHubStatusBar",
+                    Collections.singleton("https://" + LOCAL_HOST),
+                    (view, message, origin, isMainFrame, reply) -> {
+                        if (!isMainFrame) return;
+                        String appearance = message.getData();
+                        if (!"light".equals(appearance) && !"dark".equals(appearance)) return;
+                        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                                .setAppearanceLightStatusBars("light".equals(appearance));
+                    });
+        }
         webView.loadUrl(START_URL);
     }
 
@@ -110,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         WindowInsetsControllerCompat controller =
                 WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        // Иконки баров всегда светлые: кадр плеера тёмный в любой теме.
+        // До загрузки темы — светлые иконки; затем статус-бар задаёт web-интерфейс.
         controller.setAppearanceLightStatusBars(false);
         controller.setAppearanceLightNavigationBars(false);
         controller.show(WindowInsetsCompat.Type.systemBars());

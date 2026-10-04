@@ -57,6 +57,17 @@ export function applyTheme(theme: Theme, doc: Document = document): void {
   doc.documentElement.dataset.theme = theme;
   doc.documentElement.style.colorScheme = theme;
   syncThemeColor(doc);
+  syncStatusBarAppearance(doc);
+}
+
+/** Локальная Android-обёртка: тёмный кадр развёрнутого плеера требует светлых иконок. */
+export function syncStatusBarAppearance(doc: Document = document): void {
+  const view = doc.defaultView as (Window & { IPTVHubStatusBar?: { postMessage(value: string): void } }) | null;
+  if (!view?.IPTVHubStatusBar) return;
+  const playerPage = view.innerWidth <= 1023 &&
+    doc.getElementById("app")?.classList.contains("watch") &&
+    doc.getElementById("player-bar")?.classList.contains("open");
+  view.IPTVHubStatusBar.postMessage(doc.documentElement.dataset.theme === "light" && !playerPage ? "light" : "dark");
 }
 
 /**

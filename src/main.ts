@@ -126,6 +126,7 @@ import { mediaKeyAction, type MediaKeyAction } from "./media-keys";
 import { getNetworkConnection, neighborIndex, Player } from "./player";
 import {
   applyTheme,
+  syncStatusBarAppearance,
   clearTheme,
   resolveTheme,
   saveTheme,
@@ -1296,6 +1297,7 @@ function renderVirtualWindow(): void {
 // пересчитываем окно, иначе спейсер остаётся со старой высотой и карточки
 // наезжают друг на друга (issue #62).
 window.addEventListener("resize", () => {
+  syncStatusBarAppearance();
   if (playerScreen.hidden) return;
   renderVirtualWindow();
 });
@@ -2616,6 +2618,7 @@ function offerDownload(blob: Blob, name: string): void {
  */
 function setWatching(on: boolean): void {
   appEl.classList.toggle("watch", on);
+  syncStatusBarAppearance();
 }
 
 // ---------- Кнопка «назад» и стек оверлеев (FR-6) ----------
@@ -3771,6 +3774,7 @@ function togglePlayerPage(open?: boolean): void {
   const next = open ?? !playerBar.classList.contains("open");
   if (!next) cancelNumericZap();
   playerBar.classList.toggle("open", next);
+  syncStatusBarAppearance();
 }
 
 // Тап по свёрнутому плееру разворачивает его в страницу. Кнопки внутри
