@@ -1,4 +1,5 @@
 import "./style.css";
+import { parseExternalSubtitles, parseSubtitlePreference, subtitlePreferenceKey, type SubtitleCue } from "./external-subtitles";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
 import { channelHealthKey, parseChannelHealth, serializeChannelHealth, markChannelFailure, clearChannelFailure, isChannelRecovered, type ChannelHealth, type ChannelFailure } from "./channel-health";
 import { createGroupPreferencesUi } from "./group-preferences-ui";
@@ -658,6 +659,14 @@ const qualityMenuUi = createQualityMenu({
   language: () => currentLanguage,
   player,
   isRecordingPlayback: () => player.isRecordingPlayback,
+  canLoadExternalSubtitles: () => !!player.currentStreamUrl && !playerBar.hidden &&
+    (player.isRecordingPlayback || archivePlayback !== null || (Number.isFinite(videoEl.duration) && videoEl.duration > 0)),
+  loadExternalSubtitles: () => chooseExternalSubtitles(),
+  selectExternalSubtitles: (enabled) => {
+    player.setExternalSubtitleEnabled(enabled);
+    const subtitle = player.externalSubtitle;
+    if (currentRecordingId && subtitle) saveSubtitlePreference(currentRecordingId, subtitle.name, enabled);
+  },
   nodes: {
     qualityWrap,
     qualityBtn,
@@ -793,7 +802,7 @@ $("language-seg").addEventListener("click", (event) => {
   renderRecordings();
   refreshNowFav();
   renderRecButton(isRecordingNow());
-  if (!player.isRecordingPlayback) qualityMenuUi.refreshQualityUi();
+  qualityMenuUi.refreshQualityUi();
   refreshScrub();
   renderSchedule();
   if (!guideOverlay.hidden) renderGuide();
@@ -1560,6 +1569,7 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   healthAttempt = archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
   diagnosticsFor = null;
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
+  currentRecordingId = null;
   refreshPlaybackControls();
   if (refused) {
     showToast(refused);
@@ -2207,6 +2217,50 @@ function createRecorderAdapter(stream: MediaStream, mimeType: string): RecorderL
 // показывается в блоке «Записанные эфиры» (рядом с «Продолжить»), клик —
 // воспроизведение из приложения. Скачивание — кнопкой в карточке.
 let recordingsFs: RecordingsFs | null = null;
+let currentRecordingId: string | null = null;
+let subtitleRequest = 0;
+const recordingSubtitles = new Map<string, { name: string; cues: SubtitleCue[] }>();
+
+function saveSubtitlePreference(id: string, name: string, enabled: boolean): void {
+  try { localStorage.setItem(subtitlePreferenceKey(id), JSON.stringify({ name, enabled })); }
+  catch { /* Выбранная дорожка остаётся в памяти. */ }
+}
+
+function chooseExternalSubtitles(recording?: RecordingMeta): void {
+  const request = ++subtitleRequest;
+  const source = player.currentStreamUrl;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".srt,.vtt";
+  input.hidden = true;
+  input.dataset.externalSubtitles = "";
+  document.body.append(input);
+  input.addEventListener("cancel", () => input.remove(), { once: true });
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    input.remove();
+    if (!file) return;
+    void (async () => {
+      const cues = /\.(srt|vtt)$/i.test(file.name) ? parseExternalSubtitles(await file.text()) : [];
+      if (request !== subtitleRequest || source !== player.currentStreamUrl) return;
+      if (!cues.length) { showToast(tr("player.subtitlesInvalid")); return; }
+      if (recording) {
+        const media = await recordingsFs?.read(storedRecordingName(recording.id, recording.ext));
+        if (request !== subtitleRequest || source !== player.currentStreamUrl || !loadRecordings(localStorage).some((item) => item.id === recording.id)) return;
+        if (!media) { showToast(tr("error.recordMissing")); return; }
+        playRecording(media, recording);
+      } else if (source !== player.currentStreamUrl || !source) return;
+      const id = recording?.id ?? (player.isRecordingPlayback ? currentRecordingId : null);
+      player.loadExternalSubtitles(cues, file.name);
+      if (id) {
+        recordingSubtitles.set(id, { name: file.name, cues });
+        saveSubtitlePreference(id, file.name, true);
+      }
+      qualityMenuUi.refreshQualityUi();
+    })().catch(() => { if (request === subtitleRequest) showToast(tr("player.subtitlesInvalid")); });
+  }, { once: true });
+  input.click();
+}
 try {
   recordingsFs = createRecordingsFs();
 } catch {
@@ -2318,6 +2372,16 @@ function renderRecordings(): void {
 
     const actions = document.createElement("div");
     actions.className = "recording-actions";
+    const subtitles = document.createElement("button");
+    subtitles.type = "button";
+    subtitles.className = "recording-act";
+    subtitles.dataset.recordingSubtitles = "";
+    const preference = parseSubtitlePreference(localStorage.getItem(subtitlePreferenceKey(r.id)));
+    subtitles.title = preference ? tr("player.subtitlesLastFile", { name: preference.name }) : tr("player.subtitlesFile");
+    subtitles.setAttribute("aria-label", tr("player.subtitlesFile"));
+    subtitles.textContent = "CC";
+    subtitles.addEventListener("click", () => chooseExternalSubtitles(r));
+    actions.append(subtitles);
     const download = document.createElement("button");
     download.type = "button";
     download.className = "recording-act";
@@ -2342,6 +2406,14 @@ function renderRecordings(): void {
       if (!recordingsFs) return;
       void recordingsFs.remove(storedRecordingName(r.id, r.ext)).then(() => {
         removeRecording(typeof localStorage !== "undefined" ? localStorage : null, r.id);
+        recordingSubtitles.delete(r.id);
+        localStorage.removeItem(subtitlePreferenceKey(r.id));
+        if (currentRecordingId === r.id) {
+          ++subtitleRequest;
+          currentRecordingId = null;
+          player.loadExternalSubtitles([], "");
+          qualityMenuUi.refreshQualityUi();
+        }
         renderRecordings();
       });
     });
@@ -2360,12 +2432,19 @@ function playRecording(file: File, r: RecordingMeta): void {
   lastPlayed = null; // позиция записи не должна сохраняться под URL прошлого канала
   archivePlayback = null;
   const refused = player.playRecording(file, r.ext, r.durationSec);
+  currentRecordingId = r.id;
   refreshPlaybackControls();
   if (refused) {
     showToast(refused);
     return;
   }
   playerBar.hidden = false;
+  const subtitles = recordingSubtitles.get(r.id);
+  if (subtitles) {
+    const preference = parseSubtitlePreference(localStorage.getItem(subtitlePreferenceKey(r.id)));
+    player.loadExternalSubtitles(subtitles.cues, subtitles.name, preference?.enabled ?? true);
+  }
+  qualityMenuUi.refreshQualityUi();
   setWatching(true);
   // Заголовок сейчас про запись, а не про канал: сбрасываем канал,
   // категорию и звезду, потом пишем своё (#253).
@@ -2490,6 +2569,22 @@ qualityBtn.addEventListener("click", (event) => {
   if (qualityBtn.disabled) return;
   if (qualityMenu.hidden) openOverlay("quality");
   else closeOverlay("quality");
+});
+subtitleBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  subtitleMenu.hidden = !subtitleMenu.hidden;
+  subtitleBtn.setAttribute("aria-expanded", String(!subtitleMenu.hidden));
+});
+document.addEventListener("click", (event) => {
+  if (subtitleWrap.contains(event.target as Node)) return;
+  subtitleMenu.hidden = true;
+  subtitleBtn.setAttribute("aria-expanded", "false");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || subtitleMenu.hidden) return;
+  subtitleMenu.hidden = true;
+  subtitleBtn.setAttribute("aria-expanded", "false");
+  subtitleBtn.focus();
 });
 qualityMenu.addEventListener("click", (event) => {
   if ((event.target as HTMLElement).closest(".menu-item")) closeOverlay("quality");
@@ -3473,6 +3568,7 @@ for (const ev of ["pointermove", "pointerdown", "focusin"] as const) {
 videoEl.addEventListener("pause", wakeControls);
 videoEl.addEventListener("loadedmetadata", () => refreshPlayerStatus());
 videoEl.addEventListener("durationchange", () => refreshPlayerStatus());
+videoEl.addEventListener("loadedmetadata", () => qualityMenuUi.refreshQualityUi());
 videoEl.addEventListener("play", wakeControls);
 // Меню компактного кадра выходит за его границы: после выбора пункта
 // оставляем обычные 3 секунды, чтобы вернуться к кнопке качества (#226).
