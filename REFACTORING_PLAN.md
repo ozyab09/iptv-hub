@@ -126,6 +126,25 @@
 5. **`views.ts`/`ui-classes.ts`/`refresh.ts`** — уже чистые; только держать
    синхронными с CSS (тесты уже следят).
 
+### P1: браузерное покрытие после выноса (#382)
+
+Все перечисленные спеки входят в CI. `p1-module-boot.spec.ts` проверяет
+инициализацию из сохранённых экранов, повторную загрузку без pageerror/TDZ
+и настоящие storage-события между двумя вкладками.
+
+| Модуль | Проверка пользовательского действия |
+| --- | --- |
+| `screenshot-ui.ts` | `screenshot-hotkey.spec.ts`: один PNG по S, ввод в поиске |
+| `recordings-ui.ts` | `recording-card.spec.ts`, `recording-playback.spec.ts`: действия и воспроизведение |
+| `recording-capture.ts` | `volume-boost.spec.ts`: канвас-запись реальных кадров/звука и просмотр результата |
+| `channel-list-ui.ts` | `channel-scroll.spec.ts`, `channel-card-a11y.spec.ts`: виртуализация и фокус |
+| `guide-ui.ts` | `programme-card.spec.ts`, `timeline-guide.spec.ts`: карточка, список и сетка |
+| `scrub-ui.ts` | `recording-playback.spec.ts`: синхронные полосы, pointer и клавиши |
+| `backup-ui.ts` | `backup-v2.spec.ts`, `backup-local.spec.ts`: экспорт/импорт и reload |
+| `cross-tab.ts` | `p1-module-boot.spec.ts`, `parental-pin.spec.ts`: тема, избранное и PIN из другой вкладки |
+
+Новый вынесенный блок добавляется в эту таблицу вместе со спекой его действия.
+
 ## Инварианты (не менять в любом PR)
 
 - Zero backend, privacy-first, чистые модули без DOM/fetch.
