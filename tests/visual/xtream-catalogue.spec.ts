@@ -83,7 +83,14 @@ for (const width of [390, 1440]) {
     if (width < 1024) await page.locator("#player-bar").click();
     await expect(page.locator("#btn-next-episode")).toBeVisible();
     if (width === 1440) await page.locator("#video").dispatchEvent("ended");
-    else await page.locator("#btn-next-episode").click();
+    else {
+      // locator.click() в Firefox глушится hit-target interceptor'ом Playwright
+      // для этой динамически показанной кнопки (#441): при «успешном» клике
+      // события ввода не доходят до страницы. Клик по координатам — реальные
+      // trusted-события; если кнопку перекрыло, клик промахнётся и тест упадёт.
+      const box = (await page.locator("#btn-next-episode").boundingBox())!;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    }
     await expect.poll(() => page.locator("#video").evaluate((node) => {
       const video = node as HTMLVideoElement;
       return { source: video.currentSrc, ready: video.readyState >= 2, width: video.videoWidth, error: video.error?.message ?? null };
