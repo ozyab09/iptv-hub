@@ -51,6 +51,11 @@
    `renderChannelCard`, `renderProgrammeMatch`) → `channel-list-ui.ts`.
    Самый крупный и рискованный блок: прокрутка, фокус, drag&drop избранного,
    бейджи. Делать последним из P1, с визуальными спеками до/после.
+   **Сделано в #367:** `channel-list-ui.ts` — виртуальное окно, карточка
+   канала, строка результата передачи, логотип, фокус; константы
+   `CHANNEL_ROW_HEIGHT`/`CHANNEL_COLUMNS` переехали туда (тест сверяет с CSS).
+   Отбор строк (`renderChannels`: раздел, категория, поиск, избранное)
+   зависит от состояния main.ts и остался там.
 5. **Гайд/расписание** (~2767–2984: `renderGuide`, `programmeRow`,
    `renderSchedule`, `channelProgrammes`) → дорасширение существующего
    `timeline-guide-ui.ts` (или соседний `guide-ui.ts`); `programmeRow()` —
