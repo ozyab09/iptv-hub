@@ -115,3 +115,13 @@ describe("decodeEntities robustness (#352)", () => {
     expect(title("Tom &amp; Jerry &#39;s")).toBe("Tom & Jerry 's|Next");
   });
 });
+
+// #361: имя атрибута programme читается от границы — vps-start/pdc-start
+// не подменяют start, xchannel не подменяет channel.
+describe("programme attributes are matched by full name (#361)", () => {
+  it("vps-start и pdc-start перед start не подменяют время", () => {
+    const epg = parseEpg(`<tv><programme vps-start="20260928090000 +0000" pdc-start="20260928080000 +0000" start="20260928120000 +0000" stop="20260928130000 +0000" xchannel="wrong" channel="right"><title>Show</title></programme></tv>`);
+    expect(epg.get("id:wrong")).toBeUndefined();
+    expect(epg.get("id:right")?.[0]?.start).toBe("2026-09-28T12:00:00.000Z");
+  });
+});

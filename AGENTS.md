@@ -578,6 +578,10 @@ UI редактирует логин/пароль отдельно (password inp
 Http-URL публичных хостов отбрасываются с подсчётом в
 `PlaylistSnapshot.droppedHttp`.
 
+**Атрибуты** `#EXTINF` и `<programme>` читаются по полному имени от границы
+(`extractAttr`, `attr` в `parseEpg`): `xtvg-id`, `vps-start`, `pdc-start`
+не подменяют `tvg-id`/`start` (#361).
+
 **EPG:** XMLTV. Матчинг канала: сначала по `tvg-id` (lowercase, ключ
 `id:...`), при отсутствии — по нормализованному имени (ключ `name:...`,
 дисплей-неймы из `<channel><display-name>` индексируются lowercase как есть
