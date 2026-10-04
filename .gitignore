@@ -17,3 +17,6 @@ android/app/local.properties
 *.jks
 *.keystore
 *.apk
+
+# Бинарники компаньона (#463)
+companion/iptv-hub-companion*

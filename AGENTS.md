@@ -825,6 +825,23 @@ Playwright: CI-матрица `chromium`/`firefox-media` с `fail-fast: false`:
 сайт отдаёт 404, и TWA теряет trusted fullscreen. Проверять после деплоя:
 `curl -sI https://ozyab09.github.io/iptv-hub/.well-known/assetlinks.json` → 200.
 
+## Компаньон для десктопа (#452, #463)
+
+`companion/` — отдельный Go-модуль (не входит в веб-бандл, зависимости
+`fyne.io/systray` и `golang.org/x/sys` касаются только его). Режим 2: сайт на
+GitHub Pages обращается к `http://127.0.0.1:47800` (loopback браузеры считают
+безопасным, mixed content не срабатывает). `proxy/` — `/health`, `/pair`
+(токен только для разрешённого Origin), `/proxy/<token>/<scheme>/<authority>…`;
+CORS только для Pages и `-origin`, ответ на preflight Private Network Access,
+токен обязателен (защита от relay через `<video>`/`<img>` чужих вкладок),
+запрет loopback/приватных/link-local/CGNAT адресов назначения после DNS
+(`guard.go`, SSRF и rebinding), до 5 редиректов, `Range`, статус провайдера,
+переписывание HLS как у `HlsRewriter` в APK. `config/` — токен в каталоге
+пользователя (0600). `autostart/` — Windows Run-ключ, macOS LaunchAgent,
+Linux XDG autostart; включается при первом запуске (кроме `-headless`).
+Трей: статус, «Открыть IPTV Hub» (`?companion=1`), «Запускать при входе»,
+«Выход»; второй запуск открывает сайт и выходит. Тесты: `go test ./...`.
+
 ## Android: локальное приложение (#160, #246)
 
 **Прокси приложения (#452).** Страница на `https://appassets.androidplatform.net`
