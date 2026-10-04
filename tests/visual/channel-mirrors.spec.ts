@@ -66,6 +66,7 @@ test("exhausted mirrors show retry and manual retry starts with the primary URL"
 test("a failed catchup request never switches to a live mirror", async ({ page }) => {
   const requests = await openFixture(page, '#EXTINF:-1 tvg-id="a" catchup-days="2" catchup-source="https://fixture.test/archive.mp4?utc={utc}",Alpha\nhttps://fixture.test/good-one.mp4 | https://fixture.test/good-two.mp4\n', true);
   await page.locator("#search").fill("Archive show");
+  await expect(page.locator("#channel-list .channel-card")).toContainText("Archive show");
   await expect(page.locator("#channel-list .channel-card")).toHaveCount(1);
   await page.locator("#channel-list .channel-card").click();
   await expect(page.locator("#btn-retry")).toBeVisible();
