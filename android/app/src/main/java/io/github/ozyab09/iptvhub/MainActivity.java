@@ -67,6 +67,8 @@ public class MainActivity extends AppCompatActivity {
 
     /** Плейлист из интента больше этого не читаем: это уже не M3U, а ошибка. */
     private static final int MAX_PLAYLIST_BYTES = 20 * 1024 * 1024;
+    /** Интент «извне» уже обработан этой активностью. */
+    private static final String EXTRA_HANDLED = "io.github.ozyab09.iptvhub.INCOMING_HANDLED";
     private static final Pattern URL_IN_TEXT = Pattern.compile("https?://[^\\s<>\"']+");
 
     private WebView webView;
@@ -161,10 +163,7 @@ public class MainActivity extends AppCompatActivity {
                         if (isMainFrame) openInExternalPlayer(message.getData());
                     });
         }
-        String startUrl = startUrlFor(getIntent());
-        // Интент обработан: пересоздание активности не импортирует файл повторно.
-        setIntent(new Intent(Intent.ACTION_MAIN));
-        webView.loadUrl(startUrl);
+        webView.loadUrl(startUrlFor(getIntent()));
     }
 
     @Override
@@ -188,7 +187,11 @@ public class MainActivity extends AppCompatActivity {
      */
     @NonNull
     private String startUrlFor(@Nullable Intent intent) {
-        if (intent == null) return START_URL;
+        // Пересоздание активности не импортирует тот же файл повторно. Интент
+        // помечаем extra-флагом, а не подменяем: ActivityScenario и система
+        // узнают активность по исходному интенту (#459).
+        if (intent == null || intent.getBooleanExtra(EXTRA_HANDLED, false)) return START_URL;
+        intent.putExtra(EXTRA_HANDLED, true);
         String link = null;
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             String text = intent.getStringExtra(Intent.EXTRA_TEXT);
