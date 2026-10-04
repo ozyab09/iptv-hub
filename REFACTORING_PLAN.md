@@ -43,6 +43,9 @@
    `canvasHasFrames`, `captureFromCanvas`, `createRecorderAdapter`)
    → `recording-capture.ts`. Дублируется с `programme-downloader.ts` и
    `scheduled-recorder.ts` — см. P2.4.
+   **Сделано в #366:** стратегии element → canvas-audio → canvas-silent,
+   проба черноты канваса и адаптер MediaRecorder в модуле; остановка сессии
+   при черноте — колбэк `onNoFrames`.
 4. **Список каналов и виртуализация** (~1202–1520: `ensureVirtualShell`,
    `renderVirtualWindow`, `renderChannels`, `renderChannelLogo`,
    `renderChannelCard`, `renderProgrammeMatch`) → `channel-list-ui.ts`.

@@ -31,6 +31,7 @@ import {
   starClass,
 } from "./ui-classes";
 import { createRecordingSink } from "./recording-sink";
+import { createRecorderAdapter, createRecordingCapture } from "./recording-capture";
 import { createSegmentSession } from "./segment-recorder";
 import {
   isMixedContent,
@@ -132,8 +133,6 @@ import {
 import {
   canRecord,
   createRecordingSession,
-  type RecorderLike,
-  type RecordingSource,
 } from "./recorder";
 import {
   buildCatchupUrl,
@@ -2097,199 +2096,17 @@ function stopIfRecording(): void {
 }
 
 // ---- Запись эфира (MediaRecorder поверх captureStream) ----
-// Жизненный цикл живёт в recorder.ts (createRecordingSession) — здесь только
-// браузерная обвязка: источник кадров, адаптер MediaRecorder, сохранение файла.
-let recordRaf = 0;
-/**
- * Способы получить стрим, от лучшего к самому неприхотливому. Сорвавшаяся
- * запись сдвигает указатель: на мобильном Firefox захват элемента отдаёт обе
- * дорожки, но энкодер через секунду падает с UnknownError, и единственный
- * способ это пережить — попробовать следующий вариант.
- */
-const SOURCE_STRATEGIES = ["element", "canvas-audio", "canvas-silent"] as const;
-let sourceStrategy = 0;
-/** Каким путём пошла запись — показывается тостом, консоли на телефоне нет. */
-let recordPathNote = "";
-
-/** captureStream у <video> нестандартен: в Gecko он зовётся mozCaptureStream. */
-type CapturableVideo = HTMLVideoElement & {
-  captureStream?: () => MediaStream;
-  mozCaptureStream?: () => MediaStream;
-};
-
-/**
- * Источник записи: сначала прямой захват с <video> — он отдаёт видео и звук
- * одним стримом, без канваса и rAF. Не всякий браузер умеет это поверх MSE,
- * поэтому при неудаче откатываемся на отрисовку кадров в канвас (без звука).
- */
-function createRecordSource(): RecordingSource {
-  if (SOURCE_STRATEGIES[sourceStrategy] === "element") {
-    const direct = captureFromVideo();
-    if (direct) return direct;
-    sourceStrategy = 1; // захвата элемента нет — дальше только канвас
-  }
-  return captureFromCanvas(SOURCE_STRATEGIES[sourceStrategy] === "canvas-audio");
-}
-
-/**
- * Прямой захват элемента. null — браузер его не умеет для текущего источника.
- *
- * mozCaptureStream — не запасной путь, а устаревший алиас того же API, поэтому
- * берётся ровно один из них: вторая попытка на том же элементе трогала бы уже
- * созданный захват.
- */
-function captureFromVideo(): RecordingSource | null {
-  const v = videoEl as CapturableVideo;
-  const capture = v.captureStream ?? v.mozCaptureStream;
-  if (typeof capture !== "function") return null;
-  try {
-    const stream = capture.call(v);
-    const [track] = stream.getVideoTracks();
-    if (!track || track.readyState !== "live") {
-      stream.getTracks().forEach((t) => t.stop());
-      console.debug("[iptv-hub] rec: захват с <video> отдал мёртвую дорожку");
-      return null;
-    }
-    const audio = stream.getAudioTracks().length;
-    console.debug(`[iptv-hub] rec: захват с <video>, video=1 audio=${audio}`);
-    recordPathNote = audio > 0 ? tr("record.withAudio") : tr("record.noAudio");
-    return { stream };
-  } catch (e) {
-    console.debug("[iptv-hub] rec: захват с <video> не удался:", e);
-    return null;
-  }
-}
-
-/**
- * Аудиодорожка текущего видео через Web Audio — так звук добывается там, где
- * захват элемента не работает (мобильный Firefox).
- *
- * null означает, что звука не будет: нет Web Audio, либо поток кросс-доменный
- * без CORS — тогда граф по стандарту отдаёт тишину. Для HLS через hls.js это
- * не проблема: источник элемента — свой blob: от MediaSource.
- */
-function captureAudioTrack(): { track: MediaStreamTrack; release: () => void } | null {
-  return player.captureAudioTrack();
-}
-
-/**
- * Фолбэк: картинка рисуется на канвас, звук добирается через Web Audio.
- * Работает там, где захват элемента невозможен, ценой rAF-цикла — то есть
- * записи нужна вкладка на переднем плане.
- */
-/**
- * Есть ли на канвасе непустые пиксели. null — прочитать не удалось
- * (кросс-доменное видео портит канвас, и getImageData бросает).
- */
-function canvasHasFrames(
-  canvas: HTMLCanvasElement,
-  ctx: CanvasRenderingContext2D,
-): boolean | null {
-  const w = Math.min(64, canvas.width);
-  const h = Math.min(64, canvas.height);
-  try {
-    const px = ctx.getImageData((canvas.width - w) >> 1, (canvas.height - h) >> 1, w, h).data;
-    let max = 0;
-    for (let i = 0; i < px.length; i += 4) {
-      max = Math.max(max, px[i] ?? 0, px[i + 1] ?? 0, px[i + 2] ?? 0);
-    }
-    console.debug(`[iptv-hub] rec: проба канваса max=${max}`);
-    return max > 0;
-  } catch (e) {
-    console.debug("[iptv-hub] rec: канвас испорчен CORS, проба невозможна:", e);
-    return null;
-  }
-}
-
-function captureFromCanvas(withAudio: boolean): RecordingSource {
-  console.debug(`[iptv-hub] rec: запасной путь — канвас, звук=${withAudio}`);
-  const canvas = document.createElement("canvas");
-  canvas.width = videoEl.videoWidth || 1280;
-  canvas.height = videoEl.videoHeight || 720;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("canvas 2d недоступен");
-  let disposed = false;
-  // requestAnimationFrame вместо setInterval: Firefox/Zen троттлят setInterval
-  // в фоне до 1/с, и captureStream(25) перестаёт получать кадры.
-  const drawFrame = (): void => {
-    if (disposed) return;
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-    recordRaf = window.requestAnimationFrame(drawFrame);
-  };
-  drawFrame();
-  let stream: MediaStream;
-  try {
-    stream = canvas.captureStream(25);
-  } catch (e) {
-    // иначе rAF-цикл остался бы крутиться без владельца
-    disposed = true;
-    window.cancelAnimationFrame(recordRaf);
-    recordRaf = 0;
-    throw e;
-  }
-  // Firefox на Android держит декодированное видео в аппаратной поверхности,
-  // недоступной канвасу: drawImage молча рисует черноту, звук при этом идёт.
-  // Без проверки пользователь записал бы получасовой чёрный экран.
-  // Две пробы с разносом: одиночный тёмный кадр не должен считаться отказом.
-  let blackStrikes = 0;
-  const probeCanvas = (): void => {
-    if (disposed) return;
-    const lit = canvasHasFrames(canvas, ctx);
-    if (lit === null || lit) return; // прочитать не смогли или кадры есть
-    if (++blackStrikes < 2) {
-      window.setTimeout(probeCanvas, 1500);
-      return;
-    }
-    console.warn("[iptv-hub] rec: канвас не получает кадров — записывать нечего");
+// Жизненный цикл живёт в recorder.ts (createRecordingSession), источник кадров
+// и адаптер MediaRecorder — в recording-capture.ts (#366).
+const recordingCapture = createRecordingCapture({
+  video: videoEl,
+  captureAudioTrack: () => player.captureAudioTrack(),
+  language: () => currentLanguage,
+  onNoFrames: () => {
     recSession.stop(false);
-    showToast(
-      tr("record.noFrames"),
-    );
-  };
-  window.setTimeout(probeCanvas, 1000);
-
-  const audio = withAudio ? captureAudioTrack() : null;
-  if (audio) stream.addTrack(audio.track);
-  recordPathNote = audio
-    ? tr("record.fallbackAudio")
-    : tr("record.fallbackSilent");
-  const [track] = stream.getVideoTracks();
-  console.debug(
-    `[iptv-hub] rec: track=${track?.label ?? "?"} readyState=${track?.readyState} audio=${audio ? 1 : 0}`,
-  );
-  return {
-    stream,
-    dispose: () => {
-      disposed = true;
-      window.cancelAnimationFrame(recordRaf);
-      recordRaf = 0;
-      audio?.release();
-    },
-  };
-}
-
-/** Обёртка реального MediaRecorder в контракт сессии. */
-function createRecorderAdapter(stream: MediaStream, mimeType: string): RecorderLike {
-  const rec = new MediaRecorder(stream, { mimeType });
-  const adapter: RecorderLike = {
-    getState: () => rec.state,
-    start: (timesliceMs) => rec.start(timesliceMs),
-    stop: () => {
-      console.debug(`[iptv-hub] rec: stop из state=${rec.state}`);
-      rec.stop();
-    },
-    ondataavailable: null,
-    onstop: null,
-    onerror: null,
-  };
-  rec.ondataavailable = (e) => {
-    console.debug(`[iptv-hub] rec: chunk ${e.data.size}B (${rec.state})`);
-    adapter.ondataavailable?.({ data: e.data });
-  };
-  rec.onstop = () => adapter.onstop?.();
-  rec.onerror = (ev) => adapter.onerror?.((ev as unknown as { error?: Error }).error);
-  return adapter;
-}
+    showToast(tr("record.noFrames"));
+  },
+});
 
 /**
  * Отдать записанный файл. Классическое сохранение: a[download] с готовым
@@ -2672,8 +2489,8 @@ function renderRecButton(active: boolean): void {
 }
 
 const recSession = createRecordingSession({
-  createSource: createRecordSource,
-  createRecorder: createRecorderAdapter,
+  createSource: () => recordingCapture.createSource(),
+  createRecorder: (stream, mimeType) => createRecorderAdapter(stream, mimeType),
   onSave: saveRecording,
   onNotify: showToast,
   language: () => currentLanguage,
@@ -2684,9 +2501,9 @@ const recSession = createRecordingSession({
   onSourceLost: () => {
     // Запись сорвалась — переходим на следующий способ захвата и пробуем
     // снова. Указатель только растёт, так что цикла быть не может.
-    if (sourceStrategy < SOURCE_STRATEGIES.length - 1) {
-      sourceStrategy++;
-      console.debug(`[iptv-hub] rec: переключаюсь на ${SOURCE_STRATEGIES[sourceStrategy]}`);
+    const next = recordingCapture.nextStrategy();
+    if (next) {
+      console.debug(`[iptv-hub] rec: переключаюсь на ${next}`);
       showToast(tr("record.captureFallback"));
       startRecording();
       return;
@@ -2812,9 +2629,9 @@ function startRecording(): void {
     `[iptv-hub] rec: видео ${videoEl.videoWidth}x${videoEl.videoHeight}, ` +
       `на экране=${videoEl.offsetWidth}x${videoEl.offsetHeight}, paused=${videoEl.paused}`,
   );
-  recordPathNote = "";
+  recordingCapture.resetNote();
   recSession.start();
-  if (recSession.isRecording() && recordPathNote) showToast(recordPathNote);
+  if (recSession.isRecording() && recordingCapture.note()) showToast(recordingCapture.note());
 }
 
 // ---------- Скриншот кадра (FR-14) — src/screenshot-ui.ts (#364) ----------
