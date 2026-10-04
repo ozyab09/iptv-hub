@@ -61,6 +61,9 @@
    `channelProgrammes()` — в main.ts (ею пользуются таймлайн и запись).
 6. **Полоса прогресса/скраб** (~3106–3236: `refreshScrub`, `scrubPointerTime`,
    `recordingScrubDuration`) → DOM-прослойка над чистым `scrub.ts`.
+   **Сделано в #369:** `scrub-ui.ts` — рендер полосы и мини-полоски, slider
+   записи (pointer capture, клавиши), «ещё N мин»; `refreshScrub()` в main.ts
+   = кнопки плеера + `scrubUi.render()` + MediaSession.
 7. **Экспорт/импорт бэкапа** (~3793–3906) → `backup-ui.ts` над чистым
    `backup*.ts`.
 8. **Кросс-таб обработчик `storage`** (~3738–3789) → реакции (перечитать

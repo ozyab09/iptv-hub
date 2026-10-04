@@ -47,7 +47,7 @@ push в main CI вычисляет следующий патч, штампует
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
    `screenshot-ui.ts` (#364), `recordings-ui.ts` (#365), `recording-capture.ts` (#366),
-   `guide-ui.ts` (#368) —
+   `guide-ui.ts` (#368), `scrub-ui.ts` (#369) —
    узлы и зависимости приходят через create, логика тестируется на фейках.
    Осторожно с топ-левельным кодом `main.ts`: он исполняется по порядку, и
    вызов функции, трогающей `const X = createX(...)` до строки её объявления,
@@ -403,6 +403,7 @@ iptv-hub/
 │   ├── ui-classes.ts       # выбор классов дизайн-системы по состоянию
 │   ├── icons.ts            # набор линейных иконок 24×24 + спрайт
 │   ├── scrub.ts            # ход передачи и отставание от эфира
+│   ├── scrub-ui.ts         # DOM полосы прогресса: slider записи, ход передачи (#369)
 │   ├── gestures.ts         # свайпы и двойной тап на кадре
 │   ├── components.css      # КОПИЯ bundle.css дизайн-системы (править в системе)
 │   ├── types.ts            # Channel, PlaylistSnapshot, EpgProgramme, NowNext
