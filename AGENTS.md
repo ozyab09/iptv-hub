@@ -47,7 +47,7 @@ push в main CI вычисляет следующий патч, штампует
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
    `screenshot-ui.ts` (#364), `recordings-ui.ts` (#365), `recording-capture.ts` (#366),
-   `guide-ui.ts` (#368), `scrub-ui.ts` (#369) —
+   `guide-ui.ts` (#368), `scrub-ui.ts` (#369), `backup-ui.ts` (#370) —
    узлы и зависимости приходят через create, логика тестируется на фейках.
    Осторожно с топ-левельным кодом `main.ts`: он исполняется по порядку, и
    вызов функции, трогающей `const X = createX(...)` до строки её объявления,
@@ -381,6 +381,7 @@ iptv-hub/
 │   ├── playlists.ts        # список плейлистов: upsert ?p=, активный, миграция legacy
 │   ├── favorites.ts        # избранное per-плейлист (Set URL)
 │   ├── backup.ts           # экспорт/импорт versioned JSON + «недавние каналы»
+│   ├── backup-ui.ts        # DOM экспорта/импорта JSON и избранного в M3U, отчёт импорта (#370)
 │   ├── config.ts           # isMixedContent + resolveConfig (legacy-ключ, для миграции)
 │   ├── m3u.ts              # парсер M3U: Channel, категории, normalizeName
 │   ├── epg.ts              # загрузка (стрим+gzip) и разбор XMLTV, now/next
