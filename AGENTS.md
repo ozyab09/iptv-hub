@@ -292,7 +292,7 @@ push в main CI вычисляет следующий патч, штампует
 
 ### Скачивание передачи из архива (#315, #359)
 
-`programme-downloader.ts` — отдельный muted Player + сегментная сессия
+`programme-downloader.ts` — общий фоновый движок `background-recorder.ts` (#377: muted Player + сегментная сессия + сохранение в библиотеку, тот же у записи по расписанию)
 (`download-rec-*.part`), без MSE — потоковое скачивание через
 `stream-sink.ts` (`pipeStreamToSink`, чистый) в OPFS-приёмник.
 `downloadStatus()` (канал, начало, название, прогресс 0…1) и
@@ -303,6 +303,9 @@ push в main CI вычисляет следующий патч, штампует
 
 ### Записи по расписанию (#174)
 
+Фоновый движок (#377) — `background-recorder.ts`: префиксы рабочих файлов
+`schedule-rec-`/`download-rec-` (`BACKGROUND_PREFIXES`) изолированы от ручных
+`rec-` и друг от друга, тест сверяет сборку мусора всех трёх путей.
 `recording-schedule.ts` — чистые правила и tick-планировщик с инъекциями часов,
 хранилища и исполнителя; `recording-schedule-ui.ts` — гайд/редактор и лидер
 через Web Locks; `scheduled-recorder.ts` — отдельный muted Player + сегментная

@@ -1,6 +1,5 @@
 import Hls from "hls.js";
-import { Player } from "./player";
-import { createSegmentSession } from "./segment-recorder";
+import { BACKGROUND_PREFIXES, SINK_UNAVAILABLE, startBackgroundRecorder, type BackgroundRecorder } from "./background-recorder";
 import { createRecordingSink } from "./recording-sink";
 import { addRecording } from "./recordings";
 import {
@@ -117,69 +116,32 @@ async function run(opts: DownloadProgrammeOpts): Promise<boolean> {
   return downloadDirect(opts);
 }
 
-/** Сегментный путь: muted-плеер + segment-recorder, файл в библиотеку. */
+/** Сегментный путь: общий фоновый движок (background-recorder.ts), файл в библиотеку. */
 async function downloadSegments(
   opts: DownloadProgrammeOpts,
   durationMs: number,
 ): Promise<boolean> {
-  const video = document.createElement("video");
-  video.muted = true;
-  video.playsInline = true;
-  video.hidden = true;
-  video.className = "programme-download-video";
-  document.body.append(video);
-  let failed = false;
-  let saved = false;
+  let recorder: BackgroundRecorder;
+  try {
+    recorder = await startBackgroundRecorder({
+      kind: "download",
+      videoClass: "programme-download-video",
+      url: opts.url,
+      fs: opts.fs!,
+      channelName: opts.channelName,
+      channelUrl: opts.channelUrl,
+      programmeTitle: opts.programme.title,
+      notify: opts.notify,
+      onSaved: opts.onSaved,
+      saveFailedMessage: "Не удалось сохранить передачу",
+    });
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    opts.notify(reason === SINK_UNAVAILABLE ? "Хранилище записей недоступно" : reason);
+    return false;
+  }
+  const video = recorder.video;
   let cancelled = false;
-  let saving: Promise<void> = Promise.resolve();
-  const startedAt = Date.now();
-  const player = new Player(video, opts.notify, undefined, () => {
-    failed = true;
-  });
-  const session = createSegmentSession({
-    createSink: () => createRecordingSink("download-rec-"),
-    onNotify: opts.notify,
-    onState: (state) => {
-      if (state === "idle") failed = true;
-    },
-    onSave: (blob, result) => {
-      saving = (async () => {
-        const id = crypto.randomUUID();
-        await opts.fs!.write(storedRecordingName(id, result.ext), blob);
-        addRecording(localStorage, {
-          id,
-          channelName: opts.channelName,
-          channelUrl: opts.channelUrl,
-          programmeTitle: opts.programme.title,
-          startedAt,
-          durationSec: Math.max(0, (Date.now() - startedAt) / 1000),
-          sizeBytes: blob.size,
-          ext: result.ext,
-        });
-        saved = true;
-        opts.onSaved();
-      })().catch(() => {
-        failed = true;
-        opts.notify("Не удалось сохранить передачу");
-      });
-    },
-  });
-  await session.start();
-  if (!session.isRecording()) {
-    player.stop();
-    video.remove();
-    opts.notify("Хранилище записей недоступно");
-    return false;
-  }
-  player.setFragmentListener((payload, init) => session.feed(payload, init), () => session.resetStream());
-  const refused = player.play({ url: opts.url }, true);
-  if (refused) {
-    player.stop();
-    await session.stop(false);
-    video.remove();
-    opts.notify(refused);
-    return false;
-  }
   video.addEventListener("timeupdate", () => setProgress(opts, (video.currentTime * 1000) / durationMs));
 
   // Передача конечна: заканчиваем по окончании воспроизведения, по отмене
@@ -193,12 +155,8 @@ async function downloadSegments(
       resolve();
     };
   });
-  const ok = !failed && !cancelled;
-  player.stop();
-  video.remove();
-  // Отмена: stop(false) бросает приёмник и удаляет рабочий файл из OPFS.
-  await session.stop(ok);
-  await saving;
+  // Отмена бросает приёмник и удаляет рабочий файл из OPFS.
+  const saved = await recorder.stop(!recorder.failed() && !cancelled);
   if (cancelled) return false;
   opts.notify(
     saved
@@ -215,7 +173,7 @@ async function downloadSegments(
 async function downloadDirect(opts: DownloadProgrammeOpts): Promise<boolean> {
   const controller = new AbortController();
   cancelActive = () => controller.abort();
-  const sink = await createRecordingSink("download-rec-");
+  const sink = await createRecordingSink(BACKGROUND_PREFIXES.download);
   try {
     const res = await fetch(opts.url, { signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(String(res.status));
