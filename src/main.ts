@@ -109,6 +109,8 @@ import {
   type WakeLockState,
 } from "./wake-lock";
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
+import { canHotkey } from "./hotkey-guard";
+import { mediaKeyAction, type MediaKeyAction } from "./media-keys";
 import { getNetworkConnection, neighborIndex, Player } from "./player";
 import {
   applyTheme,
@@ -481,13 +483,22 @@ function canNumericZap(): boolean {
     (!isCompact() || playerBar.classList.contains("open")) &&
     !focused?.closest("input, textarea, select, [contenteditable]:not([contenteditable=false])") && !dialogOpen;
 }
-let visibleResults: (Channel | ProgrammeMatch)[] = [];
+
+/**
+ * Можно ли обрабатывать горячие клавиши (S — скриншот, ←/→ — перемотка,
+ * остальные ниже) в текущем интерфейсе: не в поле ввода, не в модальном
+ * диалоге/меню, не на настройках/записях (там свои контролы), не на
+ * мини-плеере и не когда панель скрыта.
+ */
+export let visibleResults: (Channel | ProgrammeMatch)[] = [];
+
 /**
  * Высота строки канала. Должна совпадать с `.row.channel-card` в style.css:
  * виртуализация позиционирует строки арифметикой, и расхождение тут уводит
  * прокрутку. Тест сверяет оба значения.
  */
 const CHANNEL_ROW_HEIGHT = 72;
+
 /** Список каналов — одна колонка строк, как требует дизайн-система. */
 const CHANNEL_COLUMNS = 1;
 
@@ -1633,9 +1644,47 @@ const saveCurrentPosition = (): void => {
 };
 videoEl.addEventListener("pause", saveCurrentPosition);
 window.addEventListener("pagehide", saveCurrentPosition);
+// Закрытие/перезагрузка вкладки во время записи: финализируем частичную
+// запись в библиотеку, чтобы уже полученные сегменты не остались лежать
+// как rec-*.part (и перекодирующая запись не потерялась целиком).
+// OPFS-записи при выгрузке браузер не гарантирует — это best effort.
+window.addEventListener("pagehide", () => {
+  if (isRecordingNow()) stopRecordingNow();
+});
 
 btnPrev.addEventListener("click", () => playNeighbor(-1));
 btnNext.addEventListener("click", () => playNeighbor(1));
+
+/**
+ * Применить действие медиа-клавиши (гарнитура, пульт, мультимедийная
+ * клавиатура). Смена канала — как у кнопок деки: во время просмотра записи
+ * prev/next скрыты и disabled, поэтому и клавиши ничего не делают.
+ */
+function applyMediaKey(action: MediaKeyAction): void {
+  switch (action) {
+    case "play":
+      if (videoEl.paused) player.togglePause();
+      break;
+    case "pause":
+      if (!videoEl.paused) player.togglePause();
+      break;
+    case "toggle":
+      player.togglePause();
+      break;
+    case "forward":
+      player.seekBy(15);
+      break;
+    case "backward":
+      player.seekBy(-15);
+      break;
+    case "next":
+      if (!player.isRecordingPlayback) playNeighbor(1);
+      break;
+    case "previous":
+      if (!player.isRecordingPlayback) playNeighbor(-1);
+      break;
+  }
+}
 
 // Живой эфир перематывается только в пределах локального буфера.
 btnSeekBack.addEventListener("click", () => player.seekBy(-15));
@@ -1799,6 +1848,18 @@ window.addEventListener("keydown", (e) => {
     }, ZAP_DELAY_MS);
     return;
   }
+  // Медиа-клавиши (issue #392) работают глобально, пока плеер открыт, —
+  // в том числе при фокусе в полях ввода: аппаратные медиа-клавиши не вводят
+  // текст, и в этом их смысл. Закрытый плеер значит «управлять нечем».
+  if (!playerBar.hidden) {
+    const action = mediaKeyAction(e.code);
+    if (action) {
+      e.preventDefault();
+      applyMediaKey(action);
+      return;
+    }
+  }
+
   const target = e.target as HTMLElement | null;
   const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
 
@@ -1809,6 +1870,36 @@ window.addEventListener("keydown", (e) => {
     searchInput.focus();
     searchInput.select();
     return;
+  }
+
+  // Горячие клавиши S (скриншот) и ←/→ (перемотка ±15 с) охраняются
+  // чистым canHotkey(): не срабатывают в полях ввода, в диалогах/меню,
+  // на настройках, при записи и на мини-плеере со скрытой панелью.
+  // Остальные горячие клавиши (G, C, M, J, L, F) обрабатываются ниже.
+  if (
+    canHotkey({
+      playerBar,
+      activeView,
+      isCompact,
+      showsChannelList,
+    })
+  ) {
+    if (e.key === "s" || e.key === "ы") {
+      if (playerBar.hidden) return;
+      try {
+        takeScreenshot();
+      } catch {
+        showToast(describeShotFailure("tainted"));
+      }
+      return;
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      // Стрелки: перемотка ±15 сек. На эфире цель ищется в buffered
+      // (можно перематывать в пределах буфера), в записи и VOD — по длине.
+      e.preventDefault();
+      player.seekBy(e.key === "ArrowLeft" ? -15 : 15);
+      return;
+    }
   }
 
   if (typing) return;
@@ -3998,11 +4089,19 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
     return;
   }
 
-  renderCategories();
-  renderChannels();
-  renderPinSettings();
-  renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
-  renderGroupSettings();
+  // Рендер после загрузки не должен оставлять вечное «Загрузка плейлиста…»
+  // (#344): любой бросок здесь показываем как ошибку на экране настроек.
+  try {
+    renderCategories();
+    renderChannels();
+    renderPinSettings();
+    renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
+    renderGroupSettings();
+  } catch (e) {
+    console.error("[iptv-hub] ошибка отрисовки плейлиста", e);
+    showSetup(tr("error.loadPlaylist", { reason: e instanceof Error ? e.message : t("error.unknown"), hint: "" }));
+    return;
+  }
   // Скрытые http-каналы — не потеря каналов при загрузке, а фильтр.
   // Извещаем уведомлением с колокольчиком сверху справа, ровно один раз
   // на плейлист (src/http-notice.ts): длинный текст в трёхсекундном тосте
@@ -4156,7 +4255,11 @@ scheduleUi = createRecordingScheduleUi({
   notify: showToast, onSaved: renderRecordings,
 });
 renderNav();
-void bootstrap().then(() => {
+void bootstrap().catch((e) => {
+  // Падение запуска не должно оставлять вечное «Загрузка плейлиста…» (#344).
+  console.error("[iptv-hub] ошибка запуска", e);
+  showSetup(tr("error.loadPlaylist", { reason: e instanceof Error ? e.message : t("error.unknown"), hint: "" }));
+}).then(() => {
   try {
     const raw = sessionStorage.getItem("iptv-hub.backup-result");
     sessionStorage.removeItem("iptv-hub.backup-result");

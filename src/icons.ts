@@ -34,6 +34,10 @@ export const ICONS: Record<string, string> = {
   pause: '<rect x="7" y="5" width="3.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="3.5" height="14" rx="1.2"/>',
   "seek-back": '<path d="m11 7-5 5 5 5M19 7l-5 5 5 5"/>',
   "seek-fwd": '<path d="m13 7 5 5-5 5M5 7l5 5-5 5"/>',
+  // ⏮/⏭ — переключение канала (полоска + треугольник), а не «назад/вперёд»:
+  // шевроны prev/next читались как навигацию по списку, а не смену канала.
+  "prev-track": '<path d="M6.5 6v12"/><path d="M18 7.5v9L9.5 12Z"/>',
+  "next-track": '<path d="M17.5 6v12"/><path d="M6 7.5v9L14.5 12Z"/>',
   prev: '<path d="m14.5 6-6 6 6 6"/>',
   next: '<path d="m9.5 6 6 6-6 6"/>',
   bell: '<path d="M6 16.5v-5a6 6 0 0 1 12 0v5l1.8 2.5H4.2L6 16.5Z"/><path d="M10 21a2.2 2.2 0 0 0 4 0"/>',

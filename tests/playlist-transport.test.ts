@@ -139,6 +139,23 @@ describe("createTransport: loadPlaylist", () => {
       .rejects.toThrow(t("error.localMissing", "ru"));
   });
 
+  it("local: зависший OPFS — таймаут вместо вечной загрузки (#344)", async () => {
+    vi.useFakeTimers();
+    try {
+      // fs() никогда не резолвится — как зависший OPFS в WebView.
+      const transport = createTransport({
+        fs: () => new Promise<LocalFs>(() => {}),
+        language: () => "ru",
+      });
+      const pending = expect(transport.loadPlaylist("local:abc"))
+        .rejects.toThrow(t("error.sourceTimeout", "ru"));
+      await vi.advanceTimersByTimeAsync(45_000);
+      await pending;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("local: читает содержимое из хранилища и разбирает M3U", async () => {
     const fs = fakeFs();
     fs.files.set("local:abc", M3U);
