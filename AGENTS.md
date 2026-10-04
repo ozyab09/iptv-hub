@@ -784,3 +784,7 @@ APK обновляется вручную через GitHub Releases; натив
    Пример: `agent:buff, llm:deepseek-v4-pro, in-progress`.
    Метки создаются по мере необходимости
    (`gh label create <имя> --color … --force`).
+6. **MR всегда с auto-merge.** При создании merge request (MR) обязательно
+   включить auto-merge (в `gh` — `gh pr merge --auto`, в UI — настройка
+   auto-merge pull request), чтобы ветка не застряла в ожидании ручного
+   объединения, а CI проверила изменения и запушила результат автоматически.
