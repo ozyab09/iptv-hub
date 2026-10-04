@@ -110,6 +110,7 @@ import {
 } from "./wake-lock";
 import { type OverlayName, popOverlay, pushOverlay, topOverlay } from "./overlays";
 import { canHotkey } from "./hotkey-guard";
+import { mediaKeyAction, type MediaKeyAction } from "./media-keys";
 import { getNetworkConnection, neighborIndex, Player } from "./player";
 import {
   applyTheme,
@@ -1654,6 +1655,37 @@ window.addEventListener("pagehide", () => {
 btnPrev.addEventListener("click", () => playNeighbor(-1));
 btnNext.addEventListener("click", () => playNeighbor(1));
 
+/**
+ * Применить действие медиа-клавиши (гарнитура, пульт, мультимедийная
+ * клавиатура). Смена канала — как у кнопок деки: во время просмотра записи
+ * prev/next скрыты и disabled, поэтому и клавиши ничего не делают.
+ */
+function applyMediaKey(action: MediaKeyAction): void {
+  switch (action) {
+    case "play":
+      if (videoEl.paused) player.togglePause();
+      break;
+    case "pause":
+      if (!videoEl.paused) player.togglePause();
+      break;
+    case "toggle":
+      player.togglePause();
+      break;
+    case "forward":
+      player.seekBy(15);
+      break;
+    case "backward":
+      player.seekBy(-15);
+      break;
+    case "next":
+      if (!player.isRecordingPlayback) playNeighbor(1);
+      break;
+    case "previous":
+      if (!player.isRecordingPlayback) playNeighbor(-1);
+      break;
+  }
+}
+
 // Живой эфир перематывается только в пределах локального буфера.
 btnSeekBack.addEventListener("click", () => player.seekBy(-15));
 btnSeekFwd.addEventListener("click", () => player.seekBy(15));
@@ -1816,6 +1848,18 @@ window.addEventListener("keydown", (e) => {
     }, ZAP_DELAY_MS);
     return;
   }
+  // Медиа-клавиши (issue #392) работают глобально, пока плеер открыт, —
+  // в том числе при фокусе в полях ввода: аппаратные медиа-клавиши не вводят
+  // текст, и в этом их смысл. Закрытый плеер значит «управлять нечем».
+  if (!playerBar.hidden) {
+    const action = mediaKeyAction(e.code);
+    if (action) {
+      e.preventDefault();
+      applyMediaKey(action);
+      return;
+    }
+  }
+
   const target = e.target as HTMLElement | null;
   const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
 
