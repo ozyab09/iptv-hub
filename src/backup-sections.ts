@@ -9,8 +9,10 @@ import { parseChannelHealth, serializeChannelHealth, type ChannelFailure } from 
 import { parseFavoritesOrder } from "./favorites-order";
 import { parseReminders, parseReminderSettings, type ProgrammeReminder } from "./reminder";
 import type { Language } from "./i18n";
+import { parseAppSettings, type AppSettings } from "./apk-updates";
 
 export interface BackupSections {
+  appSettings?: AppSettings;
   channelOverrides?: Record<string, (ChannelOverride & { url: string })[]>;
   groupPreferences?: Record<string, { hidden: string[]; order: string[] }>;
   parentalPins?: Record<string, (PinHash & { group: string })[]>;
@@ -70,6 +72,7 @@ export function parseBackupSections(input: Record<string, unknown>, playlistIds:
     Object.assign(sections, { [name]: clean });
   }
   global("playerSettings", object(input.playerSettings), () => parsePlayerSettings(json(input.playerSettings)));
+  global("appSettings", object(input.appSettings), () => parseAppSettings(json(input.appSettings)));
   global("language", input.language === "ru" || input.language === "en", () => input.language);
   global("refreshInterval", typeof input.refreshInterval === "number" && [0, 60, 360, 1440].includes(input.refreshInterval), () => parseInterval(String(input.refreshInterval)));
   global("positions", object(input.positions), () => parsePositions(json(input.positions)));

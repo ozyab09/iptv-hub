@@ -749,6 +749,18 @@ Playwright: CI-матрица `chromium`/`firefox-media` с `fail-fast: false`:
 
 ## Android: локальное приложение (#160, #246)
 
+**Обновления APK (#386):** `apk-updates.ts` читает только статический Pages
+`version.json` с дедлайном 8 секунд, сравнивает строгую трёхчастную semver и
+монотонный versionCode с `__APP_VERSION__` / `__APP_VERSION_CODE__` сборки.
+Новая сборка той же версии принимается, более старое имя или code — нет.
+Проверка при запуске и каждые 24 часа включена только на локальном origin.
+Ключ `iptv-hub.app-settings.v1` содержит `{ checkUpdates: boolean }`, default true;
+секция `appSettings` входит в backup v2. Отключение отменяет текущий запрос
+и не позволяет позднему ответу создать уведомление. Сетевые ошибки тихие.
+Уведомление хранит валидный `updateVersion`; повтор той же версии не добавляется,
+ссылка «Скачать APK» фиксирована на GitHub Releases/latest и открывается обычным
+`MainActivity.openExternally()`. Никакой автоматической установки или нового backend.
+
 `android/app` — один Gradle-модуль: Java 17, Gradle 8.7, AGP 8.6.1, SDK 35,
 `applicationId io.github.ozyab09.iptvhub`. Приложение **самостоятельное**, не TWA:
 web-сборка зашита в `assets/www` и открывается в `WebView` через

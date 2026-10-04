@@ -16,6 +16,7 @@ import {
   type NotificationWatch,
 } from "./notifications";
 import { t, translateMessage, type Language } from "./i18n";
+import { APK_RELEASE_URL } from "./apk-updates";
 
 type KV = Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
 
@@ -76,6 +77,14 @@ export function createNotificationBell(opts: NotifBellOptions) {
         row.append(watch);
       }
       opts.list.append(row);
+      if (item.updateVersion) {
+        const link = document.createElement("a");
+        link.className = "btn btn-sm notification-download";
+        link.href = APK_RELEASE_URL;
+        link.rel = "noopener";
+        link.textContent = t("updates.download", language);
+        row.append(link);
+      }
     }
   }
 
@@ -88,10 +97,11 @@ export function createNotificationBell(opts: NotifBellOptions) {
 
   return {
     /** Положить уведомление в колокольчик (данные + бейдж). */
-    push(message: string, watch?: NotificationWatch): void {
+    push(message: string, watch?: NotificationWatch, updateVersion?: string): void {
       const now = opts.now ?? Date.now;
       if (opts.storage) items = loadNotifications(opts.storage);
-      items = addNotification(items, nextId(items), message, now(), watch);
+      if (updateVersion && items.some(item => item.updateVersion === updateVersion)) return;
+      items = addNotification(items, nextId(items), message, now(), watch, updateVersion);
       persist();
       render();
     },

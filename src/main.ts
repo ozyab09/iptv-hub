@@ -174,6 +174,10 @@ import {
   markHttpNoticeShown,
 } from "./http-notice";
 import { createNotificationBell } from "./notification-bell";
+import { APP_SETTINGS_KEY, parseAppSettings, createApkUpdateChecker } from "./apk-updates";
+
+declare const __APP_VERSION__: string;
+declare const __APP_VERSION_CODE__: number;
 import {
   checkSummary,
   countProgrammes,
@@ -4595,6 +4599,35 @@ async function bootstrap(): Promise<void> {
 // service worker там только мешает (кеширует то, что и так лежит рядом), а при
 // первом запуске без сети ещё и нечего отдавать.
 const localOrigin = location.hostname === "appassets.androidplatform.net";
+const apkUpdatesSection = $("apk-updates-settings");
+const apkUpdatesToggle = $<HTMLInputElement>("apk-check-updates");
+function loadAppSettings(): ReturnType<typeof parseAppSettings> {
+  try { return parseAppSettings(localStorage.getItem(APP_SETTINGS_KEY)); }
+  catch { return parseAppSettings(null); }
+}
+let appSettings = loadAppSettings();
+apkUpdatesSection.hidden = !localOrigin;
+apkUpdatesToggle.checked = appSettings.checkUpdates;
+const apkUpdateChecker = createApkUpdateChecker({
+  android: localOrigin,
+  local: { version: __APP_VERSION__, versionCode: __APP_VERSION_CODE__ },
+  enabled: () => appSettings.checkUpdates,
+  fetcher: (url, init) => fetch(url, init),
+  onUpdate: version => notifBellUi.push(tr("updates.available", { version: version.version }), undefined, version.version),
+});
+apkUpdatesToggle.addEventListener("change", () => {
+  appSettings = { checkUpdates: apkUpdatesToggle.checked };
+  try { localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(appSettings)); }
+  catch { showToast(tr("settings.unsaved")); }
+  void apkUpdateChecker.check();
+});
+window.addEventListener("storage", event => {
+  if (event.key !== null && event.key !== APP_SETTINGS_KEY) return;
+  appSettings = loadAppSettings();
+  apkUpdatesToggle.checked = appSettings.checkUpdates;
+  void apkUpdateChecker.check();
+});
+apkUpdateChecker.start();
 if ("serviceWorker" in navigator && import.meta.env.PROD && !localOrigin) {
   // Была ли страница уже под старым SW: при первой установке смена
   // контроллера — не обновление, и перезагружать нечего.
