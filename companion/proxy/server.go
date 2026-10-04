@@ -187,6 +187,9 @@ func (s *Server) proxy(w http.ResponseWriter, r *http.Request) {
 			req.Header.Set(name, v)
 		}
 	}
+	// Байты провайдера передаём как есть: прозрачная распаковка Go могла бы
+	// рассинхронизировать Content-Length (например, у .xml.gz EPG).
+	req.Header.Set("Accept-Encoding", "identity")
 	resp, err := s.client.Do(req)
 	if err != nil {
 		// Без URL: платные ссылки не должны попадать в логи.

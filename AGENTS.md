@@ -836,9 +836,12 @@ CORS только для Pages и `-origin`, ответ на preflight Private N
 токен обязателен (защита от relay через `<video>`/`<img>` чужих вкладок),
 запрет loopback/приватных/link-local/CGNAT адресов назначения после DNS
 (`guard.go`, SSRF и rebinding), до 5 редиректов, `Range`, статус провайдера,
-переписывание HLS как у `HlsRewriter` в APK. `config/` — токен в каталоге
-пользователя (0600). `autostart/` — Windows Run-ключ, macOS LaunchAgent,
-Linux XDG autostart; включается при первом запуске (кроме `-headless`).
+`Accept-Encoding: identity` у исходящих запросов (байты провайдера —
+включая `.xml.gz` EPG — проходят без изменений и без рассинхрона
+Content-Length), переписывание HLS как у `HlsRewriter` в APK. `config/` —
+токен в каталоге пользователя (0600). `autostart/` — Windows Run-ключ,
+macOS LaunchAgent, Linux XDG autostart; включается при первом запуске
+(кроме `-headless`).
 Трей: статус, «Открыть IPTV Hub» (`?companion=1`), «Запускать при входе»,
 «Выход»; второй запуск открывает сайт и выходит. Тесты: `go test ./...`.
 CI (#464): job `companion` (матрица ubuntu-24.04 + macos-15) — `go vet`,
@@ -852,7 +855,13 @@ macOS amd64/arm64 (cgo); `release` ждёт `companion` и прикладыва�
 из адреса, `detectPlatform()` и ссылки на бинарники. `app-proxy.ts` обобщён:
 `localProxyUrl()`/`viaLocalProxy()` — прокси приложения или сопряжённого
 компаньона (`setCompanionPairing`), `hasLocalProxy()` управляет
-`setPublicHttpAllowed()`. `companion-ui.ts` — раздел настроек (скрыт в
+`setPublicHttpAllowed()`; для данных (плейлист, EPG, API Xtream) —
+`localDataProxyUrl()`/`viaDataProxy()`: с сопряжённым компаньоном через него
+идут и https-URL (`companionProxyUrl()` сохраняет схему цели — путь
+`/proxy/<token>/https/…`), потому что провайдер может не отдавать
+CORS-заголовки, а браузер без них ответ не читает. Потоки https и все URL
+в Android-приложении (его прокси — только про http, #452) остаются прямыми;
+приватные хосты не проксируются. `companion-ui.ts` — раздел настроек (скрыт в
 Android-приложении). Подключение — до загрузки плейлиста в `bootstrap()`;
 переключатель и «Проверить снова» перечитывают плейлист при смене режима.
 

@@ -1,12 +1,15 @@
 package proxy
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -117,6 +120,35 @@ func TestHLSIsRewrittenAndChannelListsAreNot(t *testing.T) {
 	rec = do(s, "GET", proxyPath(up, "/redirect"), pages, nil)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "http://iptv.example/a.m3u8") {
 		t.Fatalf("channel list after redirect: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGzipBodyPassesThroughUnchanged(t *testing.T) {
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	io.WriteString(zw, "<tv/>")
+	zw.Close()
+	payload := gz.Bytes()
+	seenEncoding := ""
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenEncoding = r.Header.Get("Accept-Encoding")
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+		w.Write(payload)
+	}))
+	defer up.Close()
+	s := newTestServer(true)
+	// Браузер просит gzip, но компаньон провайдеру передаёт identity и отдаёт
+	// байты как есть: магия 1f 8b у сайта остаётся, Content-Length совпадает.
+	rec := do(s, "GET", proxyPath(up, "/epg.xml.gz"), pages, map[string]string{"Accept-Encoding": "gzip"})
+	if rec.Code != 200 || !bytes.Equal(rec.Body.Bytes(), payload) {
+		t.Fatalf("gzip body changed: %d %q", rec.Code, rec.Body.Bytes())
+	}
+	if seenEncoding != "identity" {
+		t.Fatalf("upstream Accept-Encoding: %q", seenEncoding)
+	}
+	if rec.Header().Get("Content-Length") != strconv.Itoa(len(payload)) || rec.Header().Get("Content-Type") != "application/gzip" {
+		t.Fatalf("headers: %v", rec.Header())
 	}
 }
 

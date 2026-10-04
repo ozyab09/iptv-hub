@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { localProxyUrl, isAppPage, viaLocalProxy } from "../src/app-proxy";
+import { localDataProxyUrl, localProxyUrl, isAppPage, viaDataProxy, viaLocalProxy } from "../src/app-proxy";
 import { isPlayableStreamUrl, parseM3U, setPublicHttpAllowed } from "../src/m3u";
 
 const APP = "https://appassets.androidplatform.net/www/index.html";
@@ -27,6 +27,14 @@ describe("app proxy URLs", () => {
     expect(localProxyUrl("rtmp://x/live", APP)).toBeNull();
     expect(localProxyUrl("http://iptv.example/a.m3u8", PAGES)).toBeNull();
     expect(viaLocalProxy("http://iptv.example/a.m3u8", PAGES)).toBe("http://iptv.example/a.m3u8");
+  });
+
+  it("данные приложения: http через /proxy/, https остаётся прямым (задача прокси — http, #452)", () => {
+    expect(localDataProxyUrl("http://iptv.example/list.m3u", APP))
+      .toBe("https://appassets.androidplatform.net/proxy/http/iptv.example/list.m3u");
+    expect(localDataProxyUrl("https://cdn.example/list.m3u", APP)).toBeNull();
+    expect(viaDataProxy("https://cdn.example/list.m3u", APP)).toBe("https://cdn.example/list.m3u");
+    expect(localDataProxyUrl("https://192.168.1.2/epg.xml", APP)).toBeNull();
   });
 });
 

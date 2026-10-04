@@ -1,6 +1,6 @@
 import "./style.css";
 import { createCatalogueCard } from "./catalogue-card";
-import { hasLocalProxy, isAppPage, setCompanionPairing, viaLocalProxy } from "./app-proxy";
+import { hasLocalProxy, isAppPage, setCompanionPairing, viaDataProxy, viaLocalProxy } from "./app-proxy";
 import { connectCompanion, detectPlatform, loadCompanionEnabled, saveCompanionEnabled, takeCompanionParam, type CompanionStatus } from "./companion";
 import { createCompanionUi } from "./companion-ui";
 import { setPublicHttpAllowed } from "./m3u";
@@ -181,8 +181,8 @@ const tr = (key: TranslationKey, params: TranslationParams = {}): string => t(ke
 // Android-приложение проксирует http публичных хостов (#452): такие каналы
 // там не скрываются; в веб-версии — только с подключённым компаньоном (#465).
 setPublicHttpAllowed(isAppPage(location.href));
-/** EPG-источники через прокси приложения, где он нужен. */
-const appProxied = (urls: readonly string[]): string[] => urls.map((url) => viaLocalProxy(url, location.href));
+/** EPG-источники через прокси приложения или компаньона, где он нужен. */
+const dataProxied = (urls: readonly string[]): string[] => urls.map((url) => viaDataProxy(url, location.href));
 /** Мост к MediaSession (#362); создаётся лениво — до объявления плеера его не трогаем. */
 let mediaSessionBridge: MediaSessionBridge | null = null;
 
@@ -520,7 +520,7 @@ async function activateAllPlaylists(refresh = false): Promise<void> {
       updateAggregate(); renderCategories(); renderChannels(false); renderPlaylistSwitcher();
       const urls = epgSourceUrls(item.epgUrl, item.additionalEpgUrls ?? [], fresh.headerTvgUrl);
       if (urls.length) {
-        const programmes = await loadEpgSources(appProxied(urls));
+        const programmes = await loadEpgSources(dataProxied(urls));
         if (request === aggregateRequest) playlistCache.set(item.id, { snapshot: fresh, epg: programmes });
       }
       if (refresh && request === aggregateRequest && diff && (diff.added || diff.removed || diff.changed)) {
@@ -645,8 +645,10 @@ const groupPreferencesUi = createGroupPreferencesUi({
 const playlistOpfsFs = createOpfsFs(typeof navigator !== "undefined" ? navigator.storage : null);
 const playlistTransport: Transport = createTransport({
   fs: playlistOpfsFs,
-  // В Android-приложении http-плейлисты публичных хостов идут через его прокси (#452).
-  fetch: (url, init) => fetch(viaLocalProxy(url, location.href), init),
+  // В Android-приложении http-плейлисты публичных хостов идут через его прокси
+  // (#452); с сопряжённым компаньоном — и https-плейлисты/EPG/Xtream без
+  // CORS-заголовков провайдера (#465).
+  fetch: (url, init) => fetch(viaDataProxy(url, location.href), init),
   language: () => currentLanguage,
 });
 const playerBuffer = $<HTMLInputElement>("player-buffer");
@@ -3159,7 +3161,7 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
     if (epgUrls.length) {
       const epgLoad = refreshLoad;
       try {
-        const parsed = await loadEpgSources(appProxied(epgUrls), (completed, total) => {
+        const parsed = await loadEpgSources(dataProxied(epgUrls), (completed, total) => {
           if (!epgLoad.isCurrent()) return;
           epgNow.hidden = false;
           setSystemText(epgNow, total === 1 ? tr("loading.epg") : tr("loading.epgSources", { completed, total }));
@@ -3685,7 +3687,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
     // Гард от гонки (#112): пока грузится EPG, можно успеть сменить плейлист —
     // поздний ответ старой загрузки не должен затирать данные нового.
     const epgLoad = epgGuard.begin();
-    loadEpgSources(appProxied(finalEpgUrls), (completed, total) => {
+    loadEpgSources(dataProxied(finalEpgUrls), (completed, total) => {
       if (!epgLoad.isCurrent()) return;
       setSystemText(epgNow, total === 1 ? tr("loading.epg") : tr("loading.epgSources", { completed, total }));
     })

@@ -70,9 +70,10 @@ export async function connectCompanion(fetcher: Fetch, timeoutMs = COMPANION_TIM
   }
 }
 
-/** Прокси-адрес компаньона для http-ресурса; host уже проверен вызывающим. */
+/** Прокси-адрес компаньона для http(s)-ресурса; host уже проверен вызывающим. */
 export function companionProxyUrl(target: URL, pairing: CompanionPairing): string {
-  return `${pairing.proxyBase}/http/${target.host}${target.pathname}${target.search}`;
+  const scheme = target.protocol === "https:" ? "https" : "http";
+  return `${pairing.proxyBase}/${scheme}/${target.host}${target.pathname}${target.search}`;
 }
 
 /** Ссылка из трея: `?companion=1` включает режим; параметр убирается из адреса. */

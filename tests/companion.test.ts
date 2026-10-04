@@ -7,7 +7,8 @@ import {
   saveCompanionEnabled,
   takeCompanionParam,
 } from "../src/companion";
-import { hasLocalProxy, localProxyUrl, setCompanionPairing } from "../src/app-proxy";
+import { companionProxyUrl } from "../src/companion";
+import { hasLocalProxy, localDataProxyUrl, localProxyUrl, setCompanionPairing, viaDataProxy } from "../src/app-proxy";
 import { memoryStorage } from "./fakes/storage";
 
 const TOKEN = "a".repeat(64);
@@ -86,18 +87,40 @@ describe("companion settings and links", () => {
 
 describe("local proxy through the companion", () => {
   afterEach(() => setCompanionPairing(null));
+  const pairing = { token: TOKEN, proxyBase: `http://127.0.0.1:47800/proxy/${TOKEN}`, version: "0.3.0" };
 
   it("без сопряжения веб-версия не проксирует", () => {
     expect(hasLocalProxy(PAGES)).toBe(false);
     expect(localProxyUrl("http://iptv.example/a.m3u8", PAGES)).toBeNull();
+    expect(viaDataProxy("https://cassy.tv/pls/x/playlist.m3u8", PAGES)).toBe("https://cassy.tv/pls/x/playlist.m3u8");
   });
 
   it("с сопряжением http публичного хоста идёт через 127.0.0.1 с токеном", () => {
-    setCompanionPairing({ token: TOKEN, proxyBase: `http://127.0.0.1:47800/proxy/${TOKEN}`, version: "0.3.0" });
+    setCompanionPairing(pairing);
     expect(hasLocalProxy(PAGES)).toBe(true);
     expect(localProxyUrl("http://iptv.example:8080/live/a.m3u8?t=1", PAGES))
       .toBe(`http://127.0.0.1:47800/proxy/${TOKEN}/http/iptv.example:8080/live/a.m3u8?t=1`);
     expect(localProxyUrl("https://cdn.example/a.m3u8", PAGES)).toBeNull();
     expect(localProxyUrl("http://192.168.1.5/a.m3u8", PAGES)).toBeNull();
+  });
+
+  it("с сопряжением данные по https идут через компаньона — провайдер без CORS (#465)", () => {
+    setCompanionPairing(pairing);
+    expect(localDataProxyUrl("https://cassy.tv/pls/x/playlist.m3u8?e=1", PAGES))
+      .toBe(`http://127.0.0.1:47800/proxy/${TOKEN}/https/cassy.tv/pls/x/playlist.m3u8?e=1`);
+    expect(localDataProxyUrl("https://cassy.tv/epg/epg.xml.gz", PAGES))
+      .toBe(`http://127.0.0.1:47800/proxy/${TOKEN}/https/cassy.tv/epg/epg.xml.gz`);
+    // Потоки https остаются прямыми, приватные хосты не проксируются и для данных.
+    expect(localProxyUrl("https://cdn.example/live/a.m3u8", PAGES)).toBeNull();
+    expect(localDataProxyUrl("https://192.168.1.5/epg.xml", PAGES)).toBeNull();
+    expect(localDataProxyUrl("http://iptv.example/list.m3u", PAGES))
+      .toBe(`http://127.0.0.1:47800/proxy/${TOKEN}/http/iptv.example/list.m3u`);
+  });
+
+  it("companionProxyUrl сохраняет схему и порт целевого URL", () => {
+    expect(companionProxyUrl(new URL("https://cassy.tv:8443/pls/a.m3u8?x=1"), pairing))
+      .toBe(`http://127.0.0.1:47800/proxy/${TOKEN}/https/cassy.tv:8443/pls/a.m3u8?x=1`);
+    expect(companionProxyUrl(new URL("http://iptv.example/live/a.m3u8"), pairing))
+      .toBe(`http://127.0.0.1:47800/proxy/${TOKEN}/http/iptv.example/live/a.m3u8`);
   });
 });
