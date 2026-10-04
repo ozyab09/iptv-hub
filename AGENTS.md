@@ -45,7 +45,8 @@ push в main CI вычисляет следующий патч, штампует
    `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
-   (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts` —
+   (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
+   `screenshot-ui.ts` (#364) —
    узлы и зависимости приходят через create, логика тестируется на фейках.
    Осторожно с топ-левельным кодом `main.ts`: он исполняется по порядку, и
    вызов функции, трогающей `const X = createX(...)` до строки её объявления,
@@ -372,6 +373,7 @@ iptv-hub/
 │   ├── playlist-ui.ts      # UI менеджера плейлистов: setup-список + переключатель
 │   ├── playlist-transport.ts # транспорт плейлистов: OPFS-адаптер, loadPlaylist, диагностика сбоев
 │   ├── quality.ts          # лейблы уровней/дорожек, формат статуса
+│   ├── screenshot-ui.ts    # DOM скриншота кадра: canvas → PNG, кнопка (#364)
 │   ├── recorder.ts         # запись перекодированием: mime, имя файла, жизненный цикл
 │   ├── segment-recorder.ts # запись HLS сегментами: контейнер, потолок, init-сегмент
 │   ├── recording-sink.ts   # куда писать: OPFS на диск, откат — память

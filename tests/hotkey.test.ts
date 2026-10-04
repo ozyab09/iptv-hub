@@ -54,6 +54,6 @@ describe("hotkey guard: S в полях ввода (#346)", () => {
   it("в main.ts один обработчик клавиши S, под гардом", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync("src/main.ts", "utf8");
-    expect(src.match(/takeScreenshot\(\);/g)?.length).toBe(1);
+    expect(src.match(/screenshotUi\.take\(\)/g)?.length).toBe(1);
   });
 });
