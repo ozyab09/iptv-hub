@@ -1352,6 +1352,7 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
   .player-bar:not(.open) #btn-rec,
   .player-bar:not(.open) #live-badge,
   .player-bar:not(.open) #btn-retry,
+  .player-bar:not(.open) #btn-stream-out,
   .player-bar:not(.open) #now-fav,
   .player-bar:not(.open) .now-show { display: none; }
   /* Строка «превью · что идёт · пауза · закрыть»: обёртки верха кадра
