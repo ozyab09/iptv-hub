@@ -9,34 +9,10 @@ import {
   type RecoveryDeps,
 } from "../src/recording-recovery";
 import { RECORDINGS_KEY, loadRecordings } from "../src/recordings";
+import { memoryStorage as memoryKv } from "./fakes/storage";
+import { memoryRecordingsFs as memoryFs } from "./fakes/recordings-fs";
 
-function memoryKv(): Storage {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    clear: () => m.clear(),
-    key: () => null,
-    get length() {
-      return m.size;
-    },
-  };
-}
 
-function memoryFs(files: Record<string, File>) {
-  const store = new Map(Object.entries(files));
-  return {
-    store,
-    read: async (name: string) => store.get(name) ?? null,
-    write: async (name: string, blob: Blob) => {
-      store.set(name, new File([blob], name));
-    },
-    remove: async (name: string) => {
-      store.delete(name);
-    },
-  };
-}
 
 const pending = { channelName: "Первый", channelUrl: "https://x/1.m3u8", programmeTitle: "Новости", startedAt: 1_000_000 };
 

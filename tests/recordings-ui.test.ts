@@ -3,6 +3,8 @@ import { createRecordingsUi, type RecordingsUiDeps } from "../src/recordings-ui"
 import { RECORDINGS_KEY, loadRecordings, type RecordingMeta } from "../src/recordings";
 import { PENDING_RECORDING_KEY } from "../src/recording-recovery";
 import { t } from "../src/i18n";
+import { memoryStorage } from "./fakes/storage";
+import { memoryRecordingsFs } from "./fakes/recordings-fs";
 
 /** Минимальный DOM-узел: ровно то, что модуль трогает. */
 interface FakeEl {
@@ -48,17 +50,6 @@ function fakeEl(tag = "div"): FakeEl {
   return el;
 }
 
-function memoryStorage(): Storage {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    clear: () => m.clear(),
-    key: () => null,
-    get length() { return m.size; },
-  };
-}
 
 const rec: RecordingMeta = {
   id: "r1", channelName: "Первый", channelUrl: "https://x/1", programmeTitle: "Новости",
@@ -72,12 +63,7 @@ function harness(opts: { fs?: boolean; active?: boolean } = {}) {
   const calls = { toasts: [] as string[], actions: [] as string[], played: [] as string[], subtitles: [] as string[], deleted: [] as string[], before: 0 };
   const deps: RecordingsUiDeps = {
     nodes: nodes as unknown as RecordingsUiDeps["nodes"],
-    fs: () => opts.fs === false ? null : {
-      read: async (name) => (files.get(name) as File | undefined) ?? null,
-      write: async (name, blob) => void files.set(name, blob),
-      remove: async (name) => void files.delete(name),
-      list: async () => [...files.keys()],
-    },
+    fs: () => opts.fs === false ? null : memoryRecordingsFs(files),
     storage: () => storage,
     isActive: () => opts.active ?? true,
     language: () => "ru",

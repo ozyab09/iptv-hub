@@ -11,20 +11,8 @@ import {
 import { parseM3U } from "../src/m3u";
 import { buildCatchupUrl } from "../src/catchup";
 import type { Channel } from "../src/types";
+import { memoryStorage as store } from "./fakes/storage";
 
-const store = (): Storage => {
-  const map = new Map<string, string>();
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, v),
-    removeItem: (k: string) => void map.delete(k),
-    clear: () => void map.clear(),
-    key: () => null,
-    get length() {
-      return map.size;
-    },
-  } as Storage;
-};
 
 const ch = (url: string, name = url): Channel => ({
   name,

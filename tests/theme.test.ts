@@ -11,14 +11,8 @@ import {
   themeChoice,
   clearTheme,
 } from "../src/theme";
+import { memoryStorage as store } from "./fakes/storage";
 
-const store = () => {
-  const map = new Map<string, string>();
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, v),
-  };
-};
 
 describe("resolveTheme", () => {
   it("prefers the saved user choice", () => {
@@ -75,14 +69,7 @@ describe("storage key", () => {
 });
 
 describe("выбор темы в настройках", () => {
-  const mem = () => {
-    const m = new Map<string, string>();
-    return {
-      getItem: (k: string) => m.get(k) ?? null,
-      setItem: (k: string, v: string) => void m.set(k, v),
-      removeItem: (k: string) => void m.delete(k),
-    };
-  };
+  const mem = store;
 
   it("без сохранённой темы — «как в системе»", () => {
     expect(themeChoice(mem())).toBe("system");

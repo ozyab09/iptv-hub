@@ -14,15 +14,8 @@ import {
   LEGACY_FAVORITES_KEY,
   type PlaylistsState,
 } from "../src/playlists";
+import { memoryStorage as store } from "./fakes/storage";
 
-const store = () => {
-  const map = new Map<string, string>();
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, v),
-    removeItem: (k: string) => void map.delete(k),
-  };
-};
 
 const empty: PlaylistsState = { items: [], activeId: null };
 
