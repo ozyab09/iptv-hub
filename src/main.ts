@@ -2409,7 +2409,6 @@ function renderRecordings(): void {
     subtitles.setAttribute("aria-label", tr("player.subtitlesFile"));
     subtitles.textContent = "CC";
     subtitles.addEventListener("click", () => chooseExternalSubtitles(r));
-    actions.append(subtitles);
     const download = document.createElement("button");
     download.type = "button";
     download.className = "recording-act";
@@ -2445,7 +2444,7 @@ function renderRecordings(): void {
         renderRecordings();
       });
     });
-    actions.append(del);
+    actions.append(del, subtitles);
     card.append(actions);
 
     row.append(card);
