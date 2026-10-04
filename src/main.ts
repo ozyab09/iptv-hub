@@ -4045,11 +4045,19 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
     return;
   }
 
-  renderCategories();
-  renderChannels();
-  renderPinSettings();
-  renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
-  renderGroupSettings();
+  // Рендер после загрузки не должен оставлять вечное «Загрузка плейлиста…»
+  // (#344): любой бросок здесь показываем как ошибку на экране настроек.
+  try {
+    renderCategories();
+    renderChannels();
+    renderPinSettings();
+    renderPlaylistSwitcher(); // число каналов рядом с названием плейлиста
+    renderGroupSettings();
+  } catch (e) {
+    console.error("[iptv-hub] ошибка отрисовки плейлиста", e);
+    showSetup(tr("error.loadPlaylist", { reason: e instanceof Error ? e.message : t("error.unknown"), hint: "" }));
+    return;
+  }
   // Скрытые http-каналы — не потеря каналов при загрузке, а фильтр.
   // Извещаем уведомлением с колокольчиком сверху справа, ровно один раз
   // на плейлист (src/http-notice.ts): длинный текст в трёхсекундном тосте
@@ -4203,7 +4211,11 @@ scheduleUi = createRecordingScheduleUi({
   notify: showToast, onSaved: renderRecordings,
 });
 renderNav();
-void bootstrap().then(() => {
+void bootstrap().catch((e) => {
+  // Падение запуска не должно оставлять вечное «Загрузка плейлиста…» (#344).
+  console.error("[iptv-hub] ошибка запуска", e);
+  showSetup(tr("error.loadPlaylist", { reason: e instanceof Error ? e.message : t("error.unknown"), hint: "" }));
+}).then(() => {
   try {
     const raw = sessionStorage.getItem("iptv-hub.backup-result");
     sessionStorage.removeItem("iptv-hub.backup-result");

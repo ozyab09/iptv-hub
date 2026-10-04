@@ -108,12 +108,21 @@ export function createTransport(deps: TransportDeps): Transport {
   return {
     async loadPlaylist(url) {
       // Локальный источник: маркер local:<id> — читаем содержимое из OPFS.
+      // Оборачиваем в тот же таймаут, что и http (#344): зависший OPFS
+      // не должен оставлять «Загрузка плейлиста…» навсегда.
       if (url.startsWith("local:")) {
         const fs = deps.fs();
         if (!fs) throw new Error(t("error.localOpfs", deps.language()));
-        const m3u = await loadLocalPlaylist(await fs, url.slice("local:".length));
-        if (m3u === null) throw new Error(t("error.localMissing", deps.language()));
-        return parseM3U(m3u);
+        try {
+          return await withSourceTimeout(async () => {
+            const m3u = await loadLocalPlaylist(await fs, url.slice("local:".length));
+            if (m3u === null) throw new Error(t("error.localMissing", deps.language()));
+            return parseM3U(m3u);
+          });
+        } catch (error) {
+          if (error instanceof Error && error.name === "TimeoutError") throw new Error(t("error.sourceTimeout", deps.language()));
+          throw error;
+        }
       }
       const doFetch = deps.fetch ?? fetch;
       try {
