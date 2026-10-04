@@ -1,5 +1,6 @@
+import { playlistScopedKey } from "./playlist-scoped-key";
 export interface GroupPreferences { hidden: ReadonlySet<string>; order: readonly string[] }
-export const groupPreferencesKey = (id: string): string => `iptv-hub.groups.v1:${id}`;
+export const groupPreferencesKey = (id: string): string => playlistScopedKey("groups", id);
 
 export function parseGroupPreferences(raw: string | null): GroupPreferences {
   try {

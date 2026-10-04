@@ -1,6 +1,7 @@
+import { playlistScopedKey } from "./playlist-scoped-key";
 import type { Channel } from "./types";
 
-export const favoritesOrderKey = (id: string): string => `iptv-hub.favorites-order.v1:${id}`;
+export const favoritesOrderKey = (id: string): string => playlistScopedKey("favorites-order", id);
 
 export function parseFavoritesOrder(raw: string | null): string[] {
   try {

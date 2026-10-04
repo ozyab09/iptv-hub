@@ -1,6 +1,7 @@
+import { playlistScopedKey } from "./playlist-scoped-key";
 export interface PinHash { salt: string; hash: string }
 export type ParentalPins = ReadonlyMap<string, PinHash>;
-export const parentalPinsKey = (id: string): string => `iptv-hub.parental-pins.v1:${id}`;
+export const parentalPinsKey = (id: string): string => playlistScopedKey("parental-pins", id);
 export const isValidPin = (pin: string): boolean => /^\d{4,8}$/.test(pin);
 
 const hex = (bytes: Uint8Array): string => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");

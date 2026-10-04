@@ -3,6 +3,7 @@
  * Чистые функции: валидация и сборка JSON без localStorage — тестируются в node.
  */
 
+import { playlistScopedKey } from "./playlist-scoped-key";
 import { parseBackupSections, type BackupSections } from "./backup-sections";
 import { loadPlaylists, PLAYLISTS_KEY, type Playlist } from "./playlists";
 import { parseLocalPlaylistFiles, type LocalPlaylistFiles } from "./backup-local";
@@ -31,7 +32,7 @@ export interface BackupInput extends BackupSections {
 
 /** Ключ «недавних» конкретного плейлиста — единый для localStorage и бэкапа. */
 export function recentsKey(id: string): string {
-  return `iptv-hub.recents.v1:${id}`;
+  return playlistScopedKey("recents", id);
 }
 
 /** Почистить список recents: только строки, дедап по url, лимит RECENTS_MAX. */

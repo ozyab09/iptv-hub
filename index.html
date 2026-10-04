@@ -399,6 +399,7 @@
               <div id="now-show" class="now-show"></div>
             </div>
             <button id="btn-retry" class="vbtn ghost" title="Перезапустить поток" aria-label="Перезапустить поток" hidden data-i18n-title="player.retry" data-i18n-aria-label="player.retry"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg></button>
+            <button id="btn-stream-out" class="vbtn ghost" title="Скопировать ссылку на поток" aria-label="Скопировать ссылку на поток" hidden><svg class="i" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg></button>
             <div class="top-actions">
               <button id="btn-multi-view" class="vbtn ghost" title="Мульти-вью 2×2" aria-label="Мульти-вью 2×2" data-i18n-title="multi.enter" data-i18n-aria-label="multi.enter"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-grid"></use></svg></button>
               <button id="now-fav" class="vbtn ghost fav-star" title="В избранное" aria-label="В избранное или убрать" data-i18n-title="favorites.add" data-i18n-aria-label="favorites.add"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
@@ -511,6 +512,10 @@
           <input id="channel-epg-id" class="input" type="text" maxlength="120" />
           <label class="channel-hidden-label"><input id="channel-hidden" type="checkbox" /><span data-i18n="channel.hide">Скрыть из списков и поиска</span></label>
           <p class="set-note muted" data-i18n="channel.linkNote">Скрытый канал остаётся доступен по ссылке с ?ch=.</p>
+          <div class="channel-stream-actions">
+            <button id="channel-copy-stream" type="button" class="btn btn-outline" data-i18n="stream.copy">Скопировать ссылку на поток</button>
+            <button id="channel-external" type="button" class="btn btn-outline" data-i18n="stream.external" hidden>Открыть во внешнем плеере</button>
+          </div>
           <div class="channel-editor-actions">
             <button id="channel-editor-cancel" type="button" class="btn" data-i18n="channel.cancel">Отмена</button>
             <button type="submit" class="btn" data-i18n="channel.save">Сохранить</button>
