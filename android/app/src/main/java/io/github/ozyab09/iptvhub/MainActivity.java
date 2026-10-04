@@ -27,7 +27,11 @@ import androidx.webkit.WebViewClientCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * IPTV Hub как самостоятельное приложение: web-сборка зашита в APK
@@ -47,6 +51,9 @@ public class MainActivity extends AppCompatActivity {
     /** Домен локального origin: тот же, что отдаёт WebViewAssetLoader. */
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://" + LOCAL_HOST + "/www/index.html";
+    /** Схемы, которые отдаём внешнему видеоплееру (#372). */
+    private static final Set<String> PLAYER_SCHEMES = new HashSet<>(
+            Arrays.asList("http", "https", "rtmp", "rtmps", "rtsp", "rtp", "udp", "mms"));
 
     private WebView webView;
     private boolean television;
@@ -125,7 +132,31 @@ public class MainActivity extends AppCompatActivity {
                                 .setAppearanceLightStatusBars("light".equals(appearance));
                     });
         }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            // Поток во внешнем плеере (#372): веб-слой присылает URL канала,
+            // система предлагает VLC, MX Player, mpv и т.п.
+            WebViewCompat.addWebMessageListener(webView, "IPTVHubExternalPlayer",
+                    Collections.singleton("https://" + LOCAL_HOST),
+                    (view, message, origin, isMainFrame, reply) -> {
+                        if (isMainFrame) openInExternalPlayer(message.getData());
+                    });
+        }
         webView.loadUrl(START_URL);
+    }
+
+    /** Отдать поток видеоплееру: только сетевые медиа-схемы, тип video/*. */
+    private void openInExternalPlayer(@Nullable String url) {
+        if (url == null) return;
+        Uri uri = Uri.parse(url.trim());
+        String scheme = uri.getScheme();
+        if (scheme == null || !PLAYER_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT))) return;
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, "video/*");
+        try {
+            startActivity(Intent.createChooser(intent, null));
+        } catch (ActivityNotFoundException ignored) {
+            // Плеера нет — веб-слой уже показал подсказку.
+        }
     }
 
     /**

@@ -1629,3 +1629,7 @@ html[data-tv="true"] .numeric-zap { font-size: 96px; padding: 20px 32px; }
 }
 .tv-paused-info[hidden] { display: none; }
 .tv-paused-info p { margin: 0; }
+/* Ссылка на поток и внешний плеер в редакторе канала (#372). */
+.channel-stream-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.channel-stream-actions .btn { font: inherit; min-height: 44px; }
+.channel-stream-actions .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
