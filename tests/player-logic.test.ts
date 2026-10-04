@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   httpToHttps,
   neighborIndex,
+  MAX_MEDIA_RECOVERIES,
+  MEDIA_RECOVERY_WINDOW_MS,
+  nextMediaRecovery,
+  shouldRecoverMedia,
   shouldRetryNetwork,
   skipTarget,
 } from "../src/player";
@@ -50,6 +54,25 @@ describe("shouldRetryNetwork", () => {
   it("сдаётся после предела — иначе мёртвый поток переподключается вечно", () => {
     expect(shouldRetryNetwork(4)).toBe(false);
     expect(shouldRetryNetwork(99)).toBe(false);
+  });
+});
+
+describe("media error recovery limit (#350)", () => {
+  it("первые восстановления разрешены, следующая подряд ошибка — сдаваться", () => {
+    let state = nextMediaRecovery(null, 0);
+    expect(state.count).toBe(1);
+    expect(shouldRecoverMedia(state.count)).toBe(true);
+    for (let i = 1; i < MAX_MEDIA_RECOVERIES; i++) state = nextMediaRecovery(state, i * 1000);
+    expect(shouldRecoverMedia(state.count)).toBe(true);
+    state = nextMediaRecovery(state, 10_000);
+    expect(state.count).toBe(MAX_MEDIA_RECOVERIES + 1);
+    expect(shouldRecoverMedia(state.count)).toBe(false);
+  });
+
+  it("ошибка после окна тишины считается первой — редкие сбои эфира не копятся", () => {
+    const state = nextMediaRecovery({ count: MAX_MEDIA_RECOVERIES, at: 0 }, MEDIA_RECOVERY_WINDOW_MS);
+    expect(state.count).toBe(1);
+    expect(shouldRecoverMedia(state.count)).toBe(true);
   });
 });
 
