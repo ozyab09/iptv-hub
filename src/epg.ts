@@ -146,8 +146,18 @@ function decodeEntities(s: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&#(\d+);/g, (raw: string, d: string) => fromCodePointSafe(Number(d), raw))
+    .replace(/&#x([0-9a-f]+);/gi, (raw: string, h: string) => fromCodePointSafe(parseInt(h, 16), raw))
     .replace(/&amp;/g, "&");
+}
+
+/**
+ * Символ по коду или исходная сущность, если код вне Unicode или суррогат:
+ * одна битая сущность провайдера не должна ронять весь EPG (#352).
+ */
+function fromCodePointSafe(code: number, raw: string): string {
+  if (!Number.isInteger(code) || code < 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return raw;
+  return String.fromCodePoint(code);
 }
 
 /** «Сейчас / далее» для канала с учётом локального времени. */
