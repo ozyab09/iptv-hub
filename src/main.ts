@@ -1587,7 +1587,7 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   c = applyChannelOverrides([snapshot?.channels.find((original) => original.url === c.url) ?? c], channelOverrides, true)[0]!;
   if (groupPreferences.hidden.has(c.group)) { showToast(tr("groups.hidden")); return false; }
   if (!await authorizeGroup(c.group) || request !== playRequest || plState.activeId !== id) return false;
-  if (multiViewUi.isOpen && archiveUrl !== undefined) closeMultiView(false);
+  if (multiViewUi.isOpen && (archiveUrl !== undefined || c.mediaKind)) closeMultiView(false);
   // Смена канала во время записи: сохраняем записанный кусок старого канала.
   // lastPlayed может быть null (плеер закрыли сразу после старта записи —
   // осиротевший асинхронный старт): такую запись тоже останавливаем, иначе

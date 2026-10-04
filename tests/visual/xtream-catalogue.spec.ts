@@ -78,7 +78,8 @@ for (const width of [390, 1440]) {
     await expect.poll(() => requests.some((url) => url.endsWith("/series/user/secret/21.mp4"))).toBe(true);
     if (width < 1024) await page.locator("#player-bar").click();
     await expect(page.locator("#btn-next-episode")).toBeVisible();
-    await page.locator("#btn-next-episode").click();
+    if (width === 1440) await page.locator("#video").dispatchEvent("ended");
+    else await page.locator("#btn-next-episode").click();
     await expect.poll(() => requests.some((url) => url.endsWith("/series/user/secret/22.mp4"))).toBe(true);
     await expect(page.locator("#btn-next-episode")).toBeHidden();
     await page.locator("#btn-close-player").click();
