@@ -42,7 +42,7 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts` —
@@ -253,6 +253,17 @@ push в main CI вычисляет следующий патч, штампует
 просмотр. Установка защиты останавливает канал группы и открытое мульти-вью.
 В backup JSON v2 переносится соль и хеш PIN. Забытый PIN — очистка всех данных сайта; это
 локальное ограничение интерфейса, не защита от владельца браузера.
+
+### Скачивание передачи из архива (#315, #359)
+
+`programme-downloader.ts` — отдельный muted Player + сегментная сессия
+(`download-rec-*.part`), без MSE — потоковое скачивание через
+`stream-sink.ts` (`pipeStreamToSink`, чистый) в OPFS-приёмник.
+`downloadStatus()` (канал, начало, название, прогресс 0…1) и
+`cancelDownload()` питают UI: кнопка в `programmeRow()` для прошедшей
+передачи с архивом показывает «Отменить · N%», остальные кнопки ждут;
+`#download-status` в «Записях» — подпись, `<progress>` и отмена. Отмена:
+`session.stop(false)` удаляет рабочий файл, скрытый `<video>` убирается.
 
 ### Записи по расписанию (#174)
 

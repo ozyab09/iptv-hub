@@ -156,7 +156,7 @@ import {
   programmesInDay,
   type DayWindow,
 } from "./catchup";
-import { downloadProgramme } from "./programme-downloader";
+import { cancelDownload, downloadProgramme, downloadStatus } from "./programme-downloader";
 import { createQualityMenu } from "./quality-menu";
 import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
@@ -2421,6 +2421,7 @@ function noteRecordingStop(): void {
 
 function renderRecordings(): void {
   scheduleUi?.render();
+  refreshDownloadUi();
   const list = loadRecordings(typeof localStorage !== "undefined" ? localStorage : null);
   // Раздел «Записи» — самостоятельный экран из сайдбара (см. VIEWS).
   const recordingsScreen = $("recordings-screen");
@@ -3150,33 +3151,13 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
         ? tr("guide.outsideArchive")
         : tr("guide.noArchive");
   }
-  if (stop <= now.getTime()) return row;
   const wrapper = document.createElement("div"); wrapper.className = "programme-recordable";
-  // Скачивание доступной из архива передачи (#315) — рядом с записью.
-  if (state === "past" && watchable && cu.source) {
-    const dl = document.createElement("button");
-    dl.type = "button";
-    dl.className = "btn btn-sm programme-download";
-    dl.textContent = tr("download.title");
-    dl.title = tr("download.title");
-    dl.addEventListener("click", () => {
-      const url = buildCatchupUrl(cu, p, new Date());
-      if (!url) {
-        showToast(tr("error.noArchive"));
-        return;
-      }
-      void downloadProgramme({
-        channelName: c.name,
-        channelUrl: c.url,
-        programme: p,
-        url,
-        fs: recordingsFs,
-        storage: localStorage,
-        notify: showToast,
-        onSaved: renderRecordings,
-      });
-    });
-    wrapper.append(dl);
+  if (stop <= now.getTime()) {
+    // Скачивание доступной из архива передачи (#315, #359). Раньше блок стоял
+    // после раннего return для прошедших передач и не рисовался вовсе.
+    if (!(watchable && cu.source)) return row;
+    wrapper.append(row, programmeDownloadButton(c, p, cu));
+    return wrapper;
   }
   const record = document.createElement("button"); record.type = "button"; record.className = "btn btn-sm schedule-programme";
   record.textContent = tr("schedule.title");
@@ -3186,6 +3167,81 @@ function programmeRow(p: EpgProgramme, now: Date, onPlayed: () => void): HTMLEle
   const reminder = playlistId && reminderUi?.button(c, p, playlistId);
   if (reminder) wrapper.append(reminder);
   return wrapper;
+}
+
+/**
+ * Кнопка скачивания передачи из архива. Пока идёт скачивание этой передачи,
+ * кнопка показывает прогресс и отменяет его; другие кнопки ждут (#359).
+ */
+function programmeDownloadButton(c: Channel, p: EpgProgramme, cu: { days: number; source: string | null }): HTMLButtonElement {
+  const dl = document.createElement("button");
+  dl.type = "button";
+  dl.className = "btn btn-sm programme-download";
+  dl.dataset.downloadChannel = c.url;
+  dl.dataset.downloadStart = p.start;
+  dl.addEventListener("click", () => {
+    const current = downloadStatus();
+    if (current) {
+      if (current.channelUrl === c.url && current.start === p.start) cancelProgrammeDownload();
+      return;
+    }
+    const url = buildCatchupUrl(cu, p, new Date());
+    if (!url) {
+      showToast(tr("error.noArchive"));
+      return;
+    }
+    void downloadProgramme({
+      channelName: c.name,
+      channelUrl: c.url,
+      programme: p,
+      url,
+      fs: recordingsFs,
+      storage: localStorage,
+      notify: showToast,
+      onSaved: renderRecordings,
+      onStatus: refreshDownloadUi,
+    });
+  });
+  refreshDownloadButton(dl);
+  return dl;
+}
+
+function refreshDownloadButton(dl: HTMLButtonElement): void {
+  const current = downloadStatus();
+  const mine = current !== null && current.channelUrl === dl.dataset.downloadChannel && current.start === dl.dataset.downloadStart;
+  dl.disabled = current !== null && !mine;
+  dl.classList.toggle("downloading", mine);
+  dl.textContent = mine ? tr("download.progress", { pct: Math.floor(current.progress * 100) }) : tr("download.title");
+  dl.title = mine ? tr("download.cancel") : current ? tr("download.busy") : tr("download.title");
+  dl.setAttribute("aria-label", dl.title);
+}
+
+function cancelProgrammeDownload(): void {
+  cancelDownload();
+  showToast(tr("download.cancelled"));
+}
+
+/** Прогресс скачивания: кнопки в программе и строка в разделе «Записи». */
+function refreshDownloadUi(): void {
+  document.querySelectorAll<HTMLButtonElement>(".programme-download").forEach(refreshDownloadButton);
+  const box = $("download-status");
+  const current = downloadStatus();
+  box.hidden = current === null;
+  box.textContent = "";
+  if (!current) return;
+  const label = document.createElement("span");
+  label.className = "download-status-label ellipsis";
+  label.textContent = tr("download.status", { title: current.title, channel: current.channelName });
+  const bar = document.createElement("progress");
+  bar.max = 100;
+  bar.value = Math.floor(current.progress * 100);
+  bar.setAttribute("aria-label", label.textContent);
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn btn-sm download-cancel";
+  cancel.textContent = tr("download.cancel");
+  cancel.addEventListener("click", cancelProgrammeDownload);
+  box.append(label, bar, cancel);
 }
 
 /** Передачи текущего канала по телепрограмме, по времени начала. */

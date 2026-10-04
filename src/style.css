@@ -1584,3 +1584,10 @@ video::cue {
   background: var(--surface-2);
 }
 .catalogue-poster img { width: 100%; height: 100%; object-fit: contain; }
+/* Скачивание передачи из архива (#359): прогресс и отмена в «Записях». */
+.download-status { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); }
+.download-status[hidden] { display: none; }
+.download-status-label { flex: 1 1 auto; min-width: 0; }
+.download-status progress { flex: 0 1 160px; min-width: 80px; accent-color: var(--accent); }
+.download-cancel { flex: none; font: inherit; min-height: 44px; }
+.download-cancel:focus-visible, .programme-download.downloading:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
