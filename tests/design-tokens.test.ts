@@ -229,8 +229,9 @@ describe("тема PWA совпадает с фоном", () => {
     expect(manifest.background_color).toBe(DARK["--bg"]);
   });
 
-  it("meta theme-color в index.html — то же значение", () => {
+  it("meta theme-color в index.html — фон тёмной и светлой темы (#360)", () => {
     const html = readFileSync(root("index.html"), "utf-8");
-    expect(html).toContain(`<meta name="theme-color" content="${DARK["--bg"]}" />`);
+    expect(html).toContain(`<meta name="theme-color" content="${DARK["--bg"]}" media="(prefers-color-scheme: dark)" />`);
+    expect(html).toContain(`<meta name="theme-color" content="${light.get("--bg")}" media="(prefers-color-scheme: light)" />`);
   });
 });

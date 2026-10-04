@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyTheme,
   resolveTheme,
   toggleTheme,
   saveTheme,
@@ -99,5 +100,36 @@ describe("выбор темы в настройках", () => {
     clearTheme(s);
     expect(themeChoice(s)).toBe("system");
     expect(resolveTheme(s, true)).toBe("dark");
+  });
+});
+
+// #360: meta theme-color следует за фактической темой (значение из --bg).
+describe("applyTheme → meta theme-color", () => {
+  function fakeDoc(bgByTheme: Record<string, string>) {
+    const metas = [{ content: "#0c0d10" }, { content: "#f6f6f8" }];
+    const root = { dataset: {} as Record<string, string>, style: {} as Record<string, string> };
+    const doc = {
+      documentElement: root,
+      defaultView: {
+        getComputedStyle: () => ({ getPropertyValue: (name: string) => (name === "--bg" ? ` ${bgByTheme[root.dataset.theme ?? ""] ?? ""}` : "") }),
+      },
+      querySelectorAll: () => metas,
+    };
+    return { doc: doc as unknown as Document, metas, root };
+  }
+
+  it("светлая тема красит обе меты в светлый фон, тёмная — в тёмный", () => {
+    const { doc, metas, root } = fakeDoc({ light: "#f6f6f8", dark: "#0c0d10" });
+    applyTheme("light", doc);
+    expect(root.dataset.theme).toBe("light");
+    expect(metas.map((m) => m.content)).toEqual(["#f6f6f8", "#f6f6f8"]);
+    applyTheme("dark", doc);
+    expect(metas.map((m) => m.content)).toEqual(["#0c0d10", "#0c0d10"]);
+  });
+
+  it("без токена меты не трогаются", () => {
+    const { doc, metas } = fakeDoc({});
+    applyTheme("light", doc);
+    expect(metas.map((m) => m.content)).toEqual(["#0c0d10", "#f6f6f8"]);
   });
 });
