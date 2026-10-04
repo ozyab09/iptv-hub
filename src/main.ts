@@ -1579,7 +1579,8 @@ btnClosePlayer.addEventListener("click", () => {
 
 btnPause.addEventListener("click", () => {
   player.togglePause();
-});  videoEl.addEventListener("play", () => setIcon(btnPause, "play"));  // Wake Lock (FR-7): пока играет и вкладка видима — экран не гаснет.
+});
+// Wake Lock (FR-7): пока играет и вкладка видима — экран не гаснет.
   videoEl.addEventListener("play", () => {
     wakeLockState = wakeLockPlay(wakeLockState, wakeLockHooks, document.visibilityState === "visible");
     setIcon(btnPause, "pause");
