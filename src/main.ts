@@ -1,6 +1,6 @@
 import "./style.css";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
-import { channelHealthKey, parseChannelHealth, serializeChannelHealth, markChannelFailure, clearChannelFailure, type ChannelHealth, type ChannelFailure } from "./channel-health";
+import { channelHealthKey, parseChannelHealth, serializeChannelHealth, markChannelFailure, clearChannelFailure, isChannelRecovered, type ChannelHealth, type ChannelFailure } from "./channel-health";
 import { createGroupPreferencesUi } from "./group-preferences-ui";
 import { groupPreferencesKey, parseGroupPreferences, serializeGroupPreferences, orderedGroups, moveGroup, type GroupPreferences } from "./group-preferences";
 import { applyFavoritesOrder, favoritesOrderKey, moveFavorite, parseFavoritesOrder } from "./favorites-order";
@@ -398,9 +398,10 @@ function noteChannelFailure(): void {
   persistChannelHealth();
 }
 
-function noteChannelRecovered(): void {
+function noteChannelRecovered(event: Event): void {
   const attempt = currentHealthAttempt();
-  if (!attempt || videoEl.readyState < 2 || videoEl.videoWidth === 0 || videoEl.error || !channelHealth.has(attempt.url)) return;
+  const hasVideo = videoEl.videoWidth > 0 || !!player.getHls()?.levels.some((level) => level.videoCodec);
+  if (!attempt || !channelHealth.has(attempt.url) || !isChannelRecovered(videoEl, event.type, hasVideo)) return;
   channelHealth = clearChannelFailure(channelHealth, attempt.url);
   persistChannelHealth();
 }
