@@ -1,6 +1,7 @@
 import "./style.css";
 import { createCatalogueCard } from "./catalogue-card";
 import { createChannelListUi } from "./channel-list-ui";
+import { copyText, externalPlayerBridge, isExternalPlayable, openExternally, selectionCopy, streamLink } from "./external-player";
 import { resumeEpisode } from "./xtream-catalogue";
 import { parseExternalSubtitles, parseSubtitlePreference, subtitlePreferenceKey, type SubtitleCue } from "./external-subtitles";
 import { createRecordingScheduleUi } from "./recording-schedule-ui";
@@ -605,10 +606,10 @@ const player = new Player(
   () => {
     qualityMenuUi.refreshQualityUi();
     refreshPlayerStatus();
-    btnRetry.hidden = true; // поток ожил — retry не нужен
+    setFatalActions(false); // поток ожил — retry не нужен
   },
   () => {
-    btnRetry.hidden = false; // фатальная ошибка — показываем retry
+    setFatalActions(true); // фатальная ошибка — показываем retry и ссылку на поток
     noteChannelFailure();
     void diagnoseStreamFailure();
   },
@@ -1074,6 +1075,7 @@ let editedChannelUrl: string | null = null;
 function openChannelEditor(channel: Channel): void {
   if (!snapshot) return;
   editedChannelUrl = channel.url;
+  channelExternal.hidden = !externalBridge || !isExternalPlayable(channel.url);
   const original = snapshot?.channels.find((c) => c.url === channel.url);
   $("channel-original").textContent = original?.name ?? channel.name;
   channelAlias.value = channelOverrides.get(channel.url)?.alias ?? "";
@@ -1082,6 +1084,44 @@ function openChannelEditor(channel: Channel): void {
   channelEditor.showModal();
   channelAlias.focus();
 }
+
+// ---------- Ссылка на поток и внешний плеер (#372) ----------
+// Без бэкенда неиграемый в браузере канал можно только отдать дальше:
+// в приложении — системному выбору плеера, в браузере — в буфер обмена.
+const externalBridge = externalPlayerBridge(window);
+const btnStreamOut = $<HTMLButtonElement>("btn-stream-out");
+const channelExternal = $<HTMLButtonElement>("channel-external");
+
+function copyStreamLink(url: string): void {
+  void copyText(url, { clipboard: navigator.clipboard ?? null, fallback: selectionCopy(document) })
+    .then((ok) => showToast(ok ? tr("stream.copied") : tr("stream.copyFailed")));
+}
+
+function sendToExternalPlayer(url: string): void {
+  if (openExternally(externalBridge, url)) showToast(tr("stream.externalSent"));
+  else copyStreamLink(url);
+}
+
+/** Retry и ссылка на текущий источник видны только после фатальной ошибки. */
+function setFatalActions(on: boolean): void {
+  btnRetry.hidden = !on;
+  const url = streamLink(lastPlayed?.url ?? null, archivePlayback?.url ?? null);
+  btnStreamOut.hidden = !on || url === null;
+  const label = externalBridge ? tr("stream.external") : tr("stream.copy");
+  btnStreamOut.title = label;
+  btnStreamOut.setAttribute("aria-label", label);
+}
+
+btnStreamOut.addEventListener("click", () => {
+  const url = streamLink(lastPlayed?.url ?? null, archivePlayback?.url ?? null);
+  if (url) sendToExternalPlayer(url);
+});
+$("channel-copy-stream").addEventListener("click", () => {
+  if (editedChannelUrl) copyStreamLink(editedChannelUrl);
+});
+channelExternal.addEventListener("click", () => {
+  if (editedChannelUrl) sendToExternalPlayer(editedChannelUrl);
+});
 
 function refreshChannelOverrides(): void {
   if (!snapshot) return;
@@ -1317,7 +1357,7 @@ async function playChannel(c: Channel, archiveUrl?: string, archiveProgramme?: E
   setWatching(true);
   setIcon(btnPause, "pause"); // после play() обычно идёт воспроизведение
   playerStatus.textContent = "";
-  btnRetry.hidden = true; // новый канал — сбрасываем retry-статус
+  setFatalActions(false); // новый канал — сбрасываем retry-статус
   healthAttempt = !c.mediaKind && archiveUrl === undefined && plState.activeId ? { playlistId: plState.activeId, url: c.url } : null;
   diagnosticsFor = null;
   const refused = player.play(archiveUrl ? { ...c, url: archiveUrl, mirrors: undefined } : c);
@@ -1481,7 +1521,7 @@ btnSeekFwd.addEventListener("click", () => player.seekBy(15));
 // Ручной перезапуск потока после фатальной ошибки
 btnRetry.addEventListener("click", () => {
   diagnosticsFor = null;
-  btnRetry.hidden = true;
+  setFatalActions(false);
   player.retry();
   showToast(tr("player.restarting"));
 });
@@ -1969,7 +2009,7 @@ function playRecording(file: File, r: RecordingMeta): void {
   setSystemText(nowTitle, tr("record.title", { channel: r.channelName }));
   nowTitle.title = r.programmeTitle ?? "";
   setSystemText(playerStatus, tr("record.playback"));
-  btnRetry.hidden = true;
+  setFatalActions(false);
   liveBadge.hidden = true;
   refreshScrub();
   showToast(tr("record.from", { date: new Date(r.startedAt).toLocaleString(currentLanguage) }));

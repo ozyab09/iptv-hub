@@ -42,7 +42,7 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`, `external-player.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts`,
@@ -133,6 +133,12 @@ push в main CI вычисляет следующий патч, штампует
   start + currentTime, «К эфиру» вызывает обычный запуск канала. Позиции архива
   хранятся по архивному URL; явный старт с начала пропускает их восстановление.
   Состояние очищается при эфире, закрытии, записи и выборе окна мульти-вью.
+  Внешний плеер (#372, `external-player.ts`, чистый): `setFatalActions()`
+  показывает retry и `#btn-stream-out` (ссылка = catchup-URL или исходный URL
+  канала, только сетевые схемы). Есть мост `IPTVHubExternalPlayer` (WebView
+  приложения, локальный origin, главный фрейм) — URL уходит в `MainActivity`
+  → `ACTION_VIEW` `video/*` через chooser; иначе копирование (Clipboard API,
+  запасной путь — выделение textarea). То же в редакторе канала.
   Fatal media error — до 2 `recoverMediaError()` подряд (окно 60 с,
   `nextMediaRecovery`/`shouldRecoverMedia`, #350), затем retry-кнопка.
   Fatal network error — до 3 автоповторов, потом retry-кнопка; фатальная

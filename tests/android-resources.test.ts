@@ -121,3 +121,21 @@ describe("XML ресурсов валиден для aapt2", () => {
     }
   });
 });
+
+// #372: мост внешнего плеера принимает сообщения только с локального origin
+// и отдаёт системе лишь сетевые медиа-схемы с типом video/*.
+describe("внешний плеер в Android-приложении", () => {
+  const activity = readFileSync(
+    join(process.cwd(), "android/app/src/main/java/io/github/ozyab09/iptvhub/MainActivity.java"),
+    "utf-8",
+  );
+  it("мост IPTVHubExternalPlayer ограничен локальным origin и главным фреймом", () => {
+    expect(activity).toMatch(/addWebMessageListener\(webView, "IPTVHubExternalPlayer",\s*Collections\.singleton\("https:\/\/" \+ LOCAL_HOST\)/);
+    expect(activity).toContain("if (isMainFrame) openInExternalPlayer(message.getData());");
+  });
+  it("в плеер уходят только сетевые схемы, интент с типом video/* и выбором приложения", () => {
+    expect(activity).toContain('Arrays.asList("http", "https", "rtmp", "rtmps", "rtsp", "rtp", "udp", "mms")');
+    expect(activity).toContain('intent.setDataAndType(uri, "video/*");');
+    expect(activity).toContain("Intent.createChooser(intent, null)");
+  });
+});
