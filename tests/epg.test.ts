@@ -96,3 +96,22 @@ describe("name fallback through normalizeName (#348)", () => {
     expect(epg.get("name:футбол")).toHaveLength(1);
   });
 });
+
+// #352: битая числовая сущность не роняет разбор, hex-сущности декодируются.
+describe("decodeEntities robustness (#352)", () => {
+  const title = (t: string): string =>
+    parseEpg(`<tv><programme start="20260928120000 +0000" stop="20260928130000 +0000" channel="x"><title>${t}</title></programme>
+      <programme start="20260928130000 +0000" stop="20260928140000 +0000" channel="x"><title>Next</title></programme></tv>`)
+      .get("id:x")?.map((p) => p.title).join("|") ?? "";
+
+  it("код вне Unicode и суррогаты остаются литералом, остальное разобрано", () => {
+    expect(title("Test &#1114112; X")).toBe("Test &#1114112; X|Next");
+    expect(title("S &#55296; &#xD800;")).toBe("S &#55296; &#xD800;|Next");
+    expect(title("Big &#x110000;")).toBe("Big &#x110000;|Next");
+  });
+
+  it("hex-сущности в любом регистре декодируются, прежние — не сломаны", () => {
+    expect(title("A &#x2665; &#X2665; B")).toBe("A ♥ ♥ B|Next");
+    expect(title("Tom &amp; Jerry &#39;s")).toBe("Tom & Jerry 's|Next");
+  });
+});
