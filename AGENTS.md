@@ -262,6 +262,17 @@ push в main CI вычисляет следующий патч, штампует
 В backup JSON v2 переносится соль и хеш PIN. Забытый PIN — очистка всех данных сайта; это
 локальное ограничение интерфейса, не защита от владельца браузера.
 
+### Карточка передачи (#363)
+
+`programmeRow()` всегда возвращает `.programme-recordable` со строкой и кнопкой
+`.programme-info`; `openProgrammeCard()` открывает оверлей `programme` (общий
+стек, history, popstate). Escape ловится в capture-фазе window и закрывает
+карточку раньше гайда. Текст EPG — только `textContent`, `desc` с переносами
+(`white-space: pre-line`), без desc блок скрыт. Действия переиспользуют
+`watchProgramme()` (тот же путь, что клик по строке: `playChannel()` с PIN,
+`buildCatchupUrl()`), `programmeDownloadButton()` и `programmeFutureActions()`
+(«Записать» и «Напомнить»). Подсказка строки дополняется `desc`.
+
 ### Скачивание передачи из архива (#315, #359)
 
 `programme-downloader.ts` — отдельный muted Player + сегментная сессия

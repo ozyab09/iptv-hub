@@ -12,7 +12,8 @@ export type OverlayName =
   | "manager"
   | "quality"
   | "sleep"
-  | "notifications";
+  | "notifications"
+  | "programme";
 
 /**
  * Открыть оверлей. Если он уже на вершине стека — стек не меняется
