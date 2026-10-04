@@ -42,7 +42,7 @@ push в main CI вычисляет следующий патч, штампует
    `playlists.ts`, `favorites.ts`, `backup.ts`, `catchup.ts`, `quality.ts`,
    `theme.ts`, `virtual-list.ts`, `recorder.ts`, `segment-recorder.ts`,
    `recording-sink.ts`, `debug-log.ts`, `http-notice.ts`, `notifications.ts`,
-   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`) — полностью покрыта тестами.
+   `refresh.ts`, `playlist-transport.ts`, `xtream.ts`, `recording-recovery.ts`, `debounce.ts`, `stream-sink.ts`, `media-session.ts`) — полностью покрыта тестами.
    UI (`main.ts`) — тонкий слой: DOM-события и вызовы чистых модулей.
    Крупные UI-блоки выносятся из `main.ts` в инъекционные DOM-модули
    (issue #123): `notification-bell.ts`, `quality-menu.ts`, `playlist-ui.ts` —
@@ -176,6 +176,12 @@ push в main CI вычисляет следующий патч, штампует
   просмотра записи (кнопки prev/next тогда скрыты). Кнопки prev/next деки
   рисуются иконками `prev-track`/`next-track` (⏮/⏭), а шевроны `prev`/`next`
   остаются для навигации по интерфейсу.
+  MediaSession (#362, `media-session.ts`, чистый): `refreshScrub()` →
+  `syncMediaSession()` берёт заголовок/передачу из `#now-title`/`#now-show` и
+  логотип (только https/data), мост не пересоздаёт одинаковые метаданные;
+  play/pause видео обновляют `playbackState`, закрытие плеера — `clear()`.
+  Действия системы идут через `applyMediaKey()`; `createActionGate(100 мс)`
+  отбрасывает дубль одного нажатия (keydown + MediaSession), `stop` закрывает плеер.
   Chromium/Firefox проверяют трёхминутное развитие sliding-манифеста на паузе
   с ускоренными таймерами, реальными TS-кадрами, продолжением и возвратом.
 - Запись эфира: HLS — сегментами без перекодирования (`segment-recorder.ts`
