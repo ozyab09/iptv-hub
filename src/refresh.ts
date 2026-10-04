@@ -10,6 +10,7 @@
  */
 
 import type { Channel, EpgProgramme, PlaylistSnapshot } from "./types";
+import { t, type Language } from "./i18n";
 
 /** Периодичность проверки, минут (0 — выключено). */
 export type RefreshInterval = 0 | 60 | 360 | 1440;
@@ -133,17 +134,18 @@ export function diffSnapshots(
 export function refreshNotice(
   diff: SnapshotDiff,
   httpDropped: number,
+  language: Language = "ru",
 ): string {
   if (diff.added === 0 && diff.removed === 0 && diff.changed === 0 && httpDropped === 0) {
-    return "Плейлист проверён: без изменений";
+    return t("refresh.unchanged", language);
   }
   const parts: string[] = [];
   if (diff.added > 0) parts.push(`+${diff.added}`);
   if (diff.removed > 0) parts.push(`−${diff.removed}`);
-  if (diff.changed > 0) parts.push(`изменено: ${diff.changed}`);
-  const head = parts.length > 0 ? `Плейлист обновлён: ${parts.join(", ")}` : "Плейлист обновлён";
+  if (diff.changed > 0) parts.push(t("refresh.changed", language, { count: diff.changed }));
+  const head = parts.length > 0 ? t("refresh.updated", language, { changes: parts.join(", ") }) : t("refresh.updatedPlain", language);
   if (httpDropped > 0) {
-    return `${head}. Скрыто http-каналов: ${httpDropped}`;
+    return `${head}. ${t("refresh.httpDropped", language, { count: httpDropped })}`;
   }
   return head;
 }
@@ -165,15 +167,16 @@ export function checkSummary(
   channels: number,
   programmes: number,
   epgLoaded: boolean,
+  language: Language = "ru",
 ): string {
   const parts: string[] = [];
   if (diff.added > 0) parts.push(`+${diff.added}`);
   if (diff.removed > 0) parts.push(`−${diff.removed}`);
-  if (diff.changed > 0) parts.push(`изменено: ${diff.changed}`);
-  const epgPart = epgLoaded ? `передач: ${programmes}` : "передач нет";
+  if (diff.changed > 0) parts.push(t("refresh.changed", language, { count: diff.changed }));
+  const epgPart = epgLoaded ? t("refresh.programmes", language, { count: programmes }) : t("refresh.noProgrammes", language);
   const head =
     parts.length > 0
-      ? `Плейлист обновлён: ${parts.join(", ")}`
-      : "Плейлист проверён: без изменений";
-  return `${head}. Каналов: ${channels}, ${epgPart}`;
+      ? t("refresh.updated", language, { changes: parts.join(", ") })
+      : t("refresh.unchanged", language);
+  return t("refresh.summary", language, { head, channels, epg: epgPart });
 }

@@ -3565,7 +3565,7 @@ async function refreshPlaylist(silentOnNoChange: boolean): Promise<void> {
         refreshNowFav();
       }
       pushNotification(
-        checkSummary(diff, fresh.channels.length, programmes ?? 0, programmes !== null),
+        checkSummary(diff, fresh.channels.length, programmes ?? 0, programmes !== null, currentLanguage),
       );
     }
   } catch {
@@ -4010,7 +4010,7 @@ async function openPlaylist(url: string, epgUrl: string | null): Promise<void> {
   if (snapshot.droppedHttp > 0 && plState.activeId &&
       shouldShowHttpNotice(plState.activeId, localStorage)) {
     pushNotification(
-      t("notifications.http", "ru", { count: snapshot.droppedHttp }),
+      tr("notifications.http", { count: snapshot.droppedHttp }),
     );
     markHttpNoticeShown(plState.activeId, localStorage);
   }
