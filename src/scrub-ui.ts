@@ -116,7 +116,9 @@ export function createScrubUi(deps: ScrubUiDeps): ScrubUi {
     const archive = deps.archiveProgramme();
     const prog = archive ?? deps.liveProgramme();
     if (!prog) {
-      if (deps.scheduleKey()) deps.renderSchedule();
+      // Без EPG полоса пуста, но блок программы под плеером показывает
+      // часовые слоты (#472) — строим один раз, пока ключ не выставлен.
+      if (deps.channelUrl() && !deps.scheduleKey()) deps.renderSchedule();
       setProgress("0%", "", "");
       nodes.show.textContent = "";
       nodes.timeLeft.textContent = "";

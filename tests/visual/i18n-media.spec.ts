@@ -31,7 +31,7 @@ test("player, guide and dates change language without reload or stream restart",
   await page.evaluate(() => { (window as unknown as { noReload: number }).noReload = 42; });
   await expect(page.locator("#now-fav")).toHaveAttribute("title", "Add to favorites");
   await expect(page.locator("#btn-pause")).toHaveAttribute("title", "Pause / resume (Space)");
-  await page.locator("#btn-guide").click();
+  await page.locator("#btn-full-guide").click();
   await expect(page.locator("#guide-title")).toHaveText("Programme guide · Канал");
   await expect(page.locator("#guide-days button").first()).toHaveText("Today");
   await expect(page.locator("#guide-list .live")).toHaveText("Live");

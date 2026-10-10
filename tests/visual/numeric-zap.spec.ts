@@ -74,7 +74,7 @@ test("Escape, search, settings, dialogs and closing cancel or ignore numeric inp
   await expect(page.locator("#search")).toHaveValue("25");
   await expect(page.locator("#numeric-zap")).toBeHidden();
   await page.locator("#search").fill("");
-  await page.locator("#btn-guide").click();
+  await page.locator("#btn-full-guide").click();
   await page.keyboard.press("2");
   await expect(page.locator("#numeric-zap")).toBeHidden();
   await page.keyboard.press("Escape");

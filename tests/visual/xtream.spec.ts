@@ -45,7 +45,7 @@ for (const width of [390, 1440]) {
       await row.click();
       await expect.poll(() => page.locator("#video").evaluate((el) => (el as HTMLVideoElement).videoWidth)).toBe(160);
       if (width < 1024) await page.locator("#player-bar").click();
-      await page.locator("#btn-guide").click();
+      await page.locator("#btn-full-guide").click();
       await page.locator("#guide-list .prog-row").filter({ hasText: "Archive fixture" }).click({ timeout: 5000 });
       await expect.poll(() => requests.find((url) => url.includes("/timeshift/") && url.endsWith(".m3u8"))).toBeTruthy();
       const archive = new URL(requests.find((url) => url.includes("/timeshift/") && url.endsWith(".m3u8"))!);
