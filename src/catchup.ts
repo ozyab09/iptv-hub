@@ -115,6 +115,32 @@ export function hourlyFallbackProgrammes(
 }
 
 
+/**
+ * Часовые слоты вокруг текущего часа для блока программы (#472): канал
+ * без EPG получает «расписание» из часа — прошедшие слоты открываются через
+ * catchup, текущий играет как эфир, будущие неактивны. Слоты идут от старых
+ * к новым; title пустой — UI показывает локализованное «Без названия» серым.
+ */
+export function hourlyScheduleSlots(
+  now: Date,
+  pastHours: number,
+  futureHours: number,
+): EpgProgramme[] {
+  const hourStart = Math.floor(now.getTime() / HOUR) * HOUR;
+  const out: EpgProgramme[] = [];
+  for (let i = -pastHours; i < futureHours; i++) {
+    const start = hourStart + i * HOUR;
+    out.push({
+      start: new Date(start).toISOString(),
+      stop: new Date(start + HOUR).toISOString(),
+      title: "",
+      desc: null,
+    });
+  }
+  return out;
+}
+
+
 const DAY = 86_400_000;
 
 export interface DayWindow {

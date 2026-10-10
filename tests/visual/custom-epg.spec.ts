@@ -43,7 +43,7 @@ for (const width of [390, 1440]) {
     await expect(page.locator("#now-title")).toContainText("Beta");
     await expect(page.locator("#now-show")).toContainText("Extra programme");
     if (width < 1024) await page.locator("#player-bar").click();
-    await page.locator("#btn-guide").click();
+    await page.locator("#btn-full-guide").click();
     await expect(page.locator("#guide-list .prog-row")).toContainText("Extra programme");
     await page.locator("#guide-close").click();
     await page.locator("#btn-close-player").click();

@@ -6,7 +6,8 @@ import type { Channel, EpgProgramme } from "../src/types";
 class El {
   hidden = false;
   className = "";
-  title = "";
+  innerHTML = "";
+  title = "";;
   type = "";
   tabIndex = -1;
   draggable = false;
@@ -71,6 +72,7 @@ function harness(rows: ListRow[], opts: { favoritesView?: boolean; favorite?: bo
     failure: (url) => (url.endsWith("/2.m3u8") ? { failedAt: 1, kind: "network" } as never : undefined),
     failureLabel: () => "Не открылся",
     nowNext: (c) => (c.url.endsWith("/0.m3u8") ? { now: programme, next: null } : null),
+    hasEpg: (c) => !c.url.endsWith("/2.m3u8"),
     language: () => "en",
     toast: (m) => calls.toasts.push(m),
     play: (c) => calls.played.push(c.url),
@@ -122,6 +124,17 @@ describe("createChannelListUi (#367)", () => {
     expect(current!.className).toContain("on");
     expect(failed!.className).toContain("has-failure");
     expect(failed!.find("channel-failure")!.attrs["aria-label"]).toBe("Не открылся");
+  });
+
+  it("значок EPG: у канала с телепрограммой есть, у канала без — нет (#472)", () => {
+    const h = harness([ch(0), ch(2)]); // ch(2) — без EPG в harness
+    h.ui.render(true);
+    const [withEpg, without] = h.inner().els();
+    const mark = withEpg!.find("channel-epg")!;
+    expect(mark).toBeDefined();
+    expect(mark.tagName).toBe("SPAN"); // декоративный, не кнопка
+    expect(mark.innerHTML).toContain("i-calendar");
+    expect(without!.find("channel-epg")).toBeUndefined();
   });
 
   it("действия: клик — канал, звезда и редактирование не запускают канал, hover — превью", () => {

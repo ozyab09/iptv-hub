@@ -30,7 +30,7 @@ for (const width of [390, 1440]) {
     await page.locator("#channel-list .channel-card").click();
     if (width < 1024) await page.locator("#video").click();
     await expect(page.locator("#now-show")).toHaveText("Live show");
-    await page.locator("#btn-guide").click();
+    await page.locator("#btn-full-guide").click();
     await expect(page.locator("#guide-overlay")).toBeVisible();
 
     const live = page.locator("#guide-list .programme-recordable").filter({ hasText: "Live show" });

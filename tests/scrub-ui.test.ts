@@ -31,6 +31,8 @@ function harness(opts: { recording?: boolean; duration?: number; archive?: EpgPr
   const video = { readyState: opts.recording ? 1 : 0, duration: opts.duration ?? NaN, currentTime: 0 };
   const calls = { seek: [] as number[], schedule: 0, wake: 0, refresh: 0 };
   let ui: ReturnType<typeof createScrubUi>;
+  // Как в guide-ui: renderSchedule выставляет ключ, guard строит блок один раз.
+  let key = opts.scheduleKey ?? "";
   const deps: ScrubUiDeps = {
     nodes: nodes as unknown as ScrubUiDeps["nodes"],
     video: video as unknown as HTMLVideoElement,
@@ -40,8 +42,8 @@ function harness(opts: { recording?: boolean; duration?: number; archive?: EpgPr
     archiveProgramme: () => opts.archive ?? null,
     liveProgramme: () => opts.live ?? null,
     channelUrl: () => "https://x/a",
-    scheduleKey: () => opts.scheduleKey ?? "",
-    renderSchedule: () => { calls.schedule++; },
+    scheduleKey: () => key,
+    renderSchedule: () => { calls.schedule++; key = "https://x/a|built"; },
     language: () => "en",
     wake: () => { calls.wake++; },
     refresh: () => { calls.refresh++; ui.render(); },
@@ -121,11 +123,13 @@ describe("createScrubUi (#369)", () => {
     expect(h.calls.schedule).toBe(0);
   });
 
-  it("без передачи полоса пуста, программа под плеером сбрасывается", () => {
-    const h = harness({ scheduleKey: "old" });
+  it("без передачи полоса пуста; блок программы строится один раз, пока ключ не выставлен (#472)", () => {
+    const h = harness(); // ключ пуст — вызываем перестройку
     h.ui.render();
     expect(h.nodes.fill.style.width).toBe("0%");
     expect(h.nodes.start.textContent).toBe("");
+    expect(h.calls.schedule).toBe(1);
+    h.ui.render(); // ключ уже выставлен — повторно не строим
     expect(h.calls.schedule).toBe(1);
   });
 });

@@ -22,7 +22,7 @@ async function setup(page: Page) {
   await page.goto("/");
   await page.locator("#channel-list .channel-card").click();
   await expect.poll(() => page.locator("#video").evaluate((el: HTMLVideoElement) => el.videoWidth)).toBe(160);
-  await page.locator("#btn-guide").click();
+  await page.locator("#btn-full-guide").click();
   await page.locator("#guide-list .schedule-programme").click();
 }
 

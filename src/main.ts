@@ -33,8 +33,7 @@ import {
 import { chipClass, menuItemClass } from "./ui-classes";
 import { createRecordingSink } from "./recording-sink";
 import { createRecorderAdapter, createRecordingCapture } from "./recording-capture";
-import { createGuideUi } from "./guide-ui";
-import { createSegmentSession } from "./segment-recorder";
+import { createGuideUi } from "./guide-ui";import { createSegmentSession } from "./segment-recorder";
 import {
   isMixedContent,
 } from "./config";
@@ -135,7 +134,6 @@ import { cancelDownload, downloadProgramme, downloadStatus } from "./programme-d
 import { createQualityMenu } from "./quality-menu";
 import { createPlaylistUi, type PlaylistUiNodes } from "./playlist-ui";
 import { createMultiViewUi } from "./multi-view-ui";
-import { createTimelineGuide } from "./timeline-guide-ui";
 import { createProgrammeReminders } from "./reminder-ui";
 import { createBackupUi } from "./backup-ui";
 import type { NotificationWatch } from "./notifications";
@@ -351,11 +349,8 @@ const subtitleWrap = $("subtitle-wrap");
 const subtitleBtn = $<HTMLButtonElement>("subtitle-btn");
 const subtitleMenu = $("subtitle-menu");
 const playerStatus = $("player-status");
-const btnGuide = $<HTMLButtonElement>("btn-guide");
 const guideOverlay = $("guide-overlay");
 const programmeOverlay = $("programme-overlay");
-const guideGrid = $("guide-grid");
-let timelineGuideUi: ReturnType<typeof createTimelineGuide> | null = null;
 let reminderUi: ReturnType<typeof createProgrammeReminders> | null = null;
 const nowSchedule = $("now-schedule");
 const btnFullGuide = $<HTMLButtonElement>("btn-full-guide");
@@ -1356,6 +1351,7 @@ const channelListUi = createChannelListUi({
   },
   failureLabel: channelFailureLabel,
   nowNext: (c) => (epg && snapshot ? getNowNext(epg, c, snapshot) : null),
+  hasEpg: (c) => channelProgrammes(c).length > 0,
   language: () => currentLanguage,
   toast: showToast,
   play: (c) => void playChannel(c),
@@ -1418,7 +1414,6 @@ function renderChannels(resetScroll = true): void {
   emptyState.hidden = visibleResults.length > 0;
   renderContinue();
   channelListUi.render(resetScroll);
-  if (!guideOverlay.hidden && guideUi.isGrid()) timelineGuideUi?.refresh();
 }
 
 // ---------- Плеер ----------
@@ -1894,12 +1889,6 @@ window.addEventListener("keydown", (e) => {
       }
       break;
     }
-    case "g":
-    case "п": // ru-раскладка
-      e.preventDefault();
-      if (guideOverlay.hidden) guideUi.open();
-      else guideOverlay.hidden = true;
-      break;
     case "c":
     case "с": // ru-раскладка
       if (!showsChannelList(activeView)) return;
@@ -2518,18 +2507,6 @@ reminderUi = createProgrammeReminders({ root: document, minutes: $<HTMLInputElem
     time: new Date(reminder.start).toLocaleTimeString(currentLanguage, { hour: "2-digit", minute: "2-digit" }) }), { playlistId, channelUrl: reminder.channelUrl }),
   watch: (playlistId, channelUrl) => { void watchReminder({ playlistId, channelUrl }); },
 });
-timelineGuideUi = createTimelineGuide({ scroll: guideGrid, canvas: $("guide-grid-canvas") }, {
-  channels: () => visibleChannels.filter((c) => !parentalPins.has(c.group)),
-  programmes: channelProgrammes,
-  language: () => currentLanguage,
-  empty: () => tr("guide.emptyChannels"),
-  channelLabel: () => tr("guide.channels"),
-  play: (channel, url, programme) => {
-    const current = snapshot && displayChannels().find((c) => c.url === channel.url && !parentalPins.has(c.group));
-    return current ? playChannel(current, url, programme) : Promise.resolve(false);
-  },
-  close: () => closeOverlay("guide"),
-});
 
 // Шторка «Программа», блок под плеером и карточка передачи — src/guide-ui.ts (#368).
 const guideUi = createGuideUi({
@@ -2538,9 +2515,6 @@ const guideUi = createGuideUi({
     title: $("guide-title"),
     days: $("guide-days"),
     list: $("guide-list"),
-    grid: guideGrid,
-    listMode: $<HTMLButtonElement>("guide-mode-list"),
-    gridMode: $<HTMLButtonElement>("guide-mode-grid"),
     schedule: nowSchedule,
     scheduleList: $("sched-list"),
     card: {
@@ -2559,8 +2533,6 @@ const guideUi = createGuideUi({
   language: () => currentLanguage,
   toast: showToast,
   playChannel: (channel, url, programme) => playChannel(channel, url, programme),
-  isCompact,
-  renderTimeline: (day) => timelineGuideUi!.render(day),
   openOverlay,
   closeOverlay,
   playlistId: () => plState.activeId,
@@ -2583,7 +2555,6 @@ const guideUi = createGuideUi({
   },
   setIcon,
 });
-window.addEventListener("resize", () => guideUi.onResize());
 
 /** Передачи канала по телепрограмме, по времени начала. */
 function channelProgrammes(channel: Channel | null = lastPlayed): EpgProgramme[] {
@@ -2595,7 +2566,6 @@ function channelProgrammes(channel: Channel | null = lastPlayed): EpgProgramme[]
   );
 }
 
-btnGuide.addEventListener("click", () => guideUi.open());
 btnFullGuide.addEventListener("click", () => guideUi.open());
 guideClose.addEventListener("click", () => closeOverlay("guide"));
 
@@ -2905,10 +2875,7 @@ btnLive.addEventListener("click", async () => {
 videoEl.addEventListener("timeupdate", refreshScrub);
 // Передача идёт и без событий видео: без таймера полоса замирала бы на паузе
 // и между timeupdate, которые HLS шлёт нерегулярно.
-window.setInterval(() => {
-  refreshScrub();
-  if (!guideOverlay.hidden && guideUi.isGrid()) timelineGuideUi?.refresh();
-}, 10_000);
+window.setInterval(refreshScrub, 10_000);
 
 // ---- Жесты на кадре (телефон) ----
 let touchStart: { x: number; y: number } | null = null;

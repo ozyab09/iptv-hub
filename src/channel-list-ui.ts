@@ -12,6 +12,7 @@ import type { ChannelFailure } from "./channel-health";
 import { formatRange } from "./epg";
 import { isLongPress } from "./gestures";
 import { t, type Language, type TranslationKey, type TranslationParams } from "./i18n";
+import { iconMarkup } from "./icons";
 import type { ProgrammeMatch } from "./programme-search";
 import { clock, programmeProgress } from "./scrub";
 import type { Channel, NowNext } from "./types";
@@ -47,6 +48,8 @@ export interface ChannelListUiDeps {
   failureLabel: (failure: ChannelFailure) => string;
   /** Сейчас/далее по EPG или null без телепрограммы. */
   nowNext: (channel: Channel) => NowNext | null;
+  /** Есть ли у канала передачи в загруженной EPG — значок в строке (#472). */
+  hasEpg: (channel: Channel) => boolean;
   language: () => Language;
   toast: (message: string) => void;
   play: (channel: Channel) => void;
@@ -300,6 +303,17 @@ export function createChannelListUi(deps: ChannelListUiDeps): ChannelListUi {
     });
     const actions = document.createElement("span");
     actions.className = "channel-actions";
+    if (deps.hasEpg(c)) {
+      // Декоративный значок: у канала есть телепрограмма (#472).
+      // Меньше кнопок — влезает перед звёздочкой, не меняет высоту строки.
+      const mark = document.createElement("span");
+      mark.className = "channel-epg";
+      mark.innerHTML = iconMarkup("calendar", "i-sm");
+      mark.title = tr("guide.epgBadge");
+      mark.setAttribute("aria-label", tr("guide.epgBadge"));
+      mark.setAttribute("role", "img");
+      actions.append(mark);
+    }
     const edit = document.createElement("button");
     edit.className = "icon-btn";
     edit.dataset.channelEdit = "";

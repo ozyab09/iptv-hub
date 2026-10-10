@@ -32,7 +32,7 @@ for (const width of [320, 390, 1024, 1440]) {
         if (width < 1024) await page.locator("#video").click();
         const stage = page.locator("#video-stage");
         await stage.hover();
-        await expect(page.locator("#btn-guide")).toBeVisible();
+        await expect(page.locator("#btn-full-guide")).toBeVisible();
         const show = page.locator("#now-show");
         if (epg) await expect(show).toHaveText(programmeTitle);
         else await expect(show).toBeHidden();
@@ -47,9 +47,7 @@ for (const width of [320, 390, 1024, 1440]) {
             document.getElementById("player-status")!.textContent = long ? "1920×1080 · высокая скорость потока ".repeat(4) : "160×90 · 1 Мбит/с";
           }, long);
           const channel = (await title.boundingBox())!;
-          const guide = (await page.locator("#btn-guide").boundingBox())!;
           expect(channel.y).toBeCloseTo(initialY, 1);
-          expect(Math.abs(channel.y + channel.height / 2 - guide.y - guide.height / 2)).toBeLessThanOrEqual(1);
           const status = page.locator("#player-status");
           if (await status.isVisible()) {
             const bounds = (await status.boundingBox())!;

@@ -59,14 +59,14 @@ const programmes = [prog(-2, "Old"), prog(-1, "Past", "Описание прош
 function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; compact?: boolean; status?: DownloadStatus | null } = {}) {
   const el = () => new El();
   const nodes = {
-    overlay: el(), title: el(), days: el(), list: el(), grid: el(), listMode: el(), gridMode: el(),
+    overlay: el(), title: el(), days: el(), list: el(),
     schedule: el(), scheduleList: el(), downloadStatus: el(),
     card: { overlay: el(), title: el(), meta: el(), desc: el(), actions: el(), close: el() },
   };
   nodes.card.overlay.hidden = true;
   const calls = {
     played: [] as { url?: string; title?: string }[], toasts: [] as string[], opened: [] as string[], closed: [] as string[],
-    planned: [] as string[], started: [] as string[], cancelled: 0, timeline: 0,
+    planned: [] as string[], started: [] as string[], cancelled: 0,
   };
   let status = opts.status ?? null;
   const deps: GuideUiDeps = {
@@ -77,8 +77,6 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
     language: () => "en",
     toast: (m) => calls.toasts.push(m),
     playChannel: async (_c, url, p) => { calls.played.push({ url, title: p?.title }); return true; },
-    isCompact: () => opts.compact ?? false,
-    renderTimeline: () => { calls.timeline++; },
     openOverlay: (n) => { calls.opened.push(n); if (n === "programme") nodes.card.overlay.hidden = false; },
     closeOverlay: (n) => { calls.closed.push(n); },
     playlistId: () => "pl",
@@ -144,13 +142,16 @@ describe("createGuideUi (#368)", () => {
     expect(h.calls.planned).toEqual(["Next"]);
   });
 
-  it("прошлое без архива недоступно и без скачивания", () => {
+  it("прошлое без архива: строка приглушена, клик сообщает, что перемотать нельзя (#472)", () => {
     const h = harness({ channel: { ...channel, catchupDays: 0, catchupSource: null } });
     h.ui.renderSchedule();
     const past = byTitle(h.nodes.scheduleList, "Past");
-    expect(rowButton(past).disabled).toBe(true);
+    expect(rowButton(past).disabled).toBe(false);
     expect(rowButton(past).className).toContain("dim");
-    expect(past.children).toHaveLength(2);
+    rowButton(past).click();
+    expect(h.calls.toasts).toEqual([t("guide.noSeek", "en")]);
+    expect(h.calls.played).toEqual([]);
+    expect(past.children).toHaveLength(2); // без кнопки скачивания
   });
 
   it("карточка передачи: текст EPG, статус, действия; без описания блок скрыт", async () => {
@@ -189,20 +190,43 @@ describe("createGuideUi (#368)", () => {
     expect(busy.calls.toasts).toEqual([t("download.cancelled", "en")]);
   });
 
-  it("шторка: дни, пустой день, сетка недоступна на узком экране", () => {
+  it("шторка: дни, пустой день; вкладок списка/сетки больше нет (#472)", () => {
     const h = harness({ programmes: [] , channel: { ...channel, catchupSource: null } });
     h.ui.open();
     expect(h.calls.opened).toEqual(["guide"]);
     expect(h.nodes.days.children.length).toBeGreaterThan(1);
     expect(h.nodes.list.children[0]!.textContent).toBe(t("guide.noDay", "en"));
-    const compact = harness({ compact: true });
-    compact.ui.setMode(true);
-    expect(compact.ui.isGrid()).toBe(false);
-    expect(compact.calls.toasts).toEqual([t("guide.mobile", "en")]);
-    const wide = harness();
-    wide.ui.setMode(true);
-    expect(wide.ui.isGrid()).toBe(true);
-    expect(wide.calls.timeline).toBe(1);
+  });
+
+  it("канал без EPG: часовая сетка под плеером, серое «Без названия», клик по прошедшему слоту без архива — тост (#472)", () => {
+    const bare = { ...channel, catchupDays: 0, catchupSource: null };
+    const h = harness({ channel: bare, programmes: [] });
+    h.ui.renderSchedule();
+    expect(h.nodes.schedule.hidden).toBe(false);
+    const titles = rows(h.nodes.scheduleList).map((w) => rowButton(w).children[1]!.children[0]!);
+    // 1 прошедший + текущий + 2 будущих
+    expect(titles).toHaveLength(4);
+    for (const title of titles) expect(title.textContent).toBe(t("guide.noTitle", "en"));
+    // Прошедший слот кликабелен и сообщает, что перемотать нельзя
+    const pastRow = rowButton(rows(h.nodes.scheduleList)[0]!);
+    expect(pastRow.disabled).toBe(false);
+    expect(pastRow.className).toContain("dim");
+    pastRow.click();
+    expect(h.calls.toasts).toEqual([t("guide.noSeek", "en")]);
+    // Будущие слоты неактивны
+    expect(rowButton(rows(h.nodes.scheduleList)[3]!).disabled).toBe(true);
+    // Текущий час включает канал как эфир
+    rowButton(rows(h.nodes.scheduleList)[1]!).click();
+    expect(h.calls.played).toHaveLength(1);
+  });
+
+  it("канал без EPG с архивом: прошедший слот открывается через catchup (#472)", async () => {
+    const h = harness({ channel, programmes: [] });
+    h.ui.renderSchedule();
+    rowButton(rows(h.nodes.scheduleList)[0]!).click();
+    await vi.waitFor(() => expect(h.calls.played).toHaveLength(1));
+    expect(h.calls.played[0]!.url).toContain("archive.m3u8?utc=");
+    expect(h.calls.toasts).toEqual([]);
   });
 
   it("без канала шторка не открывается", () => {

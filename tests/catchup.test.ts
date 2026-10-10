@@ -5,6 +5,7 @@ import {
   canWatchPast,
   programmeStartUrl,
   hourlyFallbackProgrammes,
+  hourlyScheduleSlots,
   dayWindows,
   programmesInDay,
   MAX_CATCHUP_DAYS,
@@ -164,5 +165,31 @@ describe("hourlyFallbackProgrammes", () => {
 
   it("горизонт настраивается (3 дня для MAX_CATCHUP_DAYS)", () => {
     expect(hourlyFallbackProgrammes(now, 3)).toHaveLength(3 * 24);
+  });
+});
+
+describe("hourlyScheduleSlots (#472)", () => {
+  const now = new Date("2026-09-28T15:30:00.000Z");
+
+  it("слоты идут от старых к новым и стыкуются без наложений", () => {
+    const out = hourlyScheduleSlots(now, 2, 3);
+    expect(out).toHaveLength(5);
+    for (let i = 1; i < out.length; i++) {
+      expect(Date.parse(out[i]!.start) - Date.parse(out[i - 1]!.start)).toBe(3_600_000);
+      expect(out[i]!.start).toBe(out[i - 1]!.stop);
+    }
+  });
+
+  it("первый слот — час, включавший «сейчас», последний — будущий", () => {
+    const out = hourlyScheduleSlots(now, 1, 3);
+    expect(out[0]!.start).toBe("2026-09-28T14:00:00.000Z");
+    expect(out[0]!.stop).toBe("2026-09-28T15:00:00.000Z");
+    // Текущий час покрывает now — он играет как эфир
+    const cur = out.find((p) => Date.parse(p.start) <= now.getTime() && now.getTime() < Date.parse(p.stop));
+    expect(cur).toBeDefined();
+    for (const p of out) {
+      expect(p.title).toBe(""); // UI показывает локализованное «Без названия»
+      expect(p.desc).toBeNull();
+    }
   });
 });

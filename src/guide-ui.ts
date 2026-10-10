@@ -2,12 +2,11 @@
  * Программа передач — DOM-слой (#368, паттерн #123): шторка «Программа»
  * со списком по дням, блок под плеером и карточка передачи (#363). Строку
  * передачи строит одна функция programmeRow() — и для шторки, и для блока
- * под плеером (контракт AGENTS). Сетка-таймлайн живёт в timeline-guide-ui.ts.
- *
- * Состояние плеера, запуск каналов и оверлеи приходят через create — модуль
- * не знает устройство main.ts и тестируется на фейках.
+ * под плеером (контракт AGENTS). Канал без EPG получает часовую сетку
+ * «Без названия» (#472); клик по прошедшей строке открывает архив, а при
+ * потоке без перемотки показывается тост.
  */
-import { buildCatchupUrl, canWatchPast, dayWindows, hourlyFallbackProgrammes, programmesInDay, type DayWindow } from "./catchup";
+import { buildCatchupUrl, canWatchPast, dayWindows, hourlyFallbackProgrammes, hourlyScheduleSlots, programmesInDay } from "./catchup";
 import { formatRange } from "./epg";
 import { t, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { iconMarkup } from "./icons";
@@ -21,9 +20,6 @@ export interface GuideUiNodes {
   title: HTMLElement;
   days: HTMLElement;
   list: HTMLElement;
-  grid: HTMLElement;
-  listMode: HTMLButtonElement;
-  gridMode: HTMLButtonElement;
   schedule: HTMLElement;
   scheduleList: HTMLElement;
   card: {
@@ -55,9 +51,6 @@ export interface GuideUiDeps {
   language: () => Language;
   toast: (message: string) => void;
   playChannel: (channel: Channel, archiveUrl?: string, programme?: EpgProgramme) => Promise<boolean>;
-  isCompact: () => boolean;
-  /** Сетка-таймлайн для выбранного дня. */
-  renderTimeline: (window: DayWindow) => void;
   openOverlay: (name: OverlayName) => void;
   closeOverlay: (name: OverlayName) => void;
   playlistId: () => string | null;
@@ -78,11 +71,6 @@ export interface GuideUi {
   renderSchedule(): void;
   /** Ключ «канал|начало текущей передачи» последней перестройки блока. */
   scheduleKey(): string;
-  setMode(grid: boolean): void;
-  /** Открыт режим сетки. */
-  isGrid(): boolean;
-  /** Окно сузилось: сетка недоступна ниже 1024 px. */
-  onResize(): void;
   /** Прогресс скачивания: кнопки программы и строка в «Записях». */
   refreshDownloads(): void;
 }
@@ -93,7 +81,6 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
   const { nodes } = deps;
   const tr = (key: TranslationKey, params: TranslationParams = {}): string => t(key, deps.language(), params);
   let dayIdx = 0;
-  let gridOn = false;
   let schedKey = "";
 
   /** Включить эфир или архив передачи: те же проверки, что у строки программы. */
@@ -222,7 +209,9 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
   /**
    * Строка передачи — одна и для шторки с программой, и для блока под
    * плеером. Эфир включается, прошедшее с архивом — открывается из архива,
-   * прошедшее без архива приглушено, будущее просто подписано.
+   * прошедшее без архива кликабельно, но сообщает, что перемотать нельзя
+   * (#472), будущее неактивно. Часовой слот без EPG показывает серое
+   * «Без названия».
    */
   function programmeRow(c: Channel, p: EpgProgramme, now: Date, onPlayed: () => void): HTMLElement {
     const cu = { days: c.catchupDays, source: c.catchupSource };
@@ -233,11 +222,11 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
     const state = isLive ? "now" : stop <= now.getTime() ? "past" : "next";
 
     const row = document.createElement("button");
-    // Приглушаем только прошедшее без архива: будущие передачи тоже нельзя
-    // включить, но это нормальная программа, а не «недоступное».
+    // Приглушаем прошедшее без архива — но строка остаётся кнопкой: клик
+    // сообщает, что поток не позволяет перемотку (#472).
     row.className = programRowClass(state) + (state === "past" && !watchable ? " dim" : "");
-    // Нельзя включить — не кнопка для клавиатуры и мыши.
-    row.disabled = !watchable;
+    // Будущее включить нельзя — не кнопка для клавиатуры и мыши.
+    row.disabled = state === "next";
 
     const time = document.createElement("span");
     time.className = "time";
@@ -246,7 +235,13 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
     body.className = "prog-body";
     const title = document.createElement("span");
     title.className = "title";
-    title.textContent = p.title;
+    if (p.title) {
+      title.textContent = p.title;
+    } else {
+      // Часовой слот канала без EPG: серое «Без названия» (#472).
+      title.textContent = tr("guide.noTitle");
+      title.className = "title muted";
+    }
     body.append(title);
     // Эфир и архив — плашками, а не символами в тексте: title приходит из EPG
     if (isLive) {
@@ -268,6 +263,8 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
       row.addEventListener("click", () => void watchProgramme(c, p, now, onPlayed));
     } else if (state === "past") {
       row.title = cu.days > 0 ? tr("guide.outsideArchive") : tr("guide.noArchive");
+      // Перемотать нельзя — сообщаем об этом в момент попытки (#472).
+      row.addEventListener("click", () => deps.toast(tr("guide.noSeek")));
     }
     // Описание из EPG — подсказкой на строке, полностью — в карточке (#363).
     if (p.desc) row.title = row.title ? `${row.title}. ${p.desc}` : p.desc;
@@ -285,14 +282,7 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
 
   function render(): void {
     const channel = deps.channel();
-    nodes.title.textContent = gridOn ? tr("guide.gridTitle") : `${tr("guide.title")}${channel ? ` · ${channel.name}` : ""}`;
-    nodes.overlay.querySelector(".guide")?.classList.toggle("timeline-mode", gridOn);
-    nodes.listMode.textContent = tr("guide.list");
-    nodes.gridMode.textContent = tr("guide.grid");
-    nodes.listMode.setAttribute("aria-pressed", String(!gridOn));
-    nodes.gridMode.setAttribute("aria-pressed", String(gridOn));
-    nodes.list.hidden = gridOn;
-    nodes.grid.hidden = !gridOn;
+    nodes.title.textContent = `${tr("guide.title")}${channel ? ` · ${channel.name}` : ""}`;
     const wins = dayWindows(new Date(), deps.language());
     nodes.days.textContent = "";
     wins.forEach((w, i) => {
@@ -308,10 +298,6 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
 
     nodes.list.textContent = "";
     const day = wins[dayIdx]!;
-    if (gridOn) {
-      deps.renderTimeline(day);
-      return;
-    }
     const now = new Date();
     let progs = programmesInDay(deps.programmes(channel), day);
     // Канал без телепрограммы, но с архивом: показываем часовые слоты «без
@@ -333,11 +319,16 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
 
   /**
    * Программа под плеером: одна прошедшая (её можно открыть из архива), та,
-   * что идёт, и три следующие. Полная — в шторке «Вся программа».
+   * что идёт, и три следующие. Канал без EPG получает часовую сетку —
+   * прошедший час, текущий и три будущих, серое «Без названия» (#472).
+   * Полная — в шторке «Вся программа».
    */
   function renderSchedule(): void {
     const channel = deps.channel();
-    const all = deps.programmes(channel);
+    let all = deps.programmes(channel);
+    // Канал без телепрограммы: часовая сетка вместо пустоты (#472).
+    const hourly = channel !== null && all.length === 0;
+    if (hourly) all = hourlyScheduleSlots(new Date(), 1, 3);
     const archive = deps.archiveProgramme();
     const nowMs = archive ? Date.parse(archive.start) : Date.now();
     const i = all.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
@@ -376,17 +367,6 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
     box.append(label, bar, cancel);
   }
 
-  function setMode(grid: boolean): void {
-    if (grid && deps.isCompact()) {
-      deps.toast(tr("guide.mobile"));
-      return;
-    }
-    gridOn = grid;
-    render();
-  }
-
-  nodes.listMode.addEventListener("click", () => setMode(false));
-  nodes.gridMode.addEventListener("click", () => setMode(true));
   nodes.card.close.addEventListener("click", () => deps.closeOverlay("programme"));
   nodes.card.overlay.addEventListener("click", (e) => {
     if (e.target === nodes.card.overlay) deps.closeOverlay("programme");
@@ -417,16 +397,6 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
     render,
     renderSchedule,
     scheduleKey: () => schedKey,
-    setMode,
-    isGrid: () => gridOn,
-    onResize() {
-      if (!gridOn || !deps.isCompact()) return;
-      gridOn = false;
-      if (!nodes.overlay.hidden) {
-        deps.toast(tr("guide.mobile"));
-        render();
-      }
-    },
     refreshDownloads,
   };
 }

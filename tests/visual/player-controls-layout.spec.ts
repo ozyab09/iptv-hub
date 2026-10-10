@@ -24,22 +24,18 @@ for (const width of [320, 390, 844, 1024, 1280, 1440]) {
       await page.locator("#channel-list .channel-card").click();
       if (width < 1024) {
         await expect(page.locator("#btn-pause")).toBeVisible();
-        await expect(page.locator("#btn-guide")).toBeHidden();
         await expect(page.locator("#quality-btn")).toBeHidden();
         await page.locator("#video").click();
       }
       const stage = page.locator("#video-stage");
       await stage.hover();
       await expect(page.locator("#quality-btn")).toBeEnabled();
-      await expect(page.locator(".top #btn-guide")).toBeVisible();
       await expect(page.locator(".top #player-status")).toHaveCount(1);
       const frame = (await stage.boundingBox())!;
       const transport = (await page.locator(".transport").boundingBox())!;
       const volume = (await page.locator(".volume").boundingBox())!;
       const right = (await page.locator(".video-actions-right").boundingBox())!;
       const title = (await page.locator("#now-title").boundingBox())!;
-      const guide = (await page.locator("#btn-guide").boundingBox())!;
-      expect(guide.x + guide.width).toBeLessThanOrEqual(title.x);
       if (await page.locator("#player-status").isVisible()) {
         const status = (await page.locator("#player-status").boundingBox())!;
         expect(status.x + status.width).toBeLessThanOrEqual(title.x);
@@ -70,7 +66,7 @@ for (const width of [320, 390, 844, 1024, 1280, 1440]) {
       expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(frame.x + frame.width);
       await menu.locator(".menu-item").last().click();
       await expect(menu).toBeHidden();
-      await page.locator("#btn-guide").click();
+      await page.locator("#btn-full-guide").click();
       await expect(page.locator("#guide-overlay")).toBeVisible();
       await page.locator("#guide-close").click();
       await stage.hover();
