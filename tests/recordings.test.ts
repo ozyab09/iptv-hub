@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addRecording,
+  findLocalRecordingForProgramme,
   findRecording,
   formatBytes,
   formatDuration,
@@ -92,5 +93,29 @@ describe("recordings library", () => {
     expect(formatDuration(59)).toBe("0:59");
     expect(formatDuration(61)).toBe("1:01");
     expect(formatDuration(3700)).toBe("1:01:40");
+  });
+
+  it("findLocalRecordingForProgramme: канал + title + startedAt (контракт)", () => {
+    const start = Date.parse("2026-10-10T12:00:00Z");
+    const recs: RecordingMeta[] = [
+      { id: "r1", channelName: "Канал", channelUrl: "https://a/s", programmeTitle: "Новости", startedAt: start, durationSec: 1800, sizeBytes: 1024, ext: "ts" },
+      { id: "r2", channelName: "Канал", channelUrl: "https://a/s", programmeTitle: "Новости", startedAt: start + 5 * 60_000, durationSec: 1800, sizeBytes: 1024, ext: "ts" },
+      { id: "r3", channelName: "Канал", channelUrl: "https://a/s", programmeTitle: null, startedAt: start, durationSec: 60, sizeBytes: 1024, ext: "ts" },
+      { id: "r4", channelName: "Канал", channelUrl: "https://b/s", programmeTitle: "Новости", startedAt: start + 10 * 60_000, durationSec: 1800, sizeBytes: 1024, ext: "ts" },
+    ];
+    const prog = { title: "Новости", start, stop: start + 30 * 60_000 };
+    // Точное совпадение: канал, название, startedAt в допуске (по умолчанию 60 сек)
+    expect(findLocalRecordingForProgramme(recs, "https://a/s", prog)).toEqual(recs[0]);
+    // Строгое совпадение по startedAt (tolerance=0): первая запись подходит
+    expect(findLocalRecordingForProgramme(recs, "https://a/s", prog, 0)).toEqual(recs[0]);
+    // При совпадении названия, но startedAt отличается более чем на tolerance — null
+    const shiftedStart = start + 5 * 60_000;
+    const lateProg = { title: "Новости", start: shiftedStart + 11_000, stop: shiftedStart + 11_000 + 30 * 60_000 };
+    expect(findLocalRecordingForProgramme(recs, "https://a/s", lateProg, 10)).toBeNull();
+    // Программа без названия: фильтруем только канал и startedAt
+    const slot = { title: null as string | null, start, stop: start + 60_000 };
+    expect(findLocalRecordingForProgramme(recs, "https://a/s", slot)).toEqual(recs[0]);
+    // Чужой канал — null (канал отличается)
+    expect(findLocalRecordingForProgramme(recs, "https://b/s", prog)).toBeNull();
   });
 });

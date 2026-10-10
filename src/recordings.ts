@@ -108,6 +108,35 @@ export function findRecording(
   return loadRecordings(storage).find((r) => r.id === id) ?? null;
 }
 
+/**
+ * Найти локальную запись, соответствующую передаче.
+ *
+ * Критерии (все обязательны):
+ *  - `channelUrl` записи совпадает с каналом передачи;
+ *  - если у передачи есть название — `programmeTitle` записи совпадает;
+ *    если название пуст (часовой слот) — по названию не фильтруем;
+ *  - `startedAt` записи попадает в окно `start ± toleranceSec` (по умолчанию
+ *    60 сек) — покрывает запись, запущенную в момент передачи; запись, начатая
+ *    заранее и длившаяся во время передачи, не обнаруживается (без переименования
+ *    пользователя это ожидаемо).
+ *
+ * Возвращает первую подходящую запись — для точного совпадения достаточно.
+ * Если передача записана несколько раз — выбирать вручную из библиотеки.
+ */
+export function findLocalRecordingForProgramme(
+  recordings: RecordingMeta[],
+  channelUrl: string,
+  programme: { title: string | null; start: number; stop: number },
+  toleranceSec = 60,
+): RecordingMeta | null {
+  const start = programme.start;
+  return recordings.find((rec) => {
+    if (rec.channelUrl !== channelUrl) return false;
+    if (programme.title && rec.programmeTitle !== programme.title) return false;
+    return Math.abs(rec.startedAt - start) <= toleranceSec * 1000;
+  }) ?? null;
+}
+
 /** Человекочитаемый размер: Б/КБ/МБ/ГБ. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} Б`;

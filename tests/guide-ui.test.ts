@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGuideUi, type GuideUiDeps } from "../src/guide-ui";
+import type { RecordingMeta } from "../src/recordings";
+import type { RecordingsFs } from "../src/recordings-store";
 import type { DownloadStatus } from "../src/programme-downloader";
 import type { Channel, EpgProgramme } from "../src/types";
 import { t } from "../src/i18n";
@@ -56,7 +58,7 @@ const channel: Channel = {
 };
 const programmes = [prog(-2, "Old"), prog(-1, "Past", "Описание прошлой"), prog(-0.5, "Live"), prog(0.5, "Next"), prog(1.5, "Later")];
 
-function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; compact?: boolean; status?: DownloadStatus | null } = {}) {
+function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; compact?: boolean; status?: DownloadStatus | null; recordings?: RecordingMeta[]; recordingsFs?: RecordingsFs | null } = {}) {
   const el = () => new El();
   const nodes = {
     overlay: el(), title: el(), days: el(), list: el(),
@@ -66,7 +68,7 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
   nodes.card.overlay.hidden = true;
   const calls = {
     played: [] as { url?: string; title?: string }[], toasts: [] as string[], opened: [] as string[], closed: [] as string[],
-    planned: [] as string[], started: [] as string[], cancelled: 0,
+    planned: [] as string[], started: [] as string[], cancelled: 0, localDownloads: [] as { id: string; title?: string }[],
   };
   let status = opts.status ?? null;
   const deps: GuideUiDeps = {
@@ -76,6 +78,7 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
     archiveProgramme: () => null,
     language: () => "en",
     toast: (m) => calls.toasts.push(m),
+    toastAction: (_message, _actionLabel, action) => { action(); },
     playChannel: async (_c, url, p) => { calls.played.push({ url, title: p?.title }); return true; },
     openOverlay: (n) => { calls.opened.push(n); if (n === "programme") nodes.card.overlay.hidden = false; },
     closeOverlay: (n) => { calls.closed.push(n); },
@@ -88,6 +91,9 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
       cancel: () => { calls.cancelled++; status = null; },
     },
     setIcon: () => undefined,
+    recordings: () => opts.recordings ?? [],
+    recordingsFs: opts.recordingsFs ?? null,
+    localDownload: async (rec, p) => { calls.localDownloads.push({ id: rec.id, title: p?.title }); },
     win: { addEventListener: () => undefined } as unknown as Window,
   };
   return { ui: createGuideUi(deps), nodes, calls };
@@ -135,10 +141,15 @@ describe("createGuideUi (#368)", () => {
     await vi.waitFor(() => expect(h.calls.played).toHaveLength(2));
     expect(h.calls.played[0]).toEqual({ url: undefined, title: undefined });
     expect(h.calls.played[1]!.url).toContain("archive.m3u8?utc=");
-    expect(past.children.slice(1).map((c) => c.className)).toEqual(["icon-btn programme-info", "btn btn-sm programme-download"]);
+    // Без локальной записи показывается кнопка скачивания из архива
+    expect(past.children.length).toBeGreaterThanOrEqual(2);
+    expect(past.children.find((c) => c.classList.contains("programme-download"))).toBeDefined();
     const next = byTitle(h.nodes.scheduleList, "Next");
-    expect(next.children.slice(2).map((c) => c.className)).toEqual(["btn btn-sm schedule-programme", "programme-reminder"]);
-    next.children[2]!.click();
+    expect(next.children.length).toBeGreaterThanOrEqual(3);
+    expect(next.children.find((c) => c.classList.contains("programme-download"))).toBeDefined();
+    expect(next.children.find((c) => c.classList.contains("schedule-programme"))).toBeDefined();
+    expect(next.children.find((c) => c.classList.contains("programme-reminder"))).toBeDefined();
+    next.children.find((c) => c.classList.contains("schedule-programme"))!.click();
     expect(h.calls.planned).toEqual(["Next"]);
   });
 
@@ -233,5 +244,55 @@ describe("createGuideUi (#368)", () => {
     const h = harness({ channel: null });
     h.ui.open();
     expect(h.calls.opened).toEqual([]);
+  });
+
+  it("прошлое: локальная запись > архив; без записи — архив (#474)", () => {
+    const rec = { id: "rec", channelName: "Канал", channelUrl: channel.url, programmeTitle: "Past", startedAt: Date.parse(programmes[1]!.start), durationSec: 60, sizeBytes: 1024, ext: "ts" } as RecordingMeta;
+    const h = harness({ recordings: [rec] });
+    h.ui.render();
+    const wrapper = byTitle(h.nodes.list, "Past");
+    const downloadBtn = wrapper.querySelector(".programme-download") as El | null;
+    expect(downloadBtn).not.toBeNull();
+    expect(downloadBtn!.dataset.downloadChannel).toBe(channel.url);
+    expect(downloadBtn!.dataset.downloadStart).toBe(programmes[1]!.start);
+    downloadBtn!.click();
+    expect(h.calls.localDownloads).toEqual([{ id: "rec", title: "Past" }]);
+    expect(h.calls.started).toEqual([]);
+  });
+
+  it("прошлое без локальной записи: скачивание из архива", () => {
+    const h = harness({ recordings: [] });
+    h.ui.render();
+    const wrapper = byTitle(h.nodes.list, "Past");
+    const downloadBtn = wrapper.querySelector(".programme-download") as El | null;
+    expect(downloadBtn).not.toBeNull();
+    downloadBtn!.click();
+    expect(h.calls.started).toEqual(["Past|https://x/archive.m3u8?utc=" + String(Math.floor(Date.parse(programmes[1]!.start) / 1000))]);
+  });
+
+  it("будущее: скачивание из архива, если доступен (#474)", () => {
+    const h = harness({ recordings: [] });
+    h.ui.render();
+    const wrapper = byTitle(h.nodes.list, "Next");
+    const downloadBtn = wrapper.querySelector(".programme-download") as El | null;
+    expect(downloadBtn).not.toBeNull();
+    expect(downloadBtn!.dataset.downloadChannel).toBe(channel.url);
+    downloadBtn!.click();
+    expect(h.calls.started).toEqual(["Next|https://x/archive.m3u8?utc=" + String(Math.floor(Date.parse(programmes[3]!.start) / 1000))]);
+  });
+
+  it("live: локальная запись — скачивание; без записи — кнопок нет", () => {
+    const liveRec = { id: "live", channelName: "Канал", channelUrl: channel.url, programmeTitle: "Live", startedAt: Date.parse(programmes[2]!.start), durationSec: 60, sizeBytes: 1024, ext: "ts" } as RecordingMeta;
+    const hWith = harness({ recordings: [liveRec] });
+    hWith.ui.render();
+    const wrapper = byTitle(hWith.nodes.list, "Live");
+    expect(wrapper.querySelector(".programme-download")).not.toBeNull();
+    wrapper.querySelector(".programme-download")!.click();
+    expect(hWith.calls.localDownloads).toEqual([{ id: "live", title: "Live" }]);
+
+    const hWithout2 = harness({ recordings: [] });
+    hWithout2.ui.render();
+    const wrapper2 = byTitle(hWithout2.nodes.list, "Live");
+    expect(wrapper2.querySelector(".programme-download")).toBeNull();
   });
 });
