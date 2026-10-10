@@ -53,6 +53,8 @@ export const ru = {
   "guide.noArchive": "Архив недоступен на этом канале (нет tvg-rec)",
   "guide.today": "Сегодня",
   "guide.yesterday": "Вчера",
+  "guide.tomorrow": "Завтра",
+  "guide.scheduleDays": "Дни недели",
   "guide.futureLive": "Передача ещё не началась — включён эфир канала",
   "guide.preview": "{channel} · сейчас: {title} (с {time})",
   "categories.all": "Все",

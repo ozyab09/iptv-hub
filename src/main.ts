@@ -353,7 +353,7 @@ const guideOverlay = $("guide-overlay");
 const programmeOverlay = $("programme-overlay");
 let reminderUi: ReturnType<typeof createProgrammeReminders> | null = null;
 const nowSchedule = $("now-schedule");
-const btnFullGuide = $<HTMLButtonElement>("btn-full-guide");
+const scheduleDateSwitcher = $("schedule-date-switcher");
 const guideClose = $<HTMLButtonElement>("guide-close");
 const btnRec = $<HTMLButtonElement>("btn-rec");
 const btnShot = $<HTMLButtonElement>("btn-shot");
@@ -2541,6 +2541,7 @@ const guideUi = createGuideUi({
       close: $<HTMLButtonElement>("programme-card-close"),
     },
     downloadStatus: $("download-status"),
+    scheduleDateSwitcher: scheduleDateSwitcher,
   },
   channel: () => lastPlayed,
   programmes: (channel) => channelProgrammes(channel),
@@ -2585,7 +2586,6 @@ function channelProgrammes(channel: Channel | null = lastPlayed): EpgProgramme[]
   );
 }
 
-btnFullGuide.addEventListener("click", () => guideUi.open());
 guideClose.addEventListener("click", () => closeOverlay("guide"));
 
 /** Край живого буфера или NaN, если поток ещё не начал грузиться. */

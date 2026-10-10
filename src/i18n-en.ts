@@ -55,6 +55,8 @@ export const en: Record<TranslationKey, string> = {
   "guide.noArchive": "Archive unavailable for this channel (no tvg-rec)",
   "guide.today": "Today",
   "guide.yesterday": "Yesterday",
+  "guide.tomorrow": "Tomorrow",
+  "guide.scheduleDays": "Week days",
   "guide.futureLive": "The programme has not started yet; playing the live channel",
   "guide.preview": "{channel} · now: {title} (since {time})",
   "categories.all": "All",

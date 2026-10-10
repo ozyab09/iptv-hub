@@ -606,47 +606,91 @@ button.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset
 .prog-arch { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 12px; line-height: 16px; color: var(--muted); }
 .prog-row:not(:disabled):hover .prog-arch { color: var(--text); }
 
-/* Программа под плеером */
+/* Программа под плеером — вертикальный список на всю ширину (#476) */
 .now-schedule { display: flex; flex-direction: column; gap: var(--space-2); }
-.sched-head { display: flex; align-items: center; justify-content: space-between; }
+.sched-head { display: flex; align-items: center; }
 .sched-head h3 { margin: 0; }
-.sched-all {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font: 500 13px/18px var(--font-sans);
-  padding: var(--space-2);
-  margin-right: calc(-1 * var(--space-2));
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+
+/* Переключатель дат: горизонтальный скроллер */
+.schedule-date-switcher {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  padding: var(--space-1) var(--space-2);
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-.sched-all:hover { color: var(--text); background: var(--surface-2); }
-.sched-list { display: flex; flex-direction: column; gap: 2px; }
-.sched-list .prog-row { padding: var(--space-3) var(--space-2); }
+.schedule-date-switcher::-webkit-scrollbar { display: none; }
+.schedule-date-btn {
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  border: 0;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 500 13px/18px var(--font-sans);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.schedule-date-btn:hover { background: var(--surface-3); }
+.schedule-date-btn.current {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 2px 8px var(--accent-shadow);
+}
 @media (max-width: 1023px) {
   .player-bar:not(.open) .now-schedule { display: none; }
 }
-/* На широком экране — пять плиток в ряд под кадром */
-@media (min-width: 1024px) {
-  .sched-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2); }
-  .sched-list .prog-row {
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--surface-1);
-  }
-  .sched-list .prog-row .time { min-width: 0; font-size: 12px; line-height: 16px; }
-  .sched-list .prog-body .title {
-    font-size: 13px;
-    line-height: 18px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .sched-list .prog-row:disabled:hover { background: var(--surface-1); }
-  .sched-list .prog-row.now { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* Список передач — всегда вертикальный, на всю ширину */
+.sched-list { display: flex; flex-direction: column; gap: 2px; }
+.sched-list .prog-row { padding: var(--space-3) var(--space-2); }
+
+/* Новый макет строки передачи (#476) */
+.prog-row { display: flex; align-items: flex-start; gap: var(--space-3); width: 100%; }
+.prog-date {
+  flex: 0 0 72px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  text-align: right;
+  padding-top: 2px;
 }
+.prog-body-new { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.prog-title { font-size: 15px; line-height: 22px; font-weight: 500; text-align: center; }
+.prog-title.muted { color: var(--muted); }
+.prog-desc { font-size: 13px; line-height: 18px; text-align: center; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prog-status { flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--space-1); font-size: 11px; line-height: 14px; padding: 2px 8px; border-radius: var(--radius-sm); }
+.prog-status.live { background: var(--accent-soft); color: var(--accent); }
+.prog-status.archive { background: var(--surface-2); color: var(--muted); }
+.prog-actions { flex: 0 0 auto; display: flex; gap: var(--space-1); align-items: center; }
+
+/* Скрываем дату в шторке (там свой заголовок дня) */
+.guide-list .prog-date { display: none; }
+.guide-list .prog-body-new { flex-direction: row; align-items: center; gap: var(--space-2); }
+.guide-list .prog-title { text-align: left; flex: 1; }
+.guide-list .prog-desc { display: none; }
+.guide-list .prog-status { margin-left: auto; }
+
+/* Адаптив для узких экранов */
+@media (max-width: 480px) {
+  .prog-date { flex: 0 0 56px; font-size: 11px; }
+  .prog-title { font-size: 14px; }
+  .prog-desc { font-size: 12px; }
+  .prog-status { font-size: 10px; padding: 1px 6px; }
+}
+
 .prog-row.dim { opacity: 0.45; cursor: default; }
 .prog-row.dim:hover { background: transparent; }
+
+/* На широком экране — компактнее отступы */
+@media (min-width: 1024px) {
+  .sched-list .prog-row { padding: var(--space-2) var(--space-3); }
+  .prog-date { flex: 0 0 80px; }
+  .prog-title { font-size: 14px; }
+  .prog-desc { font-size: 12px; }
+}

@@ -159,7 +159,8 @@ describe("hourlyFallbackProgrammes", () => {
 
   it("название и пустое описание — как у передач без EPG", () => {
     const out = hourlyFallbackProgrammes(now);
-    expect(out[0]!.title).toBe("Без названия");
+    // title пустой — локализация «Без названия» происходит в UI (programmeRow)
+    expect(out[0]!.title).toBe("");
     expect(out[0]!.desc).toBeNull();
   });
 

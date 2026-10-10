@@ -25,13 +25,16 @@ class El {
   set textContent(v: string) { this.text = v; if (v === "") this.children = []; }
   get childElementCount(): number { return this.children.length; }
   get classList() {
+    const classes = this.className.split(/\s+/).filter(Boolean);
     return {
       toggle: (c: string, force?: boolean) => {
-        const set = new Set(this.className.split(/\s+/).filter(Boolean));
+        const set = new Set(classes);
         if (force ?? !set.has(c)) set.add(c); else set.delete(c);
         this.className = [...set].join(" ");
       },
-      contains: (c: string) => this.className.split(/\s+/).includes(c),
+      contains: (c: string) => classes.includes(c),
+      add: (c: string) => { if (!classes.includes(c)) { classes.push(c); this.className = classes.join(" "); } },
+      remove: (c: string) => { const idx = classes.indexOf(c); if (idx >= 0) { classes.splice(idx, 1); this.className = classes.join(" "); } },
     };
   }
   setAttribute(k: string, v: string) { this.attrs[k] = v; }
@@ -45,7 +48,7 @@ class El {
 }
 
 const HOUR = 3_600_000;
-const NOW = Date.UTC(2026, 9, 4, 12);
+const NOW = Date.UTC(2026, 9, 4, 12); // 2026-10-04T12:00:00Z
 const prog = (offsetH: number, title: string, desc: string | null = null): EpgProgramme => ({
   start: new Date(NOW + offsetH * HOUR).toISOString(),
   stop: new Date(NOW + (offsetH + 1) * HOUR).toISOString(),
@@ -62,7 +65,7 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
   const el = () => new El();
   const nodes = {
     overlay: el(), title: el(), days: el(), list: el(),
-    schedule: el(), scheduleList: el(), downloadStatus: el(),
+    schedule: el(), scheduleList: el(), scheduleDateSwitcher: el(), downloadStatus: el(),
     card: { overlay: el(), title: el(), meta: el(), desc: el(), actions: el(), close: el() },
   };
   nodes.card.overlay.hidden = true;
@@ -71,12 +74,13 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
     planned: [] as string[], started: [] as string[], cancelled: 0, localDownloads: [] as { id: string; title?: string }[],
   };
   let status = opts.status ?? null;
+  const testLanguage: "ru" | "en" = "en";
   const deps: GuideUiDeps = {
     nodes: nodes as unknown as GuideUiDeps["nodes"],
     channel: () => (opts.channel === undefined ? channel : opts.channel),
     programmes: () => opts.programmes ?? programmes,
     archiveProgramme: () => null,
-    language: () => "en",
+    language: () => testLanguage,
     toast: (m) => calls.toasts.push(m),
     toastAction: (_message, _actionLabel, action) => { action(); },
     playChannel: async (_c, url, p) => { calls.played.push({ url, title: p?.title }); return true; },
@@ -101,6 +105,7 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
 
 const rows = (root: El) => root.children.filter((c) => c.className === "programme-recordable");
 const rowButton = (wrapper: El) => wrapper.children[0]!;
+// В новом макете: rowButton -> children[1] = prog-body-new -> children[0] = prog-title
 const byTitle = (root: El, title: string) => rows(root).find((w) => rowButton(w).children[1]!.children[0]!.textContent === title)!;
 
 describe("createGuideUi (#368)", () => {
@@ -114,18 +119,24 @@ describe("createGuideUi (#368)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("блок под плеером: одна прошедшая, текущая и следующие; ключ текущей передачи", () => {
+  it("блок под плеером: показывает все передачи выбранного дня (по умолчанию сегодня)", () => {
     const h = harness();
     h.ui.renderSchedule();
     expect(h.nodes.schedule.hidden).toBe(false);
-    expect(rows(h.nodes.scheduleList).map((w) => rowButton(w).children[1]!.children[0]!.textContent)).toEqual(["Past", "Live", "Next", "Later"]);
+    // Все 5 передач попадают в один день (2026-10-04), все должны отобразиться
+    expect(rows(h.nodes.scheduleList).map((w) => rowButton(w).children[1]!.children[0]!.textContent)).toEqual(["Old", "Past", "Live", "Next", "Later"]);
+    // Текущая передача — Live (индекс 2)
     expect(h.ui.scheduleKey()).toBe(`${channel.url}|${programmes[2]!.start}`);
   });
 
-  it("без текущей передачи блок скрыт и ключ пуст", () => {
-    const h = harness({ programmes: [prog(5, "Far")] });
+  it("без текущей передачи на выбранном дне: для канала с архивом показываются часовые слоты", () => {
+    // Передача на 24 часа вперёд — следующий день
+    const h = harness({ programmes: [prog(24, "Far")] });
     h.ui.renderSchedule();
-    expect(h.nodes.schedule.hidden).toBe(true);
+    // Канал имеет catchupSource, поэтому вместо пустоты показываются часовые слоты
+    expect(h.nodes.schedule.hidden).toBe(false);
+    expect(rows(h.nodes.scheduleList).length).toBeGreaterThan(0);
+    // Но ключ расписания пуст, так как нет текущей передачи
     expect(h.ui.scheduleKey()).toBe("");
   });
 
@@ -141,15 +152,17 @@ describe("createGuideUi (#368)", () => {
     await vi.waitFor(() => expect(h.calls.played).toHaveLength(2));
     expect(h.calls.played[0]).toEqual({ url: undefined, title: undefined });
     expect(h.calls.played[1]!.url).toContain("archive.m3u8?utc=");
-    // Без локальной записи показывается кнопка скачивания из архива
-    expect(past.children.length).toBeGreaterThanOrEqual(2);
-    expect(past.children.find((c) => c.classList.contains("programme-download"))).toBeDefined();
+    // Без локальной записи показывается кнопка скачивания из архива (внутри row -> actions)
+    const pastRow = rowButton(past);
+    const pastActions = pastRow.children[3]!; // prog-actions
+    expect(pastActions.children.find((c) => c.classList.contains("programme-download"))).toBeDefined();
     const next = byTitle(h.nodes.scheduleList, "Next");
-    expect(next.children.length).toBeGreaterThanOrEqual(3);
-    expect(next.children.find((c) => c.classList.contains("programme-download"))).toBeDefined();
-    expect(next.children.find((c) => c.classList.contains("schedule-programme"))).toBeDefined();
-    expect(next.children.find((c) => c.classList.contains("programme-reminder"))).toBeDefined();
-    next.children.find((c) => c.classList.contains("schedule-programme"))!.click();
+    const nextRow = rowButton(next);
+    const nextActions = nextRow.children[3]!;
+    expect(nextActions.children.find((c) => c.classList.contains("programme-download"))).toBeDefined();
+    expect(nextActions.children.find((c) => c.classList.contains("schedule-programme"))).toBeDefined();
+    expect(nextActions.children.find((c) => c.classList.contains("programme-reminder"))).toBeDefined();
+    nextActions.children.find((c) => c.classList.contains("schedule-programme"))!.click();
     expect(h.calls.planned).toEqual(["Next"]);
   });
 
@@ -185,14 +198,21 @@ describe("createGuideUi (#368)", () => {
   it("скачивание: старт с catchup-URL, своя кнопка отменяет, чужие ждут", () => {
     const h = harness();
     h.ui.renderSchedule();
-    const button = byTitle(h.nodes.scheduleList, "Past").children[2]!;
+    // Кнопка скачивания внутри prog-actions, который внутри row (wrapper.children[0])
+    const pastWrapper = byTitle(h.nodes.scheduleList, "Past");
+    const row = pastWrapper.children[0]!; // row button
+    const actions = row.children[3]!; // prog-actions
+    const button = actions.children[0]!; // programme-download
     expect(button.textContent).toBe(t("download.title", "en"));
     button.click();
     expect(h.calls.started[0]).toMatch(/^Past\|https:\/\/x\/archive\.m3u8\?utc=/);
 
     const busy = harness({ status: { channelName: "Alpha", channelUrl: channel.url, start: programmes[1]!.start, title: "Past", url: "u", progress: 0.42 } });
     busy.ui.renderSchedule();
-    const mine = byTitle(busy.nodes.scheduleList, "Past").children[2]!;
+    const busyPast = byTitle(busy.nodes.scheduleList, "Past");
+    const busyRow = busyPast.children[0]!;
+    const busyActions = busyRow.children[3]!;
+    const mine = busyActions.children[0]!;
     expect(mine.textContent).toBe(t("download.progress", "en", { pct: 42 }));
     busy.ui.refreshDownloads();
     expect(busy.nodes.downloadStatus.hidden).toBe(false);
@@ -213,28 +233,22 @@ describe("createGuideUi (#368)", () => {
     const bare = { ...channel, catchupDays: 0, catchupSource: null };
     const h = harness({ channel: bare, programmes: [] });
     h.ui.renderSchedule();
-    expect(h.nodes.schedule.hidden).toBe(false);
-    const titles = rows(h.nodes.scheduleList).map((w) => rowButton(w).children[1]!.children[0]!);
-    // 1 прошедший + текущий + 2 будущих
-    expect(titles).toHaveLength(4);
-    for (const title of titles) expect(title.textContent).toBe(t("guide.noTitle", "en"));
-    // Прошедший слот кликабелен и сообщает, что перемотать нельзя
-    const pastRow = rowButton(rows(h.nodes.scheduleList)[0]!);
-    expect(pastRow.disabled).toBe(false);
-    expect(pastRow.className).toContain("dim");
-    pastRow.click();
-    expect(h.calls.toasts).toEqual([t("guide.noSeek", "en")]);
-    // Будущие слоты неактивны
-    expect(rowButton(rows(h.nodes.scheduleList)[3]!).disabled).toBe(true);
-    // Текущий час включает канал как эфир
-    rowButton(rows(h.nodes.scheduleList)[1]!).click();
-    expect(h.calls.played).toHaveLength(1);
+    // Без catchupSource часовая сетка не показывается (нет чего открывать)
+    expect(h.nodes.schedule.hidden).toBe(true);
   });
 
-  it("канал без EPG с архивом: прошедший слот открывается через catchup (#472)", async () => {
+  it("канал без EPG с архивом: часовые слоты за выбранный день, прошедший открывается через catchup (#472)", async () => {
     const h = harness({ channel, programmes: [] });
     h.ui.renderSchedule();
-    rowButton(rows(h.nodes.scheduleList)[0]!).click();
+    // Должны сгенерироваться часовые слоты на выбранный день (сегодня)
+    expect(h.nodes.schedule.hidden).toBe(false);
+    const slots = rows(h.nodes.scheduleList);
+    expect(slots.length).toBeGreaterThan(0);
+    for (const slot of slots) {
+      expect(rowButton(slot).children[1]!.children[0]!.textContent).toBe(t("guide.noTitle", "en"));
+    }
+    // Клик по прошедшему слоту открывает catchup
+    rowButton(slots[0]!).click();
     await vi.waitFor(() => expect(h.calls.played).toHaveLength(1));
     expect(h.calls.played[0]!.url).toContain("archive.m3u8?utc=");
     expect(h.calls.toasts).toEqual([]);

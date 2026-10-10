@@ -1,4 +1,4 @@
-import { type Language } from "./i18n";
+import { t, type Language } from "./i18n";
 import type { Channel, EpgProgramme, NowNext, PlaylistSnapshot } from "./types";
 import { withSourceTimeout } from "./source-timeout";
 import { normalizeName } from "./m3u";
@@ -212,4 +212,18 @@ export function formatRange(p: EpgProgramme, language: Language = "ru"): string 
     minute: "2-digit",
   });
   return `${fmt.format(Date.parse(p.start))}–${fmt.format(Date.parse(p.stop))}`;
+}
+
+/** Форматирование даты для переключателя: «Сб 26.09», «Сегодня», «Вчера». */
+export function formatDate(date: Date, language: Language = "ru"): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return t("guide.today", language);
+  if (diffDays === -1) return t("guide.yesterday", language);
+  if (diffDays === 1) return t("guide.tomorrow", language);
+
+  return new Intl.DateTimeFormat(language, { weekday: "short", day: "2-digit", month: "2-digit" }).format(date);
 }

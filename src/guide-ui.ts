@@ -5,10 +5,15 @@
  * под плеером (контракт AGENTS). Канал без EPG получает часовую сетку
  * «Без названия» (#472); клик по прошедшей строке открывает архив, а при
  * потоке без перемотки показывается тост.
+ *
+ * Редизайн (#476): под видео — вертикальный список передач на всю ширину,
+ * переключатель дат между видео и списком (6 дней назад, 2 вперёд),
+ * кнопка «Вся программа» убрана, строка: дата, название по центру, описание
+ * ниже, справа кнопка «Записать».
  */
-import { buildCatchupUrl, canWatchPast, dayWindows, hourlyFallbackProgrammes, hourlyScheduleSlots, programmesInDay } from "./catchup";
+import { buildCatchupUrl, canWatchPast, dayWindows, hourlyFallbackProgrammes, programmesInDay } from "./catchup";
 import { findLocalRecordingForProgramme } from "./recordings";
-import { formatRange } from "./epg";
+import { formatRange, formatDate } from "./epg";
 import { t, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { iconMarkup } from "./icons";
 import type { RecordingMeta } from "./recordings";
@@ -25,6 +30,8 @@ export interface GuideUiNodes {
   list: HTMLElement;
   schedule: HTMLElement;
   scheduleList: HTMLElement;
+  /** Контейнер для переключателя дат в блоке под плеером. */
+  scheduleDateSwitcher: HTMLElement;
   card: {
     overlay: HTMLElement;
     title: HTMLElement;
@@ -91,6 +98,7 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
   const { nodes } = deps;
   const tr = (key: TranslationKey, params: TranslationParams = {}): string => t(key, deps.language(), params);
   let dayIdx = 0;
+  let scheduleDateIdx = 6; // индекс текущего дня в переключателе (6 дней назад = индекс 6)
   let schedKey = "";
 
   /** Включить эфир или архив передачи: те же проверки, что у строки программы. */
@@ -240,11 +248,62 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
   }
 
   /**
-   * Строка передачи — одна и для шторки с программой, и для блока под
-   * плеером. Эфир включается, прошедшее с архивом — открывается из архива,
-   * прошедшее без архива кликабельно, но сообщает, что перемотать нельзя
-   * (#472), будущее неактивно. Часовой слот без EPG показывает серое
-   * «Без названия».
+   * Создаёт переключатель дат для блока программы под плеером.
+   * Показывает 6 дней назад, текущий день, 2 дня вперёд.
+   * Текущий день — между центром и правым краем.
+   */
+  function createScheduleDateSwitcher(): HTMLElement {
+    const container = document.createElement("div");
+    container.className = "schedule-date-switcher";
+    container.setAttribute("role", "tablist");
+    container.setAttribute("aria-label", tr("guide.scheduleDays"));
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // 6 дней назад, сегодня, 2 дня вперёд = 9 дней всего
+    const days: { date: Date; label: string; isCurrent: boolean }[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      days.push({
+        date: d,
+        label: formatDate(d, deps.language()),
+        isCurrent: i === 0,
+      });
+    }
+    for (let i = 1; i <= 2; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      days.push({
+        date: d,
+        label: formatDate(d, deps.language()),
+        isCurrent: false,
+      });
+    }
+
+    days.forEach((day, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `schedule-date-btn${day.isCurrent ? " current" : ""}`;
+      btn.textContent = day.label;
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", String(day.isCurrent));
+      btn.dataset.date = day.date.toISOString().slice(0, 10);
+      btn.addEventListener("click", () => {
+        scheduleDateIdx = idx;
+        renderSchedule();
+      });
+      container.append(btn);
+    });
+
+    return container;
+  }
+
+  /**
+   * Строка передачи — новый макет (#476):
+   * дата, название по центру, описание ниже, справа кнопка «Записать».
+   * Используется и в шторке, и в блоке под плеером.
    */
   function programmeRow(c: Channel, p: EpgProgramme, now: Date, onPlayed: () => void): HTMLElement {
     const cu = { days: c.catchupDays, source: c.catchupSource };
@@ -261,65 +320,86 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
     // Будущее включить нельзя — не кнопка для клавиатуры и мыши.
     row.disabled = state === "next";
 
-    const time = document.createElement("span");
-    time.className = "time";
-    time.textContent = formatRange(p, deps.language());
-    const body = document.createElement("span");
-    body.className = "prog-body";
+    // Дата передачи (только для шторки, в блоке под плеером скрывается через CSS)
+    const dateEl = document.createElement("span");
+    dateEl.className = "prog-date";
+    dateEl.textContent = formatDate(new Date(start), deps.language());
+
+    // Основное содержимое: название по центру, описание ниже
+    const body = document.createElement("div");
+    body.className = "prog-body-new";
+
     const title = document.createElement("span");
-    title.className = "title";
+    title.className = "prog-title";
     if (p.title) {
       title.textContent = p.title;
     } else {
       // Часовой слот канала без EPG: серое «Без названия» (#472).
       title.textContent = tr("guide.noTitle");
-      title.className = "title muted";
+      title.classList.add("muted");
     }
-    body.append(title);
-    // Эфир и архив — плашками, а не символами в тексте: title приходит из EPG
-    if (isLive) {
-      const live = document.createElement("span");
-      live.className = "live";
-      live.textContent = tr("guide.live");
-      body.append(live);
-    } else if (state === "past" && watchable) {
-      const arch = document.createElement("span");
-      arch.className = "prog-arch";
-      arch.innerHTML = iconMarkup("archive", "i-sm");
-      arch.append(tr("guide.archive"));
-      body.append(arch);
-    }
-    row.append(time, body);
 
+    const desc = document.createElement("span");
+    desc.className = "prog-desc muted";
+    desc.textContent = p.desc ?? "";
+
+    body.append(title, desc);
+
+    // Статус (эфир/архив) — маленькая плашка
+    const statusEl = document.createElement("span");
+    statusEl.className = "prog-status";
+    if (isLive) {
+      statusEl.classList.add("live");
+      statusEl.textContent = tr("guide.live");
+    } else if (state === "past" && watchable) {
+      statusEl.classList.add("archive");
+      statusEl.innerHTML = iconMarkup("archive", "i-xs") + tr("guide.archive");
+    }
+
+    // Правая часть: кнопка «Записать» / скачивание
+    const actions = document.createElement("div");
+    actions.className = "prog-actions";
+
+    row.append(dateEl, body, statusEl, actions);
+
+    // Обработчик клика по всей строке
     if (watchable) {
       row.title = isLive ? tr("guide.watchNow") : tr("guide.archiveTitle");
       row.addEventListener("click", () => void watchProgramme(c, p, now, onPlayed));
     } else if (state === "past") {
       row.title = cu.days > 0 ? tr("guide.outsideArchive") : tr("guide.noArchive");
-      // Перемотать нельзя — сообщаем об этом в момент попытки (#472).
       row.addEventListener("click", () => deps.toast(tr("guide.noSeek")));
     }
-    // Описание из EPG — подсказкой на строке, полностью — в карточке (#363).
+    // Описание из EPG — подсказкой на строке
     if (p.desc) row.title = row.title ? `${row.title}. ${p.desc}` : p.desc;
+
     const wrapper = document.createElement("div");
     wrapper.className = "programme-recordable";
-    wrapper.append(row, infoButton(c, p, onPlayed));
+
+    // Кнопка "Подробнее" (info) — справа от строки
+    const info = infoButton(c, p, onPlayed);
+    wrapper.append(row, info);
+
+    // Добавляем действия (скачивание / записать / напомнить) в контейнер actions
     const localRec = findLocalRecordingForProgramme(
       deps.recordings(),
       c.url,
       { title: p.title, start: Date.parse(p.start), stop: Date.parse(p.stop) },
     );
+
     if (stop <= now.getTime()) {
       // Прошлое: локальная запись > архив (#315, #359, #474).
-      if (localRec) wrapper.append(downloadLocalButton(c, p, localRec));
-      else if (watchable && cu.source) wrapper.append(downloadButton(c, p, cu));
+      if (localRec) actions.append(downloadLocalButton(c, p, localRec));
+      else if (watchable && cu.source) actions.append(downloadButton(c, p, cu));
       return wrapper;
     }
     // Live или будущее: локальная запись сейчас, архив — для будущего.
-    if (localRec && state === "now") wrapper.append(downloadLocalButton(c, p, localRec));
+    if (localRec && state === "now") actions.append(downloadLocalButton(c, p, localRec));
     else if (state === "next" && cu.source && buildCatchupUrl(cu, p, now))
-      wrapper.append(downloadButton(c, p, cu));
-    wrapper.append(...futureActions(c, p));
+      actions.append(downloadButton(c, p, cu));
+
+    // Кнопки «Записать» и «Напомнить» для текущей/будущей передачи
+    actions.append(...futureActions(c, p));
     return wrapper;
   }
 
@@ -361,26 +441,59 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
   }
 
   /**
-   * Программа под плеером: одна прошедшая (её можно открыть из архива), та,
-   * что идёт, и три следующие. Канал без EPG получает часовую сетку —
-   * прошедший час, текущий и три будущих, серое «Без названия» (#472).
-   * Полная — в шторке «Вся программа».
+   * Программа под плеером: вертикальный список передач на всю ширину,
+   * переключатель дат между видео и списком (6 дней назад, 2 дня вперёд).
+   * Канал без EPG получает часовую сетку — серое «Без названия» (#472).
    */
   function renderSchedule(): void {
     const channel = deps.channel();
     let all = deps.programmes(channel);
-    // Канал без телепрограммы: часовая сетка вместо пустоты (#472).
-    const hourly = channel !== null && all.length === 0;
-    if (hourly) all = hourlyScheduleSlots(new Date(), 1, 3);
+
+    // Переключатель дат — создаём/обновляем
+    if (nodes.scheduleDateSwitcher.children.length === 0) {
+      nodes.scheduleDateSwitcher.append(createScheduleDateSwitcher());
+    } else {
+      // Обновляем активную кнопку
+      const btns = nodes.scheduleDateSwitcher.querySelectorAll<HTMLButtonElement>(".schedule-date-btn");
+      btns.forEach((btn, idx) => {
+        btn.classList.toggle("current", idx === scheduleDateIdx);
+        btn.setAttribute("aria-selected", String(idx === scheduleDateIdx));
+      });
+    }
+
+    // Определяем выбранную дату
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDate = new Date(today);
+    selectedDate.setDate(today.getDate() + (scheduleDateIdx - 6)); // 6 дней назад = индекс 6
+
+    const dayStart = selectedDate.getTime();
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+
+    // Фильтруем передачи по выбранной дате
+    let progs = all.filter((p) => Date.parse(p.start) < dayEnd && Date.parse(p.stop) > dayStart);
+
+    // Канал без телепрограммы, но с архивом: показываем часовые слоты «без названия»
+    const hourly = channel !== null && progs.length === 0 && channel.catchupDays > 0 && channel.catchupSource;
+    if (hourly) {
+      progs = programmesInDay(hourlyFallbackProgrammes(new Date()), {
+        startMs: dayStart,
+        endMs: dayEnd,
+        label: "",
+      });
+    }
+
     const archive = deps.archiveProgramme();
     const nowMs = archive ? Date.parse(archive.start) : Date.now();
-    const i = all.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
-    schedKey = channel && i >= 0 ? `${channel.url}|${all[i]!.start}` : "";
+    // Ищем текущую передачу в отфильтрованном списке
+    const i = progs.findIndex((p) => Date.parse(p.start) <= nowMs && nowMs < Date.parse(p.stop));
+    schedKey = channel && i >= 0 ? `${channel.url}|${progs[i]!.start}` : "";
     nodes.scheduleList.textContent = "";
-    nodes.schedule.hidden = i < 0;
-    if (i < 0 || !channel) return;
+    nodes.schedule.hidden = progs.length === 0 || !channel;
+    if (!channel || progs.length === 0) return;
+
     const now = new Date();
-    for (const p of all.slice(Math.max(0, i - 1), i + 4)) {
+    for (const p of progs) {
       nodes.scheduleList.append(programmeRow(channel, p, now, () => undefined));
     }
   }
