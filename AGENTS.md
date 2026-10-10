@@ -789,9 +789,12 @@ push в `main` — то же + деплой `dist/` в GitHub Pages (artifact +
 `actions/deploy-pages@v5`). Required check — `build`. Pages включить руками:
 Settings → Pages → Source: **GitHub Actions**.
 
-**Общий dist (#263).** `build` публикует `pages-build` на всех событиях,
-включая PR. `visual` и `android` ждут успешного `build` и скачивают этот
-артефакт; `release` также использует его без повторной web-сборки.
+**Общий dist (#263, #477).** `build` публикует `pages-build` на всех событиях,
+включая PR. `visual`, `android` и `release-web` ждут успешного `build` и
+скачивают этот артефакт; `release` также использует его без повторной
+web-сборки. Быстрый путь Pages: `build` → `release-web` → `deploy`
+(~2–3 мин), тяжёлый Android-релиз (`visual`, `android`, `android-tv`,
+`companion` → `release`) идёт фоном и `deploy` не блокирует.
 `npm ci` нужен только `build` и `visual` (Playwright/Vite preview).
 Версия и versionCode в отдельных checkout штампуются из outputs
 `release-check`; подпись APK не меняет web-бандл. После подписи `release`
@@ -805,16 +808,17 @@ Playwright: CI-матрица `chromium`/`firefox-media` с `fail-fast: false`:
 `concurrency` больше не отменяет прогоны (`cancel-in-progress` снят): push в
 `main` может запускать релиз, и отмена оставила бы GitHub Release полупустым.
 
-**Один артефакт `github-pages` на прогон (#250).** Его кладёт только
-`release` — и обязательно **последним шагом** job'ы: упавший `release`
-не оставляет артефакт, и `deploy` по `needs.release.result` понимает,
-что пора во fallback. Сам `build` класть не должен: два одноимённых
-артефактов роняют `deploy-pages` (`Artifact count is 2`) — так деплой
-не проходил ни на один push в `main`. Если `release` не дошёл (упал
-визуальный тест или сборка APK), `deploy` сам упаковывает запасной
-артефакт `pages-build` из `build`, поэтому обычный деплой не зависит
-от релиза: сайт и `version.json` обновляются всегда. Свойство покрыто
-`tests/pages-deploy.test.ts`.
+**Один артефакт `github-pages` на прогон (#250, #477).** Его кладёт либо
+быстрый `release-web` (только push в `main`), либо `release` — но только
+когда `release-web` не успешен (`if: needs.release-web.result != 'success'`),
+и обязательно **последним шагом** job'ы: упавший job не оставляет артефакт,
+и `deploy` по `needs.release-web.result` понимает, что пора во fallback.
+Сам `build` класть не должен: два одноимённых артефактов роняют
+`deploy-pages` (`Artifact count is 2`) — так деплой не проходил ни на один
+push в `main`. Если `release-web` не дошёл, `deploy` сам упаковывает
+запасной артефакт `pages-build` из `build`, поэтому обычный деплой не зависит
+от релиза: сайт и `version.json` обновляются всегда (полный Android-релиз
+идёт фоном). Свойство покрыто `tests/pages-deploy.test.ts`.
 
 **Dot-файлы в Pages-артефакте.** `actions/upload-pages-artifact` с v4 по
 умолчанию архивирует с `--exclude=.[^/]*` и выбрасывает скрытые файлы, поэтому
@@ -896,6 +900,9 @@ WebView для ввода/select/IME. Back отправляет Escape, выхо
 Цифровой ZAP и autoplay используют прежние правила, PIN не обходится.
 CI `android-tv` запускает connectedDebugAndroidTest на Android TV 36 и сохраняет
 скриншот/дерево Installed Apps с IPTV Hub и отчёты тестов; выпуск APK ждёт этот job.
+Тяжёлый эмулятор запускается только по тегу `v*` и ручному `workflow_dispatch`
+(#477) — на push в `main` job скипается, а `release` его отсутствие терпит
+(`skipped`); Gradle-кэш `~/.gradle/caches` ускоряет повторные прогоны.
 
 **Обновления APK (#386):** `apk-updates.ts` читает только статический Pages
 `version.json` с дедлайном 8 секунд, сравнивает строгую трёхчастную semver и
