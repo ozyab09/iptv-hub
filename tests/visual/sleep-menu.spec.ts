@@ -1,8 +1,9 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 test.use({ serviceWorkers: "block" });
 
-const playlist = "#EXTM3U\n#EXTINF:-1,Канал\nhttps://stream.invalid/live.mp4\n";
+const playlist = "#EXTM3U\n#EXTINF:-1,Канал\nhttps://fixture.test/live.m3u8\n";
 
 async function setup(page: Page, hasEpg = false): Promise<void> {
   await page.addInitScript((epg) => {
@@ -12,14 +13,24 @@ async function setup(page: Page, hasEpg = false): Promise<void> {
     );
     localStorage.setItem("iptv-hub.active-playlist.v1", "sleep");
   }, hasEpg);
+  const ts = readFileSync("tests/fixtures/recording.mpegts");
   await page.route("https://fixture.test/**", (route) => {
-    if (route.request().url().endsWith("epg.xml")) {
+    const url = route.request().url();
+    if (url.endsWith("epg.xml")) {
       const date = (offset: number) => new Date(Date.now() + offset).toISOString().replace(/\D/g, "").slice(0, 14) + " +0000";
       return route.fulfill({ contentType: "application/xml", body: `<tv><channel id="sleep"><display-name>Канал</display-name></channel><programme channel="sleep" start="${date(-3_600_000)}" stop="${date(3_600_000)}"><title>Передача</title></programme></tv>` });
     }
+    if (url.endsWith("live.m3u8")) return route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4,\n0.ts\n#EXT-X-DISCONTINUITY\n#EXTINF:4,\n1.ts\n#EXT-X-DISCONTINUITY\n#EXTINF:4,\n2.ts\n" });
+    if (url.endsWith(".ts")) return route.fulfill({ contentType: "video/mp2t", body: ts });
     return route.fulfill({ body: playlist });
   });
-  await page.route("https://stream.invalid/**", (route) => route.fulfill({ status: 404 }));
+}
+
+/** Кнопка сна видна только во время записи (#471): запускаем запись HLS. */
+async function startRecording(page: Page): Promise<void> {
+  await page.locator("#btn-rec").click();
+  await expect(page.locator("#btn-rec")).toHaveClass(/recording/);
+  await expect(page.locator("#btn-sleep")).toBeVisible();
 }
 
 /** Развернуть мини-плеер в страницу; на десктопе страницы нет — no-op. */
@@ -79,6 +90,7 @@ test("меню sleep-таймера стилизовано, внутри кад�
   await setup(page);
   await page.goto("/");
   await page.locator("#channel-list .channel-card").first().click();
+  await startRecording(page);
   const menu = page.locator("#sleep-menu");
   await expect(menu).toBeHidden();
 
@@ -86,6 +98,8 @@ test("меню sleep-таймера стилизовано, внутри кад�
   await expect(menu).toBeVisible();
   await expectStyled(page);
   await expectInside(page, "#sleep-menu", "#video-stage");
+  // Во время записи подсказка кнопки — про остановку записи (#471).
+  await expect(page.locator("#btn-sleep")).toHaveAttribute("title", "Таймер остановки записи");
   // На широком экране меню встаёт над транспортной декой, не заходя на неё.
   await expectAboveTransport(page);
 
@@ -130,6 +144,7 @@ test("меню sleep-таймера целиком помещается в ка�
 
   // Страница плеера: меню внутри кадра и не перекрывает транспорт.
   await expandPlayerPage(page);
+  await startRecording(page);
   await page.locator("#btn-sleep").click();
   await expect(menu).toBeVisible();
   await expectStyled(page);
@@ -153,6 +168,7 @@ test("320px: меню не выходит за кадр, не перекрыва
   await page.goto("/");
   await page.locator("#channel-list .channel-card").first().click();
   await expandPlayerPage(page);
+  await startRecording(page);
   const menu = page.locator("#sleep-menu");
 
   await page.locator("#btn-sleep").click();
@@ -188,6 +204,7 @@ test("sleep-меню сохраняет выбор 30/60/90 минут, конц
   await page.goto("/");
   await page.locator("#channel-list .channel-card").first().click();
   await expect(page.locator("#now-show")).toHaveText("Передача");
+  await startRecording(page);
   const menu = page.locator("#sleep-menu");
   const badge = page.locator("#sleep-badge");
   for (const [value, label] of [["30", "30 мин"], ["60", "60 мин"], ["90", "90 мин"], ["episode", "в конце передачи"]] as const) {

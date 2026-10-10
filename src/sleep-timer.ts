@@ -82,3 +82,12 @@ export function sleepLabel(state: SleepState, now: number): string | null {
 export function sleepSurvivesChannelChange(state: SleepState): SleepState {
   return state;
 }
+
+/**
+ * Видимость кнопки сна в транспортной деке (#471): только во время записи
+ * эфира. Просмотр локальной записи и catchup/архив — не запись, кнопка
+ * скрыта (там же скрыты запись и соседние каналы).
+ */
+export function sleepButtonVisible(recordingPlayback: boolean, recordingNow: boolean): boolean {
+  return !recordingPlayback && recordingNow;
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   initialSleepState,
+  sleepButtonVisible,
   sleepCancel,
   sleepLabel,
   sleepRemainderMin,
@@ -59,5 +60,12 @@ describe("sleep timer", () => {
   it("таймер переживает смену канала (состояние не сбрасывается)", () => {
     const s = sleepStart(initialSleepState, 30, NOW);
     expect(s.mode.kind).toBe("duration");
+  });
+
+  it("кнопка сна видна только во время записи эфира (#471)", () => {
+    expect(sleepButtonVisible(false, true)).toBe(true);
+    expect(sleepButtonVisible(false, false)).toBe(false);
+    expect(sleepButtonVisible(true, false)).toBe(false);
+    expect(sleepButtonVisible(true, true)).toBe(false);
   });
 });

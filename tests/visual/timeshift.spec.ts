@@ -104,9 +104,12 @@ test("native MP4 keeps pause, resume and finite seeking", async ({ page }) => {
   await expect(page.locator("#now-title")).toHaveText("Native");
   await expect(page.locator("#btn-prev")).toHaveAttribute("title", "Предыдущий канал");
   await expect(page.locator("#btn-next")).toHaveAttribute("title", "Следующий канал");
-  await page.locator("#btn-sleep").click();
-  await expect(page.locator("#sleep-menu")).toBeVisible();
+  // Кнопка сна видна только во время записи (#471), а здесь записи нет:
+  // цикл открытия/закрытия проверяем диалогом редактирования канала.
+  await expect(page.locator("#btn-sleep")).toBeHidden();
+  await page.locator("#channel-list [data-channel-edit]").first().click();
+  await expect(page.locator("#channel-editor")).toHaveJSProperty("open", true);
   await page.keyboard.press("Escape");
-  await expect(page.locator("#sleep-menu")).toBeHidden();
+  await expect(page.locator("#channel-editor")).not.toHaveJSProperty("open", true);
   await expect(video).toHaveJSProperty("videoWidth", 160);
 });

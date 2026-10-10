@@ -59,10 +59,38 @@ for (const { kind, width } of [
       }
       await nav("Записи").click();
       // Открытое меню и активный таймер эфира не должны остаться у файла.
+      // Таймер сна ставится только во время записи эфира (#471).
+      if (width < 1024) await page.locator("#player-bar").click();
+      await page.locator("#btn-rec").dispatchEvent("click");
+      await expect(page.locator("#btn-rec")).toHaveClass(/recording/);
+      await expect(page.locator("#btn-sleep")).toBeVisible();
       await page.locator("#btn-sleep").dispatchEvent("click");
+      await expect(page.locator("#sleep-menu")).toBeVisible();
       await page.locator('[data-sleep="30"]').dispatchEvent("click");
       await expect(page.locator("#sleep-badge")).not.toHaveJSProperty("hidden", true);
+      // Остановка записи с открытым меню закрывает и его (#471).
       await page.locator("#btn-sleep").dispatchEvent("click");
+      await expect(page.locator("#sleep-menu")).toBeVisible();
+      // Остановка записи прячет кнопку, меню и бейдж (#471). Свежую запись
+      // выкидываем из библиотеки, чтобы дальше играл одиночный фикстурный файл.
+      await page.locator("#btn-rec").dispatchEvent("click");
+      await expect(page.locator("#btn-rec")).not.toHaveClass(/recording/);
+      await expect(page.locator("#btn-sleep")).toBeHidden();
+      await expect(page.locator("#sleep-menu")).toBeHidden();
+      await expect(page.locator("#sleep-badge")).toBeHidden();
+      await expect.poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem("iptv-hub.recordings.v1") ?? "[]") as unknown[]).length)).toBe(2);
+      await page.evaluate(async () => {
+        const dir = await navigator.storage.getDirectory();
+        const key = "iptv-hub.recordings.v1";
+        const recs = JSON.parse(localStorage.getItem(key) ?? "[]") as { id: string; ext: string }[];
+        const fresh = recs.find((r) => r.id !== "fixture");
+        if (fresh) await dir.removeEntry(`done-${fresh.id}.${fresh.ext}`).catch(() => undefined);
+        localStorage.setItem(key, JSON.stringify(recs.filter((r) => r.id === "fixture")));
+      });
+      if (width < 1024) await page.locator("#btn-expand").click();
+      await nav("Каналы").click();
+      await nav("Записи").click();
+      await expect(page.locator(".recording-play")).toHaveCount(1);
     }
     await page.locator(".recording-play").dispatchEvent("click");
     if (kind === "invalid-ts") {
@@ -182,7 +210,7 @@ for (const { kind, width } of [
       await expect(page.locator(`#${id}`)).toBeVisible();
       await expect(page.locator(`#${id}`)).toBeEnabled();
     }
-    await expect(page.locator("#btn-sleep")).toBeVisible();
+    await expect(page.locator("#btn-sleep")).toBeHidden();
     await expect(page.locator("#sleep-badge")).toBeHidden();
     await expect(page.locator("#quality-btn")).toBeEnabled();
     await expect(page.locator("#quality-btn")).toHaveAttribute("aria-disabled", "false");

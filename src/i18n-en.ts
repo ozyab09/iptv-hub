@@ -123,6 +123,7 @@ export const en: Record<TranslationKey, string> = {
   "player.forwardTitle": "Forward 15 seconds (L)",
   "player.pauseTitle": "Pause / resume (Space)",
   "player.sleepTitle": "Sleep timer: stop playback later",
+  "player.sleepRecTitle": "Recording stop timer",
   "player.quality": "Quality",
   "player.audio": "Audio track",
   "player.subtitles": "Subtitles",
