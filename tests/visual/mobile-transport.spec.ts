@@ -9,7 +9,7 @@ for (const width of [320, 390, 480]) {
       await page.setViewportSize({ width, height: 844 });
       const now = Date.now();
       const xmlDate = (time: number) => new Date(time).toISOString().replace(/[-:T]/g, "").slice(0, 14) + " +0000";
-      const mp4 = readFileSync("tests/fixtures/recording.mp4");
+      const ts = readFileSync("tests/fixtures/recording.mpegts");
       await page.addInitScript((value) => {
         localStorage.setItem("iptv-hub.theme.v1", value);
         localStorage.setItem("iptv-hub.playlists.v1", JSON.stringify([{ id: "t", name: "Тест", playlistUrl: "https://fixture.test/list.m3u", epgUrl: "https://fixture.test/epg.xml" }]));
@@ -17,13 +17,17 @@ for (const width of [320, 390, 480]) {
       }, theme);
       await page.route("https://fixture.test/**", (route) => {
         const url = route.request().url();
-        if (url.endsWith("list.m3u")) return route.fulfill({ body: '#EXTM3U\n#EXTINF:-1 tvg-id="tv",Тестовый канал\nhttps://fixture.test/stream.mp4\n' });
+        if (url.endsWith("list.m3u")) return route.fulfill({ body: '#EXTM3U\n#EXTINF:-1 tvg-id="tv",Тестовый канал\nhttps://fixture.test/live.m3u8\n' });
         if (url.endsWith("epg.xml")) return route.fulfill({ body: `<tv><channel id="tv"><display-name>Тестовый канал</display-name></channel><programme channel="tv" start="${xmlDate(now - 300000)}" stop="${xmlDate(now + 600000)}"><title>Текущая передача</title></programme></tv>` });
-        return route.fulfill({ contentType: "video/mp4", body: mp4 });
+        if (url.endsWith("live.m3u8")) return route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4,\n0.ts\n#EXT-X-DISCONTINUITY\n#EXTINF:4,\n1.ts\n#EXT-X-DISCONTINUITY\n#EXTINF:4,\n2.ts\n#EXT-X-ENDLIST\n" });
+        return route.fulfill({ contentType: "video/mp2t", body: ts });
       });
       await page.goto("/");
       await page.locator("#channel-list .channel-card").click();
       await page.locator("#video").click();
+      // Кнопка сна видна только во время записи (#471): пишем сегменты HLS.
+      await page.locator("#btn-rec").click();
+      await expect(page.locator("#btn-rec")).toHaveClass(/recording/);
       const stage = page.locator("#video-stage");
       await expect(page.locator("#player-bar")).toHaveClass(/open/);
       await expect(page.locator("#prog-start")).not.toBeEmpty();

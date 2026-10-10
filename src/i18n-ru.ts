@@ -121,6 +121,7 @@ export const ru = {
   "player.forwardTitle": "Вперёд 15 сек (L)",
   "player.pauseTitle": "Пауза / продолжить (Space)",
   "player.sleepTitle": "Sleep-таймер: выключить позже",
+  "player.sleepRecTitle": "Таймер остановки записи",
   "player.quality": "Качество",
   "player.audio": "Аудиодорожка",
   "player.subtitles": "Субтитры",

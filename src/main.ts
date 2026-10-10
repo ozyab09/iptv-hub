@@ -86,6 +86,7 @@ import {
 import { createScreenshotUi } from "./screenshot-ui";
 import {
   initialSleepState,
+  sleepButtonVisible,
   sleepCancel,
   sleepLabel,
   sleepRemainderMin,
@@ -2337,6 +2338,7 @@ const recSession = createRecordingSession({
   onState: (state) => {
     console.debug(`[iptv-hub] rec: state=${state}`);
     renderRecButton(state === "recording");
+    refreshPlaybackControls();
   },
   onSourceLost: () => {
     // Запись сорвалась — переходим на следующий способ захвата и пробуем
@@ -2364,6 +2366,7 @@ const segSession = createSegmentSession({
   onState: (state) => {
     console.debug(`[iptv-hub] seg: state=${state}`);
     renderRecButton(state === "recording");
+    refreshPlaybackControls();
     // Ловим и остановку самой сессией — по потолку размера или сбою хранилища.
     if (state === "idle") restoreLevelAfterRecording();
   },
@@ -2610,7 +2613,15 @@ function refreshPlaybackControls(): void {
   btnPrev.disabled = recording;
   btnNext.disabled = recording;
   btnRec.hidden = recording;
-  btnSleep.hidden = recording;
+  // Кнопка сна — только во время записи эфира (#471): ни без записи, ни при
+  // просмотре локальной записи, ни в catchup. Подпись — про остановку записи.
+  const recordingNow = isRecordingNow();
+  btnSleep.hidden = !sleepButtonVisible(recording, recordingNow);
+  const sleepTitleKey = recordingNow ? "player.sleepRecTitle" : "player.sleepTitle";
+  btnSleep.setAttribute("data-i18n-title", sleepTitleKey);
+  btnSleep.setAttribute("data-i18n-aria-label", sleepTitleKey);
+  btnSleep.title = tr(sleepTitleKey);
+  btnSleep.setAttribute("aria-label", btnSleep.title);
   btnLive.disabled = recording || vod;
   btnLive.setAttribute("aria-disabled", String(recording || vod));
   btnLive.hidden = recording || vod || (!archivePlayback && !isBehindLive(videoEl.currentTime, liveEdge()));
@@ -2621,8 +2632,11 @@ function refreshPlaybackControls(): void {
     sleepState = sleepCancel(sleepState);
     videoStage.classList.remove("sleep-dim");
   }
+  // Скрытие кнопки без записи уносит и открытое меню (#471), иначе останется
+  // попап без триггера. Таймер при этом не отменяется — только интерфейс.
+  if (btnSleep.hidden && overlayStack.includes("sleep")) closeOverlay("sleep");
   const label = sleepLabel(sleepState, Date.now());
-  sleepBadge.hidden = recording || label === null;
+  sleepBadge.hidden = btnSleep.hidden || label === null;
   if (label !== null) sleepBadge.textContent = label;
   qualityMenuUi.refreshQualityAvailability();
 }
@@ -2653,7 +2667,18 @@ function positionSleepMenu(): void {
   sleepMenu.style.setProperty("--sleep-left", `${trigger.right - stage.left - sleepMenu.offsetWidth}px`);
 }
 
-new ResizeObserver(positionSleepMenu).observe(videoStage);
+// Позиция зависит и от ширины самого меню (поздняя подгрузка шрифта, #471),
+// и от места триггера: аудио/субтитры появляются уже после открытия меню,
+// транспорт перецентруется и кнопка уезжает. Следим за всеми тремя.
+const sleepMenuPositioner = new ResizeObserver(positionSleepMenu);
+sleepMenuPositioner.observe(videoStage);
+sleepMenuPositioner.observe(sleepMenu);
+new MutationObserver(positionSleepMenu).observe(videoStage.querySelector(".video-actions")!, {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: ["hidden", "class"],
+});
 
 function sleepApplyFired(): void {
   if (!sleepState.fired) return;
@@ -2670,6 +2695,7 @@ function sleepApplyFired(): void {
 btnSleep.addEventListener("click", (e) => {
   e.stopPropagation();
   if (player.isRecordingPlayback) return;
+  if (btnSleep.hidden) return; // скрытая кнопка не отвечает (#471)
   if (sleepMenu.hidden) openOverlay("sleep");
   else closeOverlay("sleep");
   sleepRender();
