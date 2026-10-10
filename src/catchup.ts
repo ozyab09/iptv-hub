@@ -105,7 +105,7 @@ export function hourlyFallbackProgrammes(
     out.push({
       start: new Date(start).toISOString(),
       stop: new Date(stop).toISOString(),
-      title: "Без названия",
+      title: "",
       desc: null,
     });
     stop = start;

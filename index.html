@@ -490,13 +490,13 @@
              перемотки не видно, а понимать «сколько осталось» надо -->
         <div id="mini-prog" class="mini-prog"><span id="mini-prog-fill"></span></div>
 
-        <!-- Программа рядом с плеером: прошедшая (из архива), текущая и три
-             следующие. Полная — в шторке «Вся программа». -->
+        <!-- Программа под плеером: вертикальный список передач на всю ширину,
+             переключатель дат между видео и списком (6 дней назад, 2 дня вперёд). -->
         <section id="now-schedule" class="now-schedule" hidden>
           <div class="sched-head">
-            <h3 class="t-heading">Программа</h3>
-            <button id="btn-full-guide" class="sched-all">Вся программа</button>
+            <h3 class="t-heading" data-i18n="guide.title">Программа</h3>
           </div>
+          <div id="schedule-date-switcher" class="schedule-date-switcher" role="tablist" aria-label="Дни недели"></div>
           <div id="sched-list" class="sched-list"></div>
         </section>
         </div>
