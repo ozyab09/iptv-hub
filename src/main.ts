@@ -2508,6 +2508,21 @@ reminderUi = createProgrammeReminders({ root: document, minutes: $<HTMLInputElem
   watch: (playlistId, channelUrl) => { void watchReminder({ playlistId, channelUrl }); },
 });
 
+// Скачивание локальной записи как файла (#474): blob → download через временный URL.
+async function localDownload(rec: RecordingMeta, programme?: EpgProgramme): Promise<void> {
+  if (!recordingsFs) { showToast("Хранилище записей недоступно"); return; }
+  const file = await recordingsFs.read(storedRecordingName(rec.id, rec.ext));
+  if (!file) { showToast("Запись не найдена"); return; }
+  const date = new Date(rec.startedAt).toISOString().slice(0, 10);
+  const name = programme?.title ? `${programme.title} (${date})` : `${rec.channelName} (${date})`;
+  const blobUrl = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = `${name}.${rec.ext}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+}
+
 // Шторка «Программа», блок под плеером и карточка передачи — src/guide-ui.ts (#368).
 const guideUi = createGuideUi({
   nodes: {
@@ -2554,6 +2569,10 @@ const guideUi = createGuideUi({
     }),
   },
   setIcon,
+  toastAction: showToastAction,
+  recordings: () => loadRecordings(localStorage),
+  recordingsFs,
+  localDownload,
 });
 
 /** Передачи канала по телепрограмме, по времени начала. */

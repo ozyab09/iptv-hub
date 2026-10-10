@@ -7,9 +7,12 @@
  * потоке без перемотки показывается тост.
  */
 import { buildCatchupUrl, canWatchPast, dayWindows, hourlyFallbackProgrammes, hourlyScheduleSlots, programmesInDay } from "./catchup";
+import { findLocalRecordingForProgramme } from "./recordings";
 import { formatRange } from "./epg";
 import { t, type Language, type TranslationKey, type TranslationParams } from "./i18n";
 import { iconMarkup } from "./icons";
+import type { RecordingMeta } from "./recordings";
+import type { RecordingsFs } from "./recordings-store";
 import type { OverlayName } from "./overlays";
 import type { DownloadStatus } from "./programme-downloader";
 import { programRowClass } from "./ui-classes";
@@ -50,7 +53,14 @@ export interface GuideUiDeps {
   archiveProgramme: () => EpgProgramme | null;
   language: () => Language;
   toast: (message: string) => void;
+  toastAction: (message: string, actionLabel: string, action: () => void, durationMs?: number) => void;
   playChannel: (channel: Channel, archiveUrl?: string, programme?: EpgProgramme) => Promise<boolean>;
+  /** Локальные записи (из localStorage). */
+  recordings: () => RecordingMeta[];
+  /** Файловое хранилище записей (OPFS или null). */
+  recordingsFs: RecordingsFs | null;
+  /** Скачать локальную запись как файл (blob → download). */
+  localDownload: (rec: RecordingMeta, programme?: EpgProgramme) => Promise<void>;
   openOverlay: (name: OverlayName) => void;
   closeOverlay: (name: OverlayName) => void;
   playlistId: () => string | null;
@@ -151,6 +161,29 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
         return;
       }
       deps.downloads.start(c, p, url);
+    });
+    refreshDownloadButton(dl);
+    return dl;
+  }
+
+  /**
+   * Кнопка скачивания локальной записи передачи. Подтверждение — тост с кнопкой
+   * «Скачать»; отмена — таймаут тоста (#378, ACTION_TOAST_MS).
+   */
+  function downloadLocalButton(c: Channel, p: EpgProgramme, rec: RecordingMeta): HTMLButtonElement {
+    const dl = document.createElement("button");
+    dl.type = "button";
+    dl.className = "btn btn-sm programme-download";
+    dl.dataset.downloadChannel = c.url;
+    dl.dataset.downloadStart = p.start;
+    const title = p.title ?? tr("guide.noTitle");
+    dl.addEventListener("click", () => {
+      const current = deps.downloads.status();
+      if (current) {
+        if (current.channelUrl === c.url && current.start === p.start) cancelDownload();
+        return;
+      }
+      deps.toastAction(tr("download.confirm", { title }), tr("download.title"), () => void deps.localDownload(rec, p));
     });
     refreshDownloadButton(dl);
     return dl;
@@ -271,11 +304,21 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
     const wrapper = document.createElement("div");
     wrapper.className = "programme-recordable";
     wrapper.append(row, infoButton(c, p, onPlayed));
+    const localRec = findLocalRecordingForProgramme(
+      deps.recordings(),
+      c.url,
+      { title: p.title, start: Date.parse(p.start), stop: Date.parse(p.stop) },
+    );
     if (stop <= now.getTime()) {
-      // Скачивание доступной из архива передачи (#315, #359).
-      if (watchable && cu.source) wrapper.append(downloadButton(c, p, cu));
+      // Прошлое: локальная запись > архив (#315, #359, #474).
+      if (localRec) wrapper.append(downloadLocalButton(c, p, localRec));
+      else if (watchable && cu.source) wrapper.append(downloadButton(c, p, cu));
       return wrapper;
     }
+    // Live или будущее: локальная запись сейчас, архив — для будущего.
+    if (localRec && state === "now") wrapper.append(downloadLocalButton(c, p, localRec));
+    else if (state === "next" && cu.source && buildCatchupUrl(cu, p, now))
+      wrapper.append(downloadButton(c, p, cu));
     wrapper.append(...futureActions(c, p));
     return wrapper;
   }

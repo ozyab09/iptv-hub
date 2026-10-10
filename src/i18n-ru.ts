@@ -177,6 +177,7 @@ export const ru = {
   "download.cancel": "Отменить скачивание",
   "download.progress": "Отменить · {pct}%",
   "download.status": "Скачивается: {title} · {channel}",
+  "download.confirm": "Скачать передачу «{title}»?",
   "download.cancelled": "Скачивание отменено",
   "schedule.note": "Работает только при открытом приложении. Повторы идут по местному времени выбранного слота. Одновременно записывается один слот; просмотр и ручная запись не переключаются.",
   "schedule.start": "Начало",

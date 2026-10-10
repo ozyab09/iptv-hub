@@ -177,6 +177,7 @@ export const en: Record<TranslationKey, string> = {
   "download.title": "Download programme",
   "download.busy": "A download is already running — please wait",
   "download.cancel": "Cancel download",
+  "download.confirm": "Download programme «{title}»?",
   "download.progress": "Cancel · {pct}%",
   "download.status": "Downloading: {title} · {channel}",
   "download.cancelled": "Download cancelled",
