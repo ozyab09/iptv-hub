@@ -207,7 +207,10 @@
 /* Верх кадра: канал, передача и навигация по каналам.
    Нижний отступ небольшой: транспорт переехал в деку (#89). */
 .video .top { align-items: flex-start; padding: var(--space-4) var(--space-3) var(--space-3); }
-.now-meta { display: flex; align-items: center; gap: 2px; flex: none; }
+/* Статус 12px/16px по центру 18px-заголовка: его центр тоже на 22px от верха
+   (14px + половина 16px), как у названия (13px + половина 18px, #262).
+   В мини-плеере и до 719px статус скрыт, отступ ни на что не влияет (#480). */
+.now-meta { display: flex; align-items: center; gap: 2px; flex: none; padding-top: calc((44px - 16px) / 2); }
 .now-meta .player-status { max-width: 120px; }
 /* Центр текста первой строки совпадает с рядом .vbtn (44px).
    Отступ вычисляется из высоты строки, без пустого места под её текстом:

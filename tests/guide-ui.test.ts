@@ -61,7 +61,7 @@ const channel: Channel = {
 };
 const programmes = [prog(-2, "Old"), prog(-1, "Past", "Описание прошлой"), prog(-0.5, "Live"), prog(0.5, "Next"), prog(1.5, "Later")];
 
-function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; compact?: boolean; status?: DownloadStatus | null; recordings?: RecordingMeta[]; recordingsFs?: RecordingsFs | null } = {}) {
+function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; compact?: boolean; status?: DownloadStatus | null; recordings?: RecordingMeta[]; recordingsFs?: RecordingsFs | null; language?: "ru" | "en" } = {}) {
   const el = () => new El();
   const nodes = {
     overlay: el(), title: el(), days: el(), list: el(),
@@ -74,7 +74,7 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
     planned: [] as string[], started: [] as string[], cancelled: 0, localDownloads: [] as { id: string; title?: string }[],
   };
   let status = opts.status ?? null;
-  const testLanguage: "ru" | "en" = "en";
+  let testLanguage: "ru" | "en" = opts.language ?? "en";
   const deps: GuideUiDeps = {
     nodes: nodes as unknown as GuideUiDeps["nodes"],
     channel: () => (opts.channel === undefined ? channel : opts.channel),
@@ -100,7 +100,7 @@ function harness(opts: { channel?: Channel | null; programmes?: EpgProgramme[]; 
     localDownload: async (rec, p) => { calls.localDownloads.push({ id: rec.id, title: p?.title }); },
     win: { addEventListener: () => undefined } as unknown as Window,
   };
-  return { ui: createGuideUi(deps), nodes, calls };
+  return { ui: createGuideUi(deps), nodes, calls, setLanguage: (lang: "ru" | "en") => { testLanguage = lang; } };
 }
 
 const rows = (root: El) => root.children.filter((c) => c.className === "programme-recordable");
@@ -308,5 +308,21 @@ describe("createGuideUi (#368)", () => {
     hWithout2.ui.render();
     const wrapper2 = byTitle(hWithout2.nodes.list, "Live");
     expect(wrapper2.querySelector(".programme-download")).toBeNull();
+  });
+
+  it("переключатель дат перестраивается при смене языка (#480)", () => {
+    const h = harness();
+    h.ui.renderSchedule();
+    const buttons = () => h.nodes.scheduleDateSwitcher.children[0]!.children;
+    const current = () => buttons().filter((c) => c.classList.contains("current"));
+    expect(buttons()).toHaveLength(9);
+    expect(current()).toHaveLength(1);
+    expect(current()[0]!.textContent).toBe(t("guide.today", "en"));
+    h.setLanguage("ru");
+    h.ui.renderSchedule();
+    // Без дублей, метки на новом языке.
+    expect(buttons()).toHaveLength(9);
+    expect(current()).toHaveLength(1);
+    expect(current()[0]!.textContent).toBe(t("guide.today", "ru"));
   });
 });
