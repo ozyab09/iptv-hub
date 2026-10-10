@@ -66,6 +66,9 @@ for (const width of [320, 390, 844, 1024, 1280, 1440]) {
       expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(frame.x + frame.width);
       await menu.locator(".menu-item").last().click();
       await expect(menu).toBeHidden();
+      // Кнопка сна видна только во время записи (#471): пишем сегменты HLS.
+      await page.locator("#btn-rec").click();
+      await expect(page.locator("#btn-rec")).toHaveClass(/recording/);
       await page.locator("#btn-sleep").click();
       await expect(page.locator("#sleep-menu")).toBeVisible();
       await page.keyboard.press("Escape");
