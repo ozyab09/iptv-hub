@@ -89,7 +89,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Restore typecheck cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: node_modules/.cache/iptv-hub-types.tsbuildinfo
           key: types-${{ runner.os }}-node22-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-${{ github.sha }}
@@ -138,6 +138,25 @@ jobs:
           path: dist
           include-hidden-files: true
           if-no-files-found: error
+
+  # Быстрый Pages-путь (#477 P1): только build, без ожидания visual /
+  # android / android-tv / companion. На push в main деплой сайта идёт
+  # через ~2–3 мин, а тяжёлый Android-релиз догоняет фоном.
+  release-web:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.build.result == 'success'
+    needs: [release-check, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: pages-build
+          path: dist
+      # Единственный github-pages этого пути и последний шаг job'ы (#250):
+      # release пропускает свою загрузку, когда этот шаг успешен.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+          include-hidden-files: true
 
   visual:
     # always(): на PR release-check пропущен, а без этого условия зависимый
@@ -246,7 +265,9 @@ jobs:
           if-no-files-found: error
 
   android-tv:
-    if: always() && needs.build.result == 'success'
+    # Тяжёлый эмулятор TV (~3.5 мин, #477 P2): только тег v* и ручной запуск.
+    # На push в main и PR job скипается, а release его отсутствие терпит.
+    if: always() && needs.build.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
     needs: [build]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -266,6 +287,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: '8.7'
+      - name: Cache Gradle home
+        uses: actions/cache@v5
+        with:
+          path: ~/.gradle/caches
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
       - uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
@@ -362,15 +390,17 @@ jobs:
     # Гарда «релиз уже есть» больше нет — версия всегда новая.
     # Проверка ref обязательна: на PR release-check пропущен, и без неё
     # релиз собирался бы на каждый pull_request.
+    # release-web добавлен в needs для взаимоисключения github-pages (#477):
+    # сам job ждёт его секунды, тогда как тяжёлые jobs идут минуты.
     if: >-
       always()
       && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
       && needs.build.result == 'success'
       && needs.visual.result == 'success'
       && needs.android.result == 'success'
-      && needs.android-tv.result == 'success'
+      && (needs.android-tv.result == 'success' || needs.android-tv.result == 'skipped')
       && needs.companion.result == 'success'
-    needs: [release-check, build, visual, android, android-tv, companion]
+    needs: [release-check, build, visual, android, android-tv, companion, release-web]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -469,41 +499,46 @@ jobs:
             git push origin HEAD:gh-pages
           fi
 
-      # ПОСЛЕДНИЙ шаг job'ы — это контракт для deploy (#250): deploy по
-      # needs.release.result решает, брать этот артефакт или запасную
+      # ПОСЛЕДНИЙ шаг job'ы — это контракт для deploy (#250, #477): deploy по
+      # needs.release-web.result решает, брать этот артефакт или запасную
       # сборку из build. Если бы github-pages клали раньше шагов, которые
       # могут упасть (публикация Release, push metadata), упавший release
       # оставлял бы артефест в прогоне и deploy спотыкался бы о два
       # одноимённых. Провалился job ⇒ артефакта нет ⇒ срабатывает fallback.
       # include-hidden-files — как и в build: релизный деплой обязан
       # опубликовать .well-known/assetlinks.json с отпечатком keystore.
+      # На push в main быстрый release-web уже положил github-pages (#477),
+      # поэтому здесь грузим только когда он не успешен — иначе в прогоне
+      # будет два одноимённых артефакта.
       - uses: actions/upload-pages-artifact@v5
+        if: needs.release-web.result != 'success'
         with:
           path: dist
           include-hidden-files: true
 
   deploy:
-    if: always() && needs.build.result == 'success' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || needs.release.result == 'success')
-    needs: [build, release]
+    if: always() && needs.build.result == 'success' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    needs: [build, release-web]
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Fallback (#250): release не дошёл (упал визуальный тест или сборка
-      # APK) — его github-pages в прогоне нет, поэтому в Pages уходит
-      # сборка из build: иначе на сайте застрянет старая версия и старый
-      # version.json для автообновления TWA. При успешном release эти два
-      # шага пропускаются: артефакт github-pages уже положила release,
-      # второй с тем же именем сломал бы deploy-pages.
+      # Fallback (#250, #477): быстрый release-web не дошёл — его
+      # github-pages в прогоне нет, поэтому в Pages уходит сборка из build:
+      # иначе на сайте застрянет старая версия и старый version.json для
+      # автообновления. При успешном release-web эти два шага пропускаются:
+      # артефакт github-pages уже положен, второй с тем же именем сломал
+      # бы deploy-pages. Полный Android-релиз (release) идёт фоном и deploy
+      # не блокирует.
       - name: Pack build artifact for Pages
-        if: needs.release.result != 'success'
+        if: needs.release-web.result != 'success'
         uses: actions/download-artifact@v8
         with:
           name: pages-build
           path: dist
       - name: Upload Pages artifact
-        if: needs.release.result != 'success'
+        if: needs.release-web.result != 'success'
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist

@@ -57,25 +57,67 @@ it("build не кладёт github-pages — только запасной ар�
   expect(build).toContain("include-hidden-files: true");
 });
 
-it("github-pages в прогоне кладётся одним условием: release последним, fallback — под guard", () => {
+it("github-pages в прогоне кладётся одним условием: release-web и release последние, fallback — под guard (#250, #477)", () => {
   const text = readFileSync(join(workflowDir, "ci.yml"), "utf8");
+
+  // release-web (быстрый путь): единственный шаг загрузки — последний.
+  const web = jobSection(text, "release-web");
+  const webUpload = web.indexOf("uses: actions/upload-pages-artifact");
+  expect(webUpload).toBeGreaterThan(-1);
+  const webSteps = [...web.matchAll(/^      - \S.*$/gm)].map((m) => m[0]);
+  expect(webSteps.at(-1)).toContain("upload-pages-artifact");
 
   // release: шаг последний в job'е — упавший release не оставляет
   // артефакт в прогоне, и deploy гарантированно уходит во fallback.
+  // На push в main быстрый release-web уже положил github-pages, поэтому
+  // загрузка release возможна только когда его там нет — иначе два
+  // одноимённых артефакта снова сломают deploy-pages.
   const release = jobSection(text, "release");
   const releaseUpload = release.indexOf("uses: actions/upload-pages-artifact");
   expect(releaseUpload).toBeGreaterThan(-1);
   const releaseSteps = [...release.matchAll(/^      - \S.*$/gm)].map((m) => m[0]);
   expect(releaseSteps.at(-1)).toContain("upload-pages-artifact");
+  expect(release.slice(releaseUpload, releaseUpload + 300)).toContain(
+    "if: needs.release-web.result != 'success'",
+  );
 
-  // deploy: своя загрузка возможна только когда артефакта от release нет,
-  // иначе два github-pages снова сломают deploy-pages.
+  // deploy: своя загрузка возможна только когда артефакта от release-web
+  // нет, иначе два github-pages снова сломают deploy-pages.
   const deploy = jobSection(text, "deploy");
   const fallbackUpload = deploy.indexOf("uses: actions/upload-pages-artifact");
   expect(fallbackUpload).toBeGreaterThan(-1);
   expect(deploy.slice(Math.max(0, fallbackUpload - 300), fallbackUpload)).toContain(
-    "if: needs.release.result != 'success'",
+    "if: needs.release-web.result != 'success'",
   );
+});
+
+it("быстрый deploy не ждёт тяжёлые jobs: needs только build и release-web (#477)", () => {
+  const text = readFileSync(join(workflowDir, "ci.yml"), "utf8");
+  const deploy = jobSection(text, "deploy");
+  expect(deploy).toMatch(/needs: \[[^\]]*\bbuild\b/);
+  expect(deploy).toMatch(/needs: \[[^\]]*\brelease-web\b/);
+  expect(deploy).not.toMatch(/needs: \[[^\]]*\brelease[^-]\b/);
+  expect(deploy).not.toContain("android-tv");
+  expect(deploy).not.toContain("companion");
+  // release ждёт release-web для взаимоисключения github-pages, но терпит
+  // скип android-tv (эмулятор только по тегам).
+  const release = jobSection(text, "release");
+  expect(release).toMatch(/needs: \[[^\]]*\brelease-web\b/);
+  expect(release).toContain("needs.android-tv.result == 'skipped'");
+});
+
+it("android-tv только по тегам и ручному запуску, с кэшем Gradle (#477)", () => {
+  const text = readFileSync(join(workflowDir, "ci.yml"), "utf8");
+  const tv = jobSection(text, "android-tv");
+  expect(tv).toContain("startsWith(github.ref, 'refs/tags/v')");
+  expect(tv).toContain("github.event_name == 'workflow_dispatch'");
+  expect(tv).toContain("path: ~/.gradle/caches");
+  expect(tv).toContain("uses: actions/cache@v5");
+});
+
+it("без устаревшего actions/cache@v4 (#477)", () => {
+  const text = readFileSync(join(workflowDir, "ci.yml"), "utf8");
+  expect(text).not.toContain("actions/cache@v4");
 });
 
 it("проверки и релиз используют один dist текущего прогона, включая PR", () => {
@@ -87,7 +129,7 @@ it("проверки и релиз используют один dist текущ
   expect(build).toContain("npm test");
   expect(build).toContain("npm run build");
 
-  for (const name of ["visual", "android", "release"]) {
+  for (const name of ["visual", "android", "release-web", "release"]) {
     const job = jobSection(text, name);
     expect(job).toContain("needs.build.result == 'success'");
     expect(job).toMatch(/needs: \[[^\]]*\bbuild\b/);
