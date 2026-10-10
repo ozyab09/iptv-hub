@@ -53,12 +53,12 @@ async function future(page: Page, id = "b") {
 for (const width of [390, 1440]) {
   test(`guide/search toggle persists and fires once at five minutes (${width})`, async ({ page }) => {
     await setup(page, width);
-    await page.keyboard.press("g");
-    const button = page.locator("#guide-list .programme-reminder");
+    if (width < 1024) await page.locator("#player-bar").click();
+    const button = page.locator("#sched-list .programme-reminder");
     await button.click();
     await expect(button).toHaveAttribute("aria-pressed", "true");
     expect((await stored(page))[0].leadMinutes).toBe(5);
-    await page.keyboard.press("Escape");
+    if (width < 1024) await page.locator("#btn-expand").click();
     const searchButton = await future(page);
     await expect(searchButton).toHaveAttribute("aria-pressed", "true");
     await searchButton.click();

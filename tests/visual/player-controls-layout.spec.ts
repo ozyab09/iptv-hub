@@ -66,9 +66,10 @@ for (const width of [320, 390, 844, 1024, 1280, 1440]) {
       expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(frame.x + frame.width);
       await menu.locator(".menu-item").last().click();
       await expect(menu).toBeHidden();
-      await page.locator("#btn-full-guide").click();
-      await expect(page.locator("#guide-overlay")).toBeVisible();
-      await page.locator("#guide-close").click();
+      await page.locator("#btn-sleep").click();
+      await expect(page.locator("#sleep-menu")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#sleep-menu")).toBeHidden();
       await stage.hover();
       await expect(stage).not.toHaveClass(/idle/);
       await expect.poll(() => page.locator(".video .top").evaluate((el) => getComputedStyle(el).opacity)).toBe("1");

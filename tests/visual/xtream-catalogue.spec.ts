@@ -110,6 +110,10 @@ for (const width of [390, 1440]) {
     await page.locator('.pl-edit button[type="submit"]').click();
     await expect(nav("Movies")).toHaveCount(0);
     await expect(nav("Series")).toHaveCount(0);
+    // После снятия opt-in плейлист перезагружается без каталога: ждём одну
+    // карточку эфира. Прямой toContainText на двух старых карточках эпизодов
+    // падал бы сразу strict mode violation, не дожидаясь перезагрузки (#480).
+    await expect(page.locator("#channel-list .channel-card")).toHaveCount(1);
     await expect(page.locator("#channel-list .channel-card")).toContainText("Live fixture");
   });
 }

@@ -32,7 +32,7 @@ for (const width of [320, 390, 1024, 1440]) {
         if (width < 1024) await page.locator("#video").click();
         const stage = page.locator("#video-stage");
         await stage.hover();
-        await expect(page.locator("#btn-full-guide")).toBeVisible();
+        await expect(page.locator("#btn-pause")).toBeVisible();
         const show = page.locator("#now-show");
         if (epg) await expect(show).toHaveText(programmeTitle);
         else await expect(show).toBeHidden();

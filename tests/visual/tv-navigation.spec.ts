@@ -73,13 +73,13 @@ for (const theme of ["dark", "light"]) {
     await expect(page.locator(".tv-paused-info")).toContainText("Now: Current programme");
     await expect(page.locator(".tv-paused-info")).toContainText("Next: Next programme");
     await page.screenshot({ path: `test-results/tv-pause-${theme}.png` });
-    await tabTo(page, "#btn-guide");
+    await tabTo(page, "#sched-list .programme-info");
     await page.keyboard.press("Enter");
-    await expect(page.locator("#guide-overlay")).toBeVisible();
-    await expect(page.locator("#guide-close")).toBeFocused();
+    await expect(page.locator("#programme-overlay")).toBeVisible();
+    await expect(page.locator("#programme-card-close")).toBeFocused();
     await page.keyboard.press("Escape");
-    await expect(page.locator("#guide-overlay")).toBeHidden();
-    await expect(page.locator("#btn-guide")).toBeFocused();
+    await expect(page.locator("#programme-overlay")).toBeHidden();
+    await expect(page.locator("#sched-list .programme-info").first()).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(page.locator("#player-bar")).toBeHidden();
     await expect(page.locator(".tv-paused-info")).toBeHidden();

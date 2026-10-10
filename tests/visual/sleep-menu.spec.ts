@@ -108,7 +108,7 @@ test("меню sleep-таймера стилизовано, внутри кад�
   await expect(page.locator("#channel-list")).toBeVisible();
 
   // Клик мимо закрывает. Точка — левый край кадра на середине высоты:
-  // верх занял перенесённый в .top гайд (#btn-guide), центр — меню.
+  // верх занял .top плеера, центр — меню.
   await page.locator("#btn-sleep").click();
   await expect(menu).toBeVisible();
   const stage = (await page.locator("#video-stage").boundingBox())!;

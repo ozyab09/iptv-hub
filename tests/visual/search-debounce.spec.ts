@@ -8,10 +8,10 @@ test("typing a word re-renders the channel list once after the pause", async ({ 
   await page.setViewportSize({ width: 1440, height: 900 });
   const playlist = "#EXTM3U\n" + Array.from({ length: 300 }, (_, i) =>
     `#EXTINF:-1 tvg-id="c${i}",Channel ${String(i).padStart(3, "0")}\nhttps://fixture.test/${i}.mp4\n`).join("");
-  const day = Date.UTC(2026, 9, 4);
+  const base = Math.floor(Date.now() / 3600_000) * 3600_000 - 2 * 3600_000;
   const stamp = (ms: number) => new Date(ms).toISOString().replace(/[-:T]/g, "").slice(0, 14) + " +0000";
   const programmes = Array.from({ length: 300 }, (_, c) => Array.from({ length: 24 }, (_, h) =>
-    `<programme start="${stamp(day + h * 3600_000)}" stop="${stamp(day + (h + 1) * 3600_000)}" channel="c${c}"><title>${h === 20 && c % 30 === 0 ? "Football final" : `News ${h}`}</title></programme>`).join("")).join("");
+    `<programme start="${stamp(base + h * 3600_000)}" stop="${stamp(base + (h + 1) * 3600_000)}" channel="c${c}"><title>${h === 4 && c % 30 === 0 ? "Football final" : `News ${h}`}</title></programme>`).join("")).join("");
   const epg = `<tv>${Array.from({ length: 300 }, (_, c) => `<channel id="c${c}"><display-name>Channel ${c}</display-name></channel>`).join("")}${programmes}</tv>`;
   await page.route("https://fixture.test/**", (route) => {
     const url = route.request().url();
