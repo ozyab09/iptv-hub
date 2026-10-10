@@ -30,10 +30,9 @@ for (const width of [390, 1440]) {
     await page.locator("#channel-list .channel-card").click();
     if (width < 1024) await page.locator("#video").click();
     await expect(page.locator("#now-show")).toHaveText("Live show");
-    await page.locator("#btn-full-guide").click();
-    await expect(page.locator("#guide-overlay")).toBeVisible();
+    await expect(page.locator("#now-schedule")).toBeVisible();
 
-    const live = page.locator("#guide-list .programme-recordable").filter({ hasText: "Live show" });
+    const live = page.locator("#sched-list .programme-recordable").filter({ hasText: "Live show" });
     await live.locator(".programme-info").click();
     const card = page.locator("#programme-overlay");
     await expect(card).toBeVisible();
@@ -50,16 +49,16 @@ for (const width of [390, 1440]) {
 
     await page.keyboard.press("Escape");
     await expect(card).toBeHidden();
-    await expect(page.locator("#guide-overlay")).toBeVisible();
+    await expect(page.locator("#now-schedule")).toBeVisible();
 
-    const later = page.locator("#guide-list .programme-recordable").filter({ hasText: "Later show" });
+    const later = page.locator("#sched-list .programme-recordable").filter({ hasText: "Later show" });
     await later.locator(".programme-info").click();
     await expect(page.locator("#programme-card-desc")).toBeHidden();
     await expect(page.locator("#programme-card-meta")).toContainText("Upcoming");
     await expect(page.locator("#programme-card-actions .schedule-programme")).toBeVisible();
     await page.goBack();
     await expect(card).toBeHidden();
-    await expect(page.locator("#guide-overlay")).toBeVisible();
+    await expect(page.locator("#now-schedule")).toBeVisible();
 
     await live.locator(".programme-info").click();
     await page.locator("#programme-card-actions .programme-watch").click();

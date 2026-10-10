@@ -100,6 +100,7 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
   let dayIdx = 0;
   let scheduleDateIdx = 6; // индекс текущего дня в переключателе (6 дней назад = индекс 6)
   let schedKey = "";
+  let schedLang: Language | null = null;
 
   /** Включить эфир или архив передачи: те же проверки, что у строки программы. */
   async function watchProgramme(c: Channel, p: EpgProgramme, now: Date, onPlayed: () => void): Promise<boolean> {
@@ -449,9 +450,13 @@ export function createGuideUi(deps: GuideUiDeps): GuideUi {
     const channel = deps.channel();
     let all = deps.programmes(channel);
 
-    // Переключатель дат — создаём/обновляем
-    if (nodes.scheduleDateSwitcher.children.length === 0) {
+    // Переключатель дат — создаём заново при смене языка, иначе метки
+    // остаются на старом языке (смена языка перерисовывает блок, #480).
+    const lang = deps.language();
+    if (nodes.scheduleDateSwitcher.children.length === 0 || schedLang !== lang) {
+      nodes.scheduleDateSwitcher.textContent = "";
       nodes.scheduleDateSwitcher.append(createScheduleDateSwitcher());
+      schedLang = lang;
     } else {
       // Обновляем активную кнопку
       const btns = nodes.scheduleDateSwitcher.querySelectorAll<HTMLButtonElement>(".schedule-date-btn");

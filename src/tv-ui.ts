@@ -11,6 +11,7 @@ export function createTvUi(options: {
   const { doc, video, player } = options;
   let enabled = false;
   let lastFocus: HTMLElement | null = null;
+  let lastOutside: HTMLElement | null = null;
   let rowIndex: string | undefined;
   let lastScope: HTMLElement | null = null;
   const openers = new Map<HTMLElement, HTMLElement>();
@@ -41,9 +42,16 @@ export function createTvUi(options: {
         if (opener && visible(opener)) opener.focus();
         openers.delete(lastScope);
       }
-      if (currentScope && !currentScope.contains(doc.activeElement)) {
-        if (active && active !== doc.body) openers.set(currentScope, active);
-        targets(currentScope)[0]?.focus();
+      if (currentScope) {
+        // Оверлей, который сам переносит фокус внутрь (карточка передачи
+        // фокусит крестик синхронно с открытием, #480): opener уже не
+        // прочитать из activeElement — берём последний фокус вне скоупа.
+        if (!openers.has(currentScope)) {
+          const outside = active && active !== doc.body && !currentScope.contains(active) ? active
+            : lastOutside && !currentScope.contains(lastOutside) ? lastOutside : null;
+          if (outside) openers.set(currentScope, outside);
+        }
+        if (!currentScope.contains(doc.activeElement)) targets(currentScope)[0]?.focus();
       }
       lastScope = currentScope;
     }
@@ -77,6 +85,10 @@ export function createTvUi(options: {
     if (!enabled || !(event.target instanceof HTMLElement)) return;
     lastFocus = event.target;
     rowIndex = lastFocus.closest<HTMLElement>("[data-result-index]")?.dataset.resultIndex ?? rowIndex;
+    // Последний фокус вне открытого скоупа — кандидат в opener для оверлеев,
+    // переносящих фокус внутрь себя при открытии (карточка передачи, #480).
+    const scopeNow = scope();
+    if (!scopeNow || !scopeNow.contains(lastFocus)) lastOutside = lastFocus;
   });
   doc.addEventListener("keydown", event => {
     if (!enabled || event.altKey || event.ctrlKey || event.metaKey) return;
